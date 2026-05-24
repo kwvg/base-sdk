@@ -7,13 +7,13 @@
 //! Dash service flag bitfield.
 
 use bitcoin_consensus_encoding as encoding;
+use dash_types::codec::NumCodec;
 
 use core::fmt;
 use core::ops;
 
 /// Bitfield advertised in `version` messages describing node capabilities.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ServiceFlags(pub u64);
 
 impl ServiceFlags {
@@ -39,6 +39,16 @@ impl ServiceFlags {
 
   /// Returns the raw `u64` value.
   pub const fn to_u64(self) -> u64 {
+    self.0
+  }
+}
+
+impl NumCodec<u64> for ServiceFlags {
+  fn from_base(v: u64) -> Self {
+    Self(v)
+  }
+
+  fn to_base(&self) -> u64 {
     self.0
   }
 }
@@ -74,6 +84,8 @@ impl fmt::Display for ServiceFlags {
     write!(f, "0x{:x}", self.0)
   }
 }
+
+dash_types::impl_num!(ServiceFlags, u64);
 
 encoding::encoder_newtype_exact! {
   /// Encoder for [`ServiceFlags`].

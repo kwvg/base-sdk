@@ -15,6 +15,7 @@ use crate::tx_types::TxType;
 use crate::validation::{DeploymentContext, MAX_COINBASE_SCRIPT_SIZE, MAX_TX_EXTRA_PAYLOAD};
 
 use bitcoin_consensus_encoding as encoding;
+use dash_types::codec::NumCodec;
 
 use core::fmt;
 
@@ -34,7 +35,6 @@ pub struct Transaction {
   /// Transaction version (lower 16 bits of the wire i32).
   pub version: i16,
   /// Transaction type (upper 16 bits of the wire i32).
-  #[cfg_attr(feature = "serde", serde(with = "crate::serialize::uint::w16"))]
   pub tx_type: TxType,
   /// Transaction inputs.
   pub inputs: Vec<TxIn>,
@@ -51,7 +51,7 @@ impl Transaction {
   /// Returns the packed i32 version field as on the wire.
   pub fn raw_version(&self) -> i32 {
     let v = (self.version as u16) as i32;
-    let t = (self.tx_type.to_u16() as i32) << 16;
+    let t = (self.tx_type.to_base() as i32) << 16;
     v | t
   }
 
@@ -249,7 +249,7 @@ impl encoding::Decoder for TransactionDecoder {
           let buf = dec.end().map_err(TransactionDecoderError::Version)?;
           let raw = i32::from_le_bytes(buf);
           let version = raw as i16;
-          let tx_type = TxType::from_u16(((raw >> 16) & 0xffff) as u16);
+          let tx_type = TxType::from_base(((raw >> 16) & 0xffff) as u16);
           self.state = TxDecoderState::Inputs {
             version,
             tx_type,

@@ -6,13 +6,14 @@ license = "MIT"
 
 [features]
 default = []
-std = ["bitcoin-consensus-encoding/std"]
+std = ["bitcoin-consensus-encoding/std", "dash-types/std"]
 full = ["std", "serde"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "dash-types/serde"]
 _internal = []
 
 [dependencies]
 bitcoin-consensus-encoding = { version = "0.2", default-features = false }
+dash-types = { version = "0.0.0", path = "../types", default-features = false }
 serde = { version = "1", default-features = false, features = [
   "derive",
   "alloc",

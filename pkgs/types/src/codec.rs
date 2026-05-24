@@ -200,3 +200,12 @@ pub fn write_compact_size(value: usize, buf: &mut Vec<u8>) {
     }
   }
 }
+
+/// Links a type to its underlying base integer type.
+pub trait NumCodec<N>: Sized {
+  /// Constructs from the base integer.
+  fn from_base(v: N) -> Self;
+
+  /// Returns the base integer.
+  fn to_base(&self) -> N;
+}

@@ -6,11 +6,12 @@
 
 //! Transaction type and masternode type enums.
 
+use dash_types::codec::NumCodec;
+
 use core::fmt;
 
 /// Dash transaction type, encoded in the upper 16 bits of the version field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TxType {
   /// Spend transaction (includes legacy coinbase).
   Spend,
@@ -36,9 +37,8 @@ pub enum TxType {
   Unknown(u16),
 }
 
-impl TxType {
-  /// Converts a raw `u16` to a `TxType`.
-  pub const fn from_u16(value: u16) -> Self {
+impl NumCodec<u16> for TxType {
+  fn from_base(value: u16) -> Self {
     match value {
       0 => Self::Spend,
       1 => Self::ProviderRegister,
@@ -54,8 +54,7 @@ impl TxType {
     }
   }
 
-  /// Converts a `TxType` to its raw `u16` value.
-  pub const fn to_u16(self) -> u16 {
+  fn to_base(&self) -> u16 {
     match self {
       Self::Spend => 0,
       Self::ProviderRegister => 1,
@@ -67,7 +66,7 @@ impl TxType {
       Self::MnhfSignal => 7,
       Self::AssetLock => 8,
       Self::AssetUnlock => 9,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
@@ -90,9 +89,10 @@ impl fmt::Display for TxType {
   }
 }
 
+dash_types::impl_num!(TxType, u16);
+
 /// Masternode type, used in provider registration and update transactions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum MnType {
   /// Regular masternode.
   Regular,
@@ -102,9 +102,8 @@ pub enum MnType {
   Unknown(u16),
 }
 
-impl MnType {
-  /// Converts a raw `u16` to a `MnType`.
-  pub const fn from_u16(value: u16) -> Self {
+impl NumCodec<u16> for MnType {
+  fn from_base(value: u16) -> Self {
     match value {
       0 => Self::Regular,
       1 => Self::Evo,
@@ -112,12 +111,11 @@ impl MnType {
     }
   }
 
-  /// Converts a `MnType` to its raw `u16` value.
-  pub const fn to_u16(self) -> u16 {
+  fn to_base(&self) -> u16 {
     match self {
       Self::Regular => 0,
       Self::Evo => 1,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
@@ -131,3 +129,5 @@ impl fmt::Display for MnType {
     }
   }
 }
+
+dash_types::impl_num!(MnType, u16);

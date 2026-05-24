@@ -57,9 +57,27 @@ predicate hasSerdeDerivedImpl(TypeItem t, string traitName) {
 }
 
 /**
- * Holds if `t` implements a serde trait via derive or manual impl.
- * Checks both `::serde::`-qualified derives and manual impls.
+ * Holds if `t` has a macro-generated (non-derive) impl for `traitName`
+ * under the `serde` crate (e.g. from `impl_num!`).
+ */
+predicate hasMacroSerdImpl(TypeItem t, string traitName) {
+  exists(MacroItems m, Impl i, Path p |
+    i = m.getItem(_) and
+    not m = t.getADeriveMacroExpansion() and
+    implSelfName(i) = t.getName().getText() and
+    i.getLocation().getFile() = t.getLocation().getFile() and
+    p = i.getTrait().(PathTypeRepr).getPath() and
+    p.getSegment().getIdentifier().getText() = traitName and
+    p.getQualifier().getSegment().getIdentifier().getText() = "serde"
+  )
+}
+
+/**
+ * Holds if `t` implements a serde trait via derive, manual impl, or
+ * non-derive macro expansion (e.g. `impl_num!`).
  */
 predicate implementsSerdeTrait(TypeItem t, string traitName) {
-  hasSerdeDerivedImpl(t, traitName) or hasManualImpl(t, traitName)
+  hasSerdeDerivedImpl(t, traitName) or
+  hasManualImpl(t, traitName) or
+  hasMacroSerdImpl(t, traitName)
 }

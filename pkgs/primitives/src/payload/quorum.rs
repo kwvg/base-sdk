@@ -12,7 +12,7 @@ use crate::wire;
 use crate::{QuorumHash, QuorumVvecHash};
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes};
 
 use core::fmt;
@@ -29,7 +29,6 @@ pub struct Commitment {
   /// 1=legacy, 2=+indexed, 3=basic, 4=basic+idx.
   pub version: u16,
   /// LLMQ type.
-  #[cfg_attr(feature = "serde", serde(with = "crate::serialize::uint::w8"))]
   pub llmq_type: LlmqType,
   /// Quorum block hash.
   pub quorum_hash: QuorumHash,
@@ -64,7 +63,7 @@ impl Commitment {
   /// Decodes from a slice positioned mid-stream.
   pub fn decode_inner(sl: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(sl)?;
-    let llmq_type = LlmqType::from_u8(codec::read_u8(sl)?);
+    let llmq_type = LlmqType::from_base(codec::read_u8(sl)?);
     let quorum_hash = wire::read_hash(sl)?.into();
 
     let quorum_index = if version == 2 || version == 4 {
@@ -97,7 +96,7 @@ impl Commitment {
   /// Encodes into a byte buffer.
   pub fn encode(&self, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.push(self.llmq_type.to_u8());
+    buf.push(self.llmq_type.to_base());
     buf.extend_from_slice(self.quorum_hash.as_bytes());
     if let Some(idx) = self.quorum_index {
       buf.extend_from_slice(&idx.to_le_bytes());

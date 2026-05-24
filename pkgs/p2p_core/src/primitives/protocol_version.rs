@@ -6,7 +6,7 @@
 
 //! Dash protocol version constants.
 
-dash_types::make_uint! {
+dash_types::make_num! {
   /// Protocol version exchanged during the handshake.
   ProtocolVersion, u32, 4
 }

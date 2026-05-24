@@ -19,7 +19,7 @@ use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
 use dash_script::KeyId;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, PlatformNodeId};
 
 use core::fmt;
@@ -93,14 +93,14 @@ impl ProRegTx {
 
     let version = codec::read_u16_le(sl)?;
     let mn_type_raw = codec::read_u16_le(sl)?;
-    let mn_type = MnType::from_u16(mn_type_raw);
+    let mn_type = MnType::from_base(mn_type_raw);
     let mode = codec::read_u16_le(sl)?;
     let collateral_hash = wire::read_hash(sl)?.into();
     let collateral_index = codec::read_u32_le(sl)?;
 
     let net_info = if version >= 3 {
       let raw = wire::read_vec(sl, 1024)?;
-      NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&raw)?)
+      NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
       NetInfo::Legacy(wire::read_cservice(sl)?)
     };

@@ -6,7 +6,7 @@
 
 //! Compact block filter type identifier.
 
-dash_types::make_uint! {
+dash_types::make_num! {
   /// BIP157 filter type, encoded as a single byte on the wire.
   FilterType, u8, 1
 }

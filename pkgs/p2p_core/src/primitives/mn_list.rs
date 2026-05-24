@@ -16,7 +16,7 @@ use dash_primitives::payload::Commitment;
 use dash_primitives::wire;
 use dash_primitives::{BlockHash, CService, LlmqType, MnType, Transaction, TxHash};
 use dash_script::KeyId;
-use dash_types::codec;
+use dash_types::codec::{self, NumCodec};
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes, PlatformNodeId};
 
 use core::fmt;
@@ -51,7 +51,6 @@ pub struct SimplifiedMnListEntry {
   /// Whether this masternode is currently valid.
   pub is_valid: bool,
   /// Masternode type (Regular or Evo).
-  #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::uint::w16"))]
   pub mn_type: MnType,
   /// Platform HTTP port (Evo masternodes only).
   pub platform_http_port: Option<u16>,
@@ -72,7 +71,7 @@ impl SimplifiedMnListEntry {
 
     // nType is gated by the entry's version
     let mn_type = if version >= 2 {
-      MnType::from_u16(codec::read_u16_le(sl)?)
+      MnType::from_base(codec::read_u16_le(sl)?)
     } else {
       MnType::Regular
     };
@@ -111,7 +110,7 @@ impl SimplifiedMnListEntry {
     buf.push(u8::from(self.is_valid));
     // nType and platform fields are gated by the entry's version
     if self.version >= 2 {
-      buf.extend_from_slice(&self.mn_type.to_u16().to_le_bytes());
+      buf.extend_from_slice(&self.mn_type.to_base().to_le_bytes());
       if self.mn_type == MnType::Evo {
         buf.extend_from_slice(&self.platform_http_port.unwrap_or(0).to_le_bytes());
         buf.extend_from_slice(self.platform_node_id.as_ref().map_or(&[0u8; 20], |n| &n.0));
@@ -131,7 +130,6 @@ impl fmt::Display for SimplifiedMnListEntry {
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct DeletedQuorum {
   /// LLMQ type.
-  #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::uint::w8"))]
   pub llmq_type: LlmqType,
   /// Quorum hash.
   pub hash: BlockHash,
@@ -217,7 +215,7 @@ impl MnListDiffPayload {
     let dq_count = codec::read_compact_size(sl, MAX_QUORUMS)?;
     let mut deleted_quorums = Vec::with_capacity(dq_count);
     for _ in 0..dq_count {
-      let llmq_type = LlmqType::from_u8(codec::read_u8(sl)?);
+      let llmq_type = LlmqType::from_base(codec::read_u8(sl)?);
       let hash = BlockHash::from_bytes(codec::take(sl)?);
       deleted_quorums.push(DeletedQuorum { llmq_type, hash });
     }
@@ -289,7 +287,7 @@ impl MnListDiffPayload {
 
     codec::write_compact_size(self.deleted_quorums.len(), &mut buf);
     for dq in &self.deleted_quorums {
-      buf.push(dq.llmq_type.to_u8());
+      buf.push(dq.llmq_type.to_base());
       buf.extend_from_slice(&dq.hash.to_bytes());
     }
 

@@ -15,14 +15,13 @@ use dash_num::Hash256;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_primitives::OutPoint;
-use dash_types::codec;
+use dash_types::codec::{self, NumCodec};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
 
 /// Governance vote outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum VoteOutcome {
   /// No vote cast.
   None,
@@ -36,9 +35,8 @@ pub enum VoteOutcome {
   Unknown(u32),
 }
 
-impl VoteOutcome {
-  /// Converts from the on-wire `u32`.
-  pub const fn from_u32(v: u32) -> Self {
+impl NumCodec<u32> for VoteOutcome {
+  fn from_base(v: u32) -> Self {
     match v {
       0 => Self::None,
       1 => Self::Yes,
@@ -48,14 +46,13 @@ impl VoteOutcome {
     }
   }
 
-  /// Returns the on-wire `u32`.
-  pub const fn to_u32(self) -> u32 {
+  fn to_base(&self) -> u32 {
     match self {
       Self::None => 0,
       Self::Yes => 1,
       Self::No => 2,
       Self::Abstain => 3,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
@@ -72,25 +69,10 @@ impl fmt::Display for VoteOutcome {
   }
 }
 
-#[cfg(feature = "serde")]
-impl dash_types::AsUint<u32> for VoteOutcome {
-  fn as_uint(&self) -> u32 {
-    self.to_u32()
-  }
-}
-
-#[cfg(feature = "serde")]
-impl dash_types::TryFromUint<u32> for VoteOutcome {
-  type Err = core::convert::Infallible;
-
-  fn try_from_uint(v: u32) -> Result<Self, Self::Err> {
-    Ok(Self::from_u32(v))
-  }
-}
+dash_types::impl_num!(VoteOutcome, u32);
 
 /// Governance vote signal type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum VoteSignal {
   /// No signal.
   None,
@@ -106,9 +88,8 @@ pub enum VoteSignal {
   Unknown(u32),
 }
 
-impl VoteSignal {
-  /// Converts from the on-wire `u32`.
-  pub const fn from_u32(v: u32) -> Self {
+impl NumCodec<u32> for VoteSignal {
+  fn from_base(v: u32) -> Self {
     match v {
       0 => Self::None,
       1 => Self::Funding,
@@ -119,15 +100,14 @@ impl VoteSignal {
     }
   }
 
-  /// Returns the on-wire `u32`.
-  pub const fn to_u32(self) -> u32 {
+  fn to_base(&self) -> u32 {
     match self {
       Self::None => 0,
       Self::Funding => 1,
       Self::Valid => 2,
       Self::Delete => 3,
       Self::Endorsed => 4,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
@@ -145,21 +125,7 @@ impl fmt::Display for VoteSignal {
   }
 }
 
-#[cfg(feature = "serde")]
-impl dash_types::AsUint<u32> for VoteSignal {
-  fn as_uint(&self) -> u32 {
-    self.to_u32()
-  }
-}
-
-#[cfg(feature = "serde")]
-impl dash_types::TryFromUint<u32> for VoteSignal {
-  type Err = core::convert::Infallible;
-
-  fn try_from_uint(v: u32) -> Result<Self, Self::Err> {
-    Ok(Self::from_u32(v))
-  }
-}
+dash_types::impl_num!(VoteSignal, u32);
 
 /// A governance object (proposal or superblock trigger).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -247,10 +213,8 @@ pub struct GovernanceVote {
   /// Hash of the governance object being voted on.
   pub parent_hash: Hash256,
   /// Vote outcome.
-  #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::uint::w32"))]
   pub outcome: VoteOutcome,
   /// Vote signal type.
-  #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::uint::w32"))]
   pub signal: VoteSignal,
   /// Vote timestamp (seconds since epoch).
   pub time: i64,
@@ -268,8 +232,8 @@ impl GovernanceVote {
       index: outpoint_n,
     };
     let parent_hash = wire::read_hash(sl)?;
-    let outcome = VoteOutcome::from_u32(codec::read_u32_le(sl)?);
-    let signal = VoteSignal::from_u32(codec::read_u32_le(sl)?);
+    let outcome = VoteOutcome::from_base(codec::read_u32_le(sl)?);
+    let signal = VoteSignal::from_base(codec::read_u32_le(sl)?);
     let time = codec::read_i64_le(sl)?;
     let sig = BlsSignatureBytes(codec::take(sl)?);
     Ok(Self {
@@ -287,8 +251,8 @@ impl GovernanceVote {
     buf.extend_from_slice(&self.mn_outpoint.hash.to_bytes());
     buf.extend_from_slice(&self.mn_outpoint.index.to_le_bytes());
     buf.extend_from_slice(&self.parent_hash.to_bytes());
-    buf.extend_from_slice(&self.outcome.to_u32().to_le_bytes());
-    buf.extend_from_slice(&self.signal.to_u32().to_le_bytes());
+    buf.extend_from_slice(&self.outcome.to_base().to_le_bytes());
+    buf.extend_from_slice(&self.signal.to_base().to_le_bytes());
     buf.extend_from_slice(&self.time.to_le_bytes());
     buf.extend_from_slice(&self.sig.0);
     buf

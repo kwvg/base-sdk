@@ -10,13 +10,12 @@ use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_internals::array::ArrayExt as _;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, DecodeError, NumCodec};
 
 use core::fmt;
 
 /// LLMQ type (quorum size/threshold configuration).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum LlmqType {
   /// 50 members, 60% threshold.
   Llmq50_60,
@@ -46,9 +45,8 @@ pub enum LlmqType {
   Unknown(u8),
 }
 
-impl LlmqType {
-  /// Converts a raw byte to an `LlmqType`.
-  pub const fn from_u8(val: u8) -> Self {
+impl NumCodec<u8> for LlmqType {
+  fn from_base(val: u8) -> Self {
     match val {
       1 => Self::Llmq50_60,
       2 => Self::Llmq400_60,
@@ -66,8 +64,7 @@ impl LlmqType {
     }
   }
 
-  /// Converts to raw byte value.
-  pub const fn to_u8(self) -> u8 {
+  fn to_base(&self) -> u8 {
     match self {
       Self::Llmq50_60 => 1,
       Self::Llmq400_60 => 2,
@@ -81,7 +78,7 @@ impl LlmqType {
       Self::LlmqTestInstantsend => 104,
       Self::LlmqTestPlatform => 106,
       Self::LlmqDevnetPlatform => 107,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
@@ -106,9 +103,10 @@ impl fmt::Display for LlmqType {
   }
 }
 
+dash_types::impl_num!(LlmqType, u8);
+
 /// Revocation reason for provider update revocation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum RevocationReason {
   /// No specific reason.
   NotSpecified,
@@ -122,9 +120,8 @@ pub enum RevocationReason {
   Unknown(u16),
 }
 
-impl RevocationReason {
-  /// Converts a raw `u16`.
-  pub const fn from_u16(val: u16) -> Self {
+impl NumCodec<u16> for RevocationReason {
+  fn from_base(val: u16) -> Self {
     match val {
       0 => Self::NotSpecified,
       1 => Self::KeyCompromise,
@@ -134,14 +131,13 @@ impl RevocationReason {
     }
   }
 
-  /// Converts to raw `u16`.
-  pub const fn to_u16(self) -> u16 {
+  fn to_base(&self) -> u16 {
     match self {
       Self::NotSpecified => 0,
       Self::KeyCompromise => 1,
       Self::ChangeOfKeys => 2,
       Self::ViolationOfService => 3,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
@@ -158,9 +154,10 @@ impl fmt::Display for RevocationReason {
   }
 }
 
+dash_types::impl_num!(RevocationReason, u16);
+
 /// Network address type (BIP155).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetworkType {
   /// IPv4.
   Ipv4,
@@ -176,9 +173,8 @@ pub enum NetworkType {
   Unknown(u8),
 }
 
-impl NetworkType {
-  /// Converts a raw byte.
-  pub const fn from_u8(val: u8) -> Self {
+impl NumCodec<u8> for NetworkType {
+  fn from_base(val: u8) -> Self {
     match val {
       1 => Self::Ipv4,
       2 => Self::Ipv6,
@@ -189,18 +185,19 @@ impl NetworkType {
     }
   }
 
-  /// Converts to raw byte.
-  pub const fn to_u8(self) -> u8 {
+  fn to_base(&self) -> u8 {
     match self {
       Self::Ipv4 => 1,
       Self::Ipv6 => 2,
       Self::TorV3 => 4,
       Self::I2P => 5,
       Self::Cjdns => 6,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
+
+dash_types::impl_num!(NetworkType, u8);
 
 /// LSB-first dynamic bitset.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -430,7 +427,6 @@ impl encoding::Decodable for CService {
 
 /// Purpose tag for an extended network info entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetInfoPurpose {
   /// Core P2P port.
   CoreP2p,
@@ -442,9 +438,8 @@ pub enum NetInfoPurpose {
   Unknown(u8),
 }
 
-impl NetInfoPurpose {
-  /// Converts from a raw byte.
-  pub const fn from_u8(val: u8) -> Self {
+impl NumCodec<u8> for NetInfoPurpose {
+  fn from_base(val: u8) -> Self {
     match val {
       0 => Self::CoreP2p,
       1 => Self::PlatformP2p,
@@ -453,13 +448,12 @@ impl NetInfoPurpose {
     }
   }
 
-  /// Converts to a raw byte.
-  pub const fn to_u8(self) -> u8 {
+  fn to_base(&self) -> u8 {
     match self {
       Self::CoreP2p => 0,
       Self::PlatformP2p => 1,
       Self::PlatformHttps => 2,
-      Self::Unknown(v) => v,
+      Self::Unknown(v) => *v,
     }
   }
 }
@@ -474,6 +468,8 @@ impl fmt::Display for NetInfoPurpose {
     }
   }
 }
+
+dash_types::impl_num!(NetInfoPurpose, u8);
 
 /// A single network info entry within a purpose group.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -518,28 +514,27 @@ impl ExtendedNetInfo {
   /// # Errors
   ///
   /// Returns `DecodeError` if the data is malformed.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-    let version = codec::read_u8(sl)?;
-    let purpose_count = codec::read_compact_size(sl, MAX_PURPOSES)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u8(data)?;
+    let purpose_count = codec::read_compact_size(data, MAX_PURPOSES)?;
 
     let mut entries = Vec::with_capacity(purpose_count);
     for _ in 0..purpose_count {
-      let purpose = NetInfoPurpose::from_u8(codec::read_u8(sl)?);
-      let entry_count = codec::read_compact_size(sl, MAX_ENTRIES)?;
+      let purpose = NetInfoPurpose::from_base(codec::read_u8(data)?);
+      let entry_count = codec::read_compact_size(data, MAX_ENTRIES)?;
       let mut group = Vec::with_capacity(entry_count);
 
       for _ in 0..entry_count {
-        let entry_type = codec::read_u8(sl)?;
+        let entry_type = codec::read_u8(data)?;
         let entry = match entry_type {
           0x01 => NetInfoEntry::Service(CService {
-            addr: codec::take(sl)?,
-            port: codec::read_u16_be(sl)?,
+            addr: codec::take(data)?,
+            port: codec::read_u16_be(data)?,
           }),
           0x02 => {
-            let name_len = codec::read_compact_size(sl, MAX_DOMAIN)?;
-            let name = codec::read_bytes(sl, name_len)?.to_vec();
-            let port = codec::read_u16_be(sl)?;
+            let name_len = codec::read_compact_size(data, MAX_DOMAIN)?;
+            let name = codec::read_bytes(data, name_len)?.to_vec();
+            let port = codec::read_u16_be(data)?;
             NetInfoEntry::Domain { name, port }
           }
           _ => NetInfoEntry::Invalid,

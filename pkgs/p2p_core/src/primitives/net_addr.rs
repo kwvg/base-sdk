@@ -16,7 +16,7 @@ use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_primitives::CService;
 use dash_primitives::NetworkType;
-use dash_types::codec;
+use dash_types::codec::{self, NumCodec};
 
 use core::fmt;
 
@@ -140,7 +140,7 @@ impl AddrV2 {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let net_byte = codec::read_u8(sl)?;
-    let network = NetworkType::from_u8(net_byte);
+    let network = NetworkType::from_base(net_byte);
     let len = codec::read_compact_size(sl, 512)?;
     let addr = codec::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = Self::expected_len(network) {
@@ -156,7 +156,7 @@ impl AddrV2 {
 
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
-    buf.push(self.network.to_u8());
+    buf.push(self.network.to_base());
     codec::write_compact_size(self.addr.len(), &mut buf);
     buf.extend_from_slice(&self.addr);
     buf
@@ -198,7 +198,7 @@ impl AddrV2Entry {
     let time = codec::read_u32_le(sl)?;
     let services = ServiceFlags(codec::read_compact_u64(sl)?);
     let net_byte = codec::read_u8(sl)?;
-    let network = NetworkType::from_u8(net_byte);
+    let network = NetworkType::from_base(net_byte);
     let len = codec::read_compact_size(sl, 512)?;
     let addr_bytes = codec::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = AddrV2::expected_len(network) {
@@ -231,7 +231,7 @@ impl AddrV2Entry {
     let mut buf = Vec::new();
     buf.extend_from_slice(&self.time.to_le_bytes());
     codec::write_compact_size(self.services.0 as usize, &mut buf);
-    buf.push(self.addr.network.to_u8());
+    buf.push(self.addr.network.to_base());
     codec::write_compact_size(self.addr.addr.len(), &mut buf);
     buf.extend_from_slice(&self.addr.addr);
     buf.extend_from_slice(&self.port.to_be_bytes());

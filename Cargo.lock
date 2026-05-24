@@ -230,6 +230,7 @@ name = "dash-num"
 version = "0.0.0"
 dependencies = [
  "bitcoin-consensus-encoding 0.2.0",
+ "dash-types",
  "divan",
  "hex-literal",
  "rstest",

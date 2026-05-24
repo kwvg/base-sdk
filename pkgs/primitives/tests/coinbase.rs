@@ -11,6 +11,7 @@
 mod util;
 
 use dash_primitives::TxType;
+use dash_types::codec::NumCodec;
 use hex_conservative::FromHex;
 use rstest::rstest;
 
@@ -26,7 +27,7 @@ fn decode_fields() {
     assert_eq!(tx.version, util::json_u64(&d["version"]) as i16, "{txid} version",);
     assert_eq!(
       tx.tx_type,
-      TxType::from_u16(util::json_u64(&d["type"]) as u16),
+      TxType::from_base(util::json_u64(&d["type"]) as u16),
       "{txid} type",
     );
     assert_eq!(tx.lock_time, util::json_u64(&d["locktime"]) as u32, "{txid} locktime",);

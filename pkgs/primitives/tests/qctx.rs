@@ -12,6 +12,7 @@ mod util;
 
 use dash_primitives::payload::FinalCommitment;
 use dash_primitives::{LlmqType, QuorumHash, QuorumVvecHash};
+use dash_types::codec::NumCodec;
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes};
 use hex_conservative::FromHex;
 use rstest::rstest;
@@ -25,7 +26,7 @@ fn decode_fields() {
     assert!(tx.validate(&Default::default()).is_ok());
     assert!(!tx.extra_payload.is_empty(), "{txid}");
 
-    let payload = FinalCommitment::decode(&tx.extra_payload).unwrap();
+    let payload = FinalCommitment::decode(&mut &tx.extra_payload[..]).unwrap();
     let d = &entry.details;
 
     assert_eq!(payload.version, util::json_u64(&d["version"]) as u16, "{txid} version",);
@@ -45,7 +46,7 @@ fn decode_fields() {
     );
     assert_eq!(
       commitment.llmq_type,
-      LlmqType::from_u8(util::json_u64(&c["llmqType"]) as u8),
+      LlmqType::from_base(util::json_u64(&c["llmqType"]) as u8),
       "{txid} commitment.llmqType",
     );
     assert_eq!(

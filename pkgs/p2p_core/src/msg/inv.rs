@@ -14,7 +14,7 @@ use crate::primitives::inventory::{InvType, Inventory};
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
-use dash_types::codec;
+use dash_types::codec::{self, NumCodec};
 
 /// Maximum inventory items per message.
 const MAX_INV_ITEMS: usize = 50_000;
@@ -27,7 +27,7 @@ fn decode_inv_list(sl: &mut &[u8]) -> Result<Vec<Inventory>, P2pDecodeError> {
     let raw_type = codec::read_u32_le(sl)?;
     let hash = Hash256::from_bytes(codec::take(sl)?);
     items.push(Inventory {
-      inv_type: InvType::from_u32(raw_type),
+      inv_type: InvType::from_base(raw_type),
       hash,
     });
   }
@@ -38,7 +38,7 @@ fn decode_inv_list(sl: &mut &[u8]) -> Result<Vec<Inventory>, P2pDecodeError> {
 fn encode_inv_list(items: &[Inventory], buf: &mut Vec<u8>) {
   codec::write_compact_size(items.len(), buf);
   for item in items {
-    buf.extend_from_slice(&item.inv_type.to_u32().to_le_bytes());
+    buf.extend_from_slice(&item.inv_type.to_base().to_le_bytes());
     buf.extend_from_slice(&item.hash.to_bytes());
   }
 }

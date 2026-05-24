@@ -17,7 +17,7 @@ use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, DecodeError, NumCodec};
 use dash_types::{BlsSignatureBytes, PlatformNodeId};
 
 use core::fmt;
@@ -67,7 +67,7 @@ impl ProUpServTx {
 
     let mn_type = if version >= 2 {
       let raw = codec::read_u16_le(sl)?;
-      MnType::from_u16(raw)
+      MnType::from_base(raw)
     } else {
       MnType::Regular
     };
@@ -76,7 +76,7 @@ impl ProUpServTx {
 
     let net_info = if version >= 3 {
       let raw = wire::read_vec(sl, 1024)?;
-      NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&raw)?)
+      NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
       NetInfo::Legacy(wire::read_cservice(sl)?)
     };
