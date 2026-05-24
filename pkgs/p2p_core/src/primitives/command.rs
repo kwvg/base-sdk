@@ -202,12 +202,6 @@ impl CommandString {
   pub const PLATFORMBAN: Self = Self::from_static("platformban");
 }
 
-impl From<[u8; 12]> for CommandString {
-  fn from(bytes: [u8; 12]) -> Self {
-    Self(bytes)
-  }
-}
-
 impl fmt::Debug for CommandString {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "CommandString(\"{}\")", self.as_str())

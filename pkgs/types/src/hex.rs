@@ -6,11 +6,16 @@
 
 //! Fixed-size byte newtype macros.
 
-/// Generates `Codec` + `Encodable` + `Decodable` for a fixed-size
-/// byte newtype that implements `From<[u8; N]>` and `as_bytes()`.
+/// Generates `From<[u8; N]>` + `Codec` + `Encodable` + `Decodable`
+/// for a fixed-size byte newtype that wraps `[u8; N]` and exposes
+/// `as_bytes()`.
 #[macro_export]
 macro_rules! impl_bytes {
   ($n:literal, $($name:ident),* $(,)?) => { $(
+    impl From<[u8; $n]> for $name {
+      fn from(bytes: [u8; $n]) -> Self { Self(bytes) }
+    }
+
     impl $crate::codec::Codec for $name {
       fn decode(
         data: &mut &[u8],
@@ -63,10 +68,6 @@ macro_rules! make_bytes {
       pub fn is_null(&self) -> bool {
         self.0.iter().all(|&b| b == 0)
       }
-    }
-
-    impl From<[u8; $n]> for $name {
-      fn from(bytes: [u8; $n]) -> Self { Self(bytes) }
     }
 
     impl From<$name> for [u8; $n] {

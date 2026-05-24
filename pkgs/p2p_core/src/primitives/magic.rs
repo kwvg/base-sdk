@@ -6,8 +6,6 @@
 
 //! Dash network magic bytes.
 
-use dash_params::types::MessageStart;
-
 use core::fmt;
 
 /// Four-byte network identifier prepended to every V1 message.
@@ -24,12 +22,6 @@ impl Magic {
   /// Borrows the inner byte array.
   pub const fn as_bytes(&self) -> &[u8; 4] {
     &self.0
-  }
-}
-
-impl From<MessageStart> for Magic {
-  fn from(ms: MessageStart) -> Self {
-    Self(ms)
   }
 }
 
