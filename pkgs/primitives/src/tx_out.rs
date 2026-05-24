@@ -69,7 +69,7 @@ impl Default for TxOutDecoder {
 }
 
 /// Decode error for [`TxOut`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TxOutDecoderError {
   /// Failed to decode the value field.
   Value(encoding::UnexpectedEofError),

@@ -178,7 +178,7 @@ impl<T, const N: usize> Default for ByteTypeDecoder<T, N> {
 }
 
 /// Decode error for fixed-size byte newtypes.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ByteTypeDecoderError(pub bitcoin_consensus_encoding::UnexpectedEofError);
 
 impl core::fmt::Display for ByteTypeDecoderError {

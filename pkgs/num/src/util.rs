@@ -159,7 +159,7 @@ impl<T> Default for Hash256TypeDecoder<T> {
 }
 
 /// Decode error for hash256 newtypes.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hash256TypeDecoderError(pub bitcoin_consensus_encoding::UnexpectedEofError);
 
 impl core::fmt::Display for Hash256TypeDecoderError {

@@ -29,7 +29,7 @@ impl<const N: usize> Default for HashDecoder<N> {
 }
 
 /// Decode error for hash types.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HashDecoderError(pub encoding::UnexpectedEofError);
 
 impl fmt::Display for HashDecoderError {

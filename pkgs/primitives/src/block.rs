@@ -80,7 +80,7 @@ impl Default for BlockDecoder {
 }
 
 /// Decode error for [`Block`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockDecoderError {
   /// Failed to decode the header.
   Header(BlockHeaderDecoderError),

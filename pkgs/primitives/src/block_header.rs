@@ -89,7 +89,7 @@ impl Default for BlockHeaderDecoder {
 }
 
 /// Decode error for [`BlockHeader`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockHeaderDecoderError(encoding::UnexpectedEofError);
 
 impl fmt::Display for BlockHeaderDecoderError {

@@ -145,7 +145,7 @@ pub enum LlmqType {
 }
 
 /// Parameters that influence chain consensus.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConsensusParams {
   /// Hash of the genesis block.
   pub hash_genesis_block: Hash256,

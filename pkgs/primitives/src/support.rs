@@ -211,7 +211,7 @@ pub struct DynBitset {
 
 /// Serde helper for [`DynBitset`] that validates on deserialisation.
 #[cfg(feature = "serde")]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
 struct DynBitsetSerde {
   num_bits: u64,
   #[serde(with = "dash_types::serialize::hex")]
@@ -286,7 +286,7 @@ impl DynBitset {
 }
 
 /// Iterator over set bit indices in a [`DynBitset`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynBitsetIterator<'a> {
   bitset: &'a DynBitset,
   index: u64,
@@ -379,7 +379,7 @@ impl Default for CServiceDecoder {
 }
 
 /// Decode error for [`CService`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CServiceDecoderError(encoding::UnexpectedEofError);
 
 impl fmt::Display for CServiceDecoderError {

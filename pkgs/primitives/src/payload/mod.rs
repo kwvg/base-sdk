@@ -68,7 +68,7 @@ pub enum SpecialPayload {
 }
 
 /// Error decoding a special payload.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayloadError {
   /// Which transaction type was being decoded.
   pub tx_type: TxType,

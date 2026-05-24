@@ -104,7 +104,7 @@ impl Default for KeyIdDecoder {
 }
 
 /// Decode error for [`KeyId`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyIdDecoderError(encoding::UnexpectedEofError);
 
 impl fmt::Display for KeyIdDecoderError {

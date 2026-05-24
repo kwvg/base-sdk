@@ -100,7 +100,7 @@ impl Default for ScriptDecoder {
 }
 
 /// Decode error for [`Script`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScriptDecoderError(encoding::ByteVecDecoderError);
 
 impl fmt::Display for ScriptDecoderError {

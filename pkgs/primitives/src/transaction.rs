@@ -205,7 +205,7 @@ impl Default for TransactionDecoder {
 }
 
 /// Decode error for [`Transaction`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionDecoderError {
   /// Failed to decode the packed version field.
   Version(encoding::UnexpectedEofError),

@@ -56,7 +56,7 @@ pub(crate) const PROTX_VERSION_EXT_ADDR: u16 = 3;
 /// Each field is tri-state: `Some(true)` means the fork is active,
 /// `Some(false)` means it is not yet active, and `None` means the caller does
 /// not know and the corresponding checks should be skipped.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeploymentContext {
   /// DIP0001 (2 MB blocks, relaxed sigops).
   pub dip0001_active: Option<bool>,

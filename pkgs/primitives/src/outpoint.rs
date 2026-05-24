@@ -65,7 +65,7 @@ impl Default for OutPointDecoder {
 }
 
 /// Decode error for [`OutPoint`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutPointDecoderError(encoding::UnexpectedEofError);
 
 impl fmt::Display for OutPointDecoderError {

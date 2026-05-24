@@ -67,7 +67,7 @@ impl<T, E> encoding::Decoder for BufferDecoder<T, E> {
 }
 
 /// An encoder that wraps a pre-built byte vector.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VecEncoder {
   data: Vec<u8>,
   done: bool,

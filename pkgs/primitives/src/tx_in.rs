@@ -74,7 +74,7 @@ impl Default for TxInDecoder {
 }
 
 /// Decode error for [`TxIn`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TxInDecoderError {
   /// Failed to decode the outpoint.
   Outpoint(OutPointDecoderError),
