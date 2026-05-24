@@ -9,12 +9,12 @@
 //! G1 (48 bytes): sign bit at byte[0] & 0x80, no compression indicator.
 //! G2 (96 bytes): legacy component order (c0||c1), sign bit at byte[0] & 0x80.
 
+use super::error::Error;
+
 use blst::blst_p1_affine;
 use blst::blst_p2_affine;
 use blst::BLST_ERROR;
 use hex_literal::hex;
-
-use super::error::Error;
 
 /// Serialize a G1 affine point to 48 legacy bytes.
 #[expect(unsafe_code, reason = "blst C FFI")]

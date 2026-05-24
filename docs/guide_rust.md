@@ -315,7 +315,7 @@ pub struct OutPoint {
 ```rust
 // Sealed trait: only types inside this crate may implement it.
 pub trait Encoder: private::Sealed {
-  fn encode(&self, buf: &mut alloc::vec::Vec<u8>);
+  fn encode(&self, buf: &mut Vec<u8>);
 }
 
 mod private {

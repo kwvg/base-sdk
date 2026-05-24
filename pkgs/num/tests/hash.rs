@@ -8,11 +8,11 @@
 
 #![expect(clippy::unwrap_used, reason = "test code")]
 
-use core::str::FromStr;
-
 use dash_num::{Hash160, Hash256, Hash512, ParseHexError};
 use hex_literal::hex;
 use rstest::*;
+
+use core::str::FromStr;
 
 /// Consensus test vector R1 (raw little-endian bytes).
 #[fixture]

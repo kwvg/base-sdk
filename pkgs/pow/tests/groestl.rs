@@ -12,11 +12,12 @@
 mod common;
 
 #[cfg(all(feature = "_internal", feature = "simd"))]
-use core::simd::Simd;
-#[cfg(all(feature = "_internal", feature = "simd"))]
 use dash_pow::groestl::{scalar, simd};
 #[cfg(all(feature = "_internal", feature = "simd"))]
 use rstest::rstest;
+
+#[cfg(all(feature = "_internal", feature = "simd"))]
+use core::simd::Simd;
 
 /// Groestl-512 IV: all zeros except the last word encodes the output size.
 #[cfg(all(feature = "_internal", feature = "simd"))]
@@ -125,6 +126,7 @@ fn output_transform_agree() {
 #[cfg(feature = "_internal")]
 mod kat {
   use crate::common;
+
   use dash_pow::groestl::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::groestl::simd;

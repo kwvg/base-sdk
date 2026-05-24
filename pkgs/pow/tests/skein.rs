@@ -112,6 +112,7 @@ fn output_block_agree() {
 #[cfg(feature = "_internal")]
 mod kat {
   use crate::common;
+
   use dash_pow::skein::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::skein::simd;

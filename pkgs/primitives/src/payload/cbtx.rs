@@ -11,11 +11,11 @@ use crate::validation::DeploymentContext;
 use crate::wire;
 use crate::MerkleRoot;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::BlockHeight;
 use dash_types::BlsSignatureBytes;
+
+use core::fmt;
 
 /// CoinbaseCommitment -- coinbase commitment payload.
 ///

@@ -6,11 +6,11 @@
 
 //! Legacy BLS public key (48-byte G1 point, legacy serialization).
 
-use blst::blst_p1_affine;
-
 use super::error::Error;
 use super::ser;
 use super::sk::SecretKey;
+
+use blst::blst_p1_affine;
 
 /// A legacy BLS public key (48-byte G1 point in legacy serialization).
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -40,6 +40,7 @@ fn compress(#[case] last: bool, #[case] block: [u8; 128]) {
 
 mod kat {
   use super::common;
+
   use dash_pow::simd_hash::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::simd_hash::simd;

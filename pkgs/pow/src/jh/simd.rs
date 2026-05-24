@@ -9,8 +9,9 @@
 use super::consts::{BLOCK, IV, ROUND_CONSTS};
 use crate::util::memops::{load_u64_le, store_u64_le};
 
-use core::simd::{simd_swizzle, Simd};
 use dash_num::Hash512;
+
+use core::simd::{simd_swizzle, Simd};
 
 /// One 128-bit JH row, stored as four 32-bit lanes.
 pub type Row = Simd<u32, 4>;

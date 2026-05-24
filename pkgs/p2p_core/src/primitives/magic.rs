@@ -6,10 +6,10 @@
 
 //! Dash network magic bytes.
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_params::types::MessageStart;
+
+use core::fmt;
 
 /// Four-byte network identifier prepended to every V1 message.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

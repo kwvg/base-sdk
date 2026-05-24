@@ -8,11 +8,11 @@
 
 #![expect(clippy::unwrap_used, reason = "test code")]
 
-use core::str::FromStr;
-
 use dash_num::{Arith256, Hash256};
 use hex_literal::hex;
 use rstest::*;
+
+use core::str::FromStr;
 
 fn arith_from_le(bytes: &[u8; 32]) -> Arith256 {
   Arith256::from(Hash256::from_bytes(*bytes))

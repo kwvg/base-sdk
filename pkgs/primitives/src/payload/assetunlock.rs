@@ -11,10 +11,10 @@ use crate::validation::DeploymentContext;
 use crate::wire;
 use crate::QuorumHash;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_types::BlsSignatureBytes;
+
+use core::fmt;
 
 /// AssetUnlock: Platform-to-L1 (type 9).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

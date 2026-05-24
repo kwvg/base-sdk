@@ -9,9 +9,9 @@
 
 use crate::prelude::*;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// A decoder that buffers all input and decodes in `end()`.
 ///

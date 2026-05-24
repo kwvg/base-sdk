@@ -10,12 +10,12 @@ use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeEr
 use crate::prelude::*;
 use crate::primitives::service_flags::ServiceFlags;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::wire;
 use dash_primitives::CService;
 use dash_primitives::NetworkType;
+
+use core::fmt;
 
 /// Network address with service flags (used inside the version message).
 ///

@@ -9,10 +9,10 @@
 use crate::encode::{BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
 use crate::primitives::mn_list::MnListDiffPayload;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::BlockHash;
+
+use core::fmt;
 
 /// Requests a masternode list diff between two blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

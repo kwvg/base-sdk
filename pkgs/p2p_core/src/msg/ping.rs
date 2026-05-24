@@ -6,9 +6,9 @@
 
 //! Ping and Pong keepalive messages.
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// Keepalive request carrying a random nonce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

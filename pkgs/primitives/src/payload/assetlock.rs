@@ -12,9 +12,9 @@ use crate::tx_out::TxOut;
 use crate::validation::DeploymentContext;
 use crate::wire;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// AssetLock: L1-to-Platform (type 8).
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -71,6 +71,8 @@ use crate::some_internal_module;
 
 use some_external_crate;
 
+use core::fmt;
+
 // ... code ...
 ```
 
@@ -83,7 +85,9 @@ use some_external_crate;
 6. Blank line
 7. External imports (`use some_crate::...`)
 8. Blank line
-9. Code
+9. Language primitive imports (`use alloc::...`, `use core::...`, `use std::...`)
+10. Blank line
+11. Code
 
 ### Test and bench tooling
 

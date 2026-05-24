@@ -12,11 +12,12 @@
 mod common;
 
 #[cfg(all(feature = "_internal", feature = "simd"))]
-use core::simd::Simd;
-#[cfg(all(feature = "_internal", feature = "simd"))]
 use dash_pow::cubehash::{consts::IV, scalar, simd};
 #[cfg(all(feature = "_internal", feature = "simd"))]
 use rstest::rstest;
+
+#[cfg(all(feature = "_internal", feature = "simd"))]
+use core::simd::Simd;
 
 /// Converts a flat `[u32; 32]` state into the SIMD `[Simd<u32, 4>; 8]` layout.
 #[cfg(all(feature = "_internal", feature = "simd"))]
@@ -92,6 +93,7 @@ fn absorb_block_agree() {
 #[cfg(feature = "_internal")]
 mod kat {
   use crate::common;
+
   use dash_pow::cubehash::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::cubehash::simd;

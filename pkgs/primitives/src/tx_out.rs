@@ -8,10 +8,10 @@
 
 use crate::script::{Script, ScriptDecoder, ScriptDecoderError, ScriptEncoder};
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::Amount;
+
+use core::fmt;
 
 /// A transaction output.
 #[derive(Debug, Clone, PartialEq, Eq)]

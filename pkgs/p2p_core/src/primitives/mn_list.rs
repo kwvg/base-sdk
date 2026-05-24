@@ -9,14 +9,14 @@
 use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
 use crate::prelude::*;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::payload::Commitment;
 use dash_primitives::wire;
 use dash_primitives::{BlockHash, CService, LlmqType, MnType, Transaction, TxHash};
 use dash_script::KeyId;
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes, PlatformNodeId};
+
+use core::fmt;
 
 /// Maximum number of entries in a single MN list diff.
 const MAX_MN_LIST: usize = 10_000;

@@ -6,13 +6,13 @@
 
 //! IETF BLS public key (48-byte compressed G1 point).
 
-use blst::min_pk;
-use blst::BLST_ERROR;
-
 use super::error::Error;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use super::DST_POP_PROVE;
+
+use blst::min_pk;
+use blst::BLST_ERROR;
 
 /// A BLS public key (48-byte compressed G1 point).
 #[derive(Clone, Debug, PartialEq, Eq)]

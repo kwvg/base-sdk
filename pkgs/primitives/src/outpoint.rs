@@ -8,10 +8,10 @@
 
 use crate::TxHash;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_internals::array::ArrayExt as _;
+
+use core::fmt;
 
 /// A reference to a previous transaction output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

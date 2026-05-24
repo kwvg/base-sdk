@@ -6,10 +6,10 @@
 
 //! secp256k1 public key.
 
-use k256::ecdsa::{self, signature::hazmat::PrehashVerifier};
-
 use super::error::Error;
 use super::sig::{RecoveryId, Signature};
+
+use k256::ecdsa::{self, signature::hazmat::PrehashVerifier};
 
 /// A secp256k1 public key.
 #[derive(Clone, Debug, PartialEq, Eq)]

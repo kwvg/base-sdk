@@ -8,10 +8,10 @@
 
 use crate::prelude::*;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_internals::array::ArrayExt as _;
+
+use core::fmt;
 
 /// LLMQ type (quorum size/threshold configuration).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

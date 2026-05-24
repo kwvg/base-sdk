@@ -6,10 +6,10 @@
 
 //! Inventory vector used by inv, getdata, and notfound messages.
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
+
+use core::fmt;
 
 /// Inventory object type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -8,12 +8,12 @@
 
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
-
 use bitcoin_consensus_encoding::{decode_from_slice, encode_to_vec};
 use dash_primitives::{Transaction, TxHash};
 use hex_conservative::FromHex;
 use serde::Deserialize;
+
+use std::collections::BTreeMap;
 
 /// A single entry from a transaction corpus JSON5 file.
 #[derive(Debug, Deserialize)]

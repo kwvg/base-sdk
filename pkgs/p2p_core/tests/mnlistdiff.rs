@@ -8,14 +8,13 @@
 
 #![expect(clippy::unwrap_used, reason = "test code")]
 
-use dash_p2p_core::primitives::mn_list::MnListDiffPayload;
-
-use std::collections::BTreeMap;
-
 use bitcoin_consensus_encoding::{decode_from_slice, encode_to_vec};
+use dash_p2p_core::primitives::mn_list::MnListDiffPayload;
 use hex_conservative::FromHex;
 use rstest::rstest;
 use serde::Deserialize;
+
+use std::collections::BTreeMap;
 
 /// A single entry from the mnlistdiff corpus.
 #[derive(Debug, Deserialize)]

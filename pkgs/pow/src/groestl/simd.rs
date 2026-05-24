@@ -12,11 +12,12 @@ use super::consts::{SUBSH_P, SUBSH_Q};
 #[cfg(not(all(feature = "aes_hw", target_arch = "aarch64")))]
 use crate::util::aes::consts::SBOX;
 
+use dash_num::Hash512;
+
 use core::simd::num::{SimdInt, SimdUint};
+use core::simd::Simd;
 #[cfg(not(all(feature = "aes_hw", target_arch = "aarch64")))]
 use core::simd::simd_swizzle;
-use core::simd::Simd;
-use dash_num::Hash512;
 
 type Row = Simd<u8, 16>;
 
@@ -203,9 +204,9 @@ fn add_rc_q(rows: &mut [Row; 8], round: usize) {
 #[expect(unsafe_code, reason = "direct vector intrinsics produce the right codegen")]
 #[inline(always)]
 fn sub_shift(rows: &mut [Row; 8], masks: &[[u8; 16]; 8]) {
-  use core::arch::aarch64::uint8x16_t;
-
   use crate::util::aes::aarch64::sub_shift as hw_sub_shift;
+
+  use core::arch::aarch64::uint8x16_t;
 
   unsafe {
     let zero = core::mem::transmute::<[u8; 16], uint8x16_t>([0u8; 16]);

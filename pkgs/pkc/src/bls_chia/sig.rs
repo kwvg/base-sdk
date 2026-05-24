@@ -6,12 +6,12 @@
 
 //! Legacy BLS signature (96-byte G2 point, legacy serialization).
 
-use blst::*;
-
 use super::error::Error;
 use super::hash;
 use super::pk::PublicKey;
 use super::ser;
+
+use blst::*;
 
 /// A legacy BLS signature (96-byte G2 point in legacy serialization).
 #[derive(Clone, Debug, PartialEq, Eq)]

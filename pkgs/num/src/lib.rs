@@ -27,15 +27,14 @@ mod prelude;
 pub mod serialize;
 #[doc(hidden)]
 pub mod util;
-
 #[doc(hidden)]
 pub mod __private {
   pub use bitcoin_consensus_encoding;
 }
 
-pub use arith::ArithInt;
-pub use arith256::Arith256;
-pub use compact::{CompactTarget, DecodedTarget};
-pub use error::ParseHexError;
-pub use hash::{Hash160, Hash256, Hash512, HashBlob};
-pub use hash_encoding::{HashDecoder, HashDecoderError, HashTypeDecoder};
+pub use crate::arith::ArithInt;
+pub use crate::arith256::Arith256;
+pub use crate::compact::{CompactTarget, DecodedTarget};
+pub use crate::error::ParseHexError;
+pub use crate::hash::{Hash160, Hash256, Hash512, HashBlob};
+pub use crate::hash_encoding::{HashDecoder, HashDecoderError, HashTypeDecoder};

@@ -23,6 +23,7 @@ cfg_if::cfg_if! {
 #[cfg(feature = "simd")]
 pub(crate) fn sponge(data: &[u8], perm: fn(&mut [u64; 25])) -> dash_num::Hash512 {
   use crate::util::memops::{load_u64_le, store_u64_le};
+
   use consts::RATE;
 
   let mut state = [0u64; 25];

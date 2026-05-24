@@ -14,9 +14,9 @@ use crate::tx_out::{TxOut, TxOutDecoderError};
 use crate::tx_types::TxType;
 use crate::validation::{DeploymentContext, MAX_COINBASE_SCRIPT_SIZE, MAX_TX_EXTRA_PAYLOAD};
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// Maximum extra payload size over the wire (100 KB).
 pub const MAX_EXTRA_PAYLOAD_SIZE: usize = 100_000;

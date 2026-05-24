@@ -7,7 +7,6 @@
 //! Shared type definitions for chain parameters.
 
 pub(crate) use bitcoin_units::BlockHeight;
-
 pub use dash_num::{Arith256, Hash256};
 pub use dash_primitives::hash::double_sha256;
 pub use dash_primitives::{

@@ -12,10 +12,10 @@ use crate::support::{DynBitset, LlmqType};
 use crate::wire;
 use crate::{QuorumHash, QuorumVvecHash};
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes};
+
+use core::fmt;
 
 /// DKG session output for one LLMQ.
 ///
