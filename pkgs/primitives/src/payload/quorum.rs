@@ -125,6 +125,7 @@ impl fmt::Display for Commitment {
 
 /// Tx-level wrapper for Commitment (type 6).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct FinalCommitment {
   /// Payload version.
   pub version: u16,

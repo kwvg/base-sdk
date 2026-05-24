@@ -16,6 +16,7 @@ use core::fmt;
 
 /// Requests a masternode list diff between two blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GetMnListDiff {
   /// Base block hash (beginning of range).
   pub base_block_hash: BlockHash,
@@ -89,6 +90,7 @@ impl encoding::Decodable for GetMnListDiff {
 
 /// Response carrying the masternode list diff.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct MnListDiff {
   /// The full diff payload.
   pub payload: MnListDiffPayload,

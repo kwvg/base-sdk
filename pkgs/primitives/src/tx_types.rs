@@ -10,6 +10,7 @@ use core::fmt;
 
 /// Dash transaction type, encoded in the upper 16 bits of the version field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TxType {
   /// Spend transaction (includes legacy coinbase).
   Spend,
@@ -91,6 +92,7 @@ impl fmt::Display for TxType {
 
 /// Masternode type, used in provider registration and update transactions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum MnType {
   /// Regular masternode.
   Regular,

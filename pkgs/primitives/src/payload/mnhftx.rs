@@ -18,6 +18,7 @@ use core::fmt;
 
 /// MnHardFork -- hard-fork signal (type 7).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct MnHardFork {
   /// Payload version.
   pub version: u8,

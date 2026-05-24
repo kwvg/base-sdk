@@ -13,6 +13,7 @@ use core::fmt;
 
 /// Inventory object type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum InvType {
   /// Error / not used.
   Error,
@@ -79,6 +80,7 @@ impl fmt::Display for InvType {
 
 /// An inventory vector: a typed 32-byte hash.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Inventory {
   /// Object type.
   pub inv_type: InvType,

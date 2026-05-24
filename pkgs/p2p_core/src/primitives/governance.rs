@@ -19,6 +19,7 @@ use core::fmt;
 
 /// Governance vote outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum VoteOutcome {
   /// No vote cast.
   None,
@@ -86,6 +87,7 @@ impl dash_types::TryFromUint<u32> for VoteOutcome {
 
 /// Governance vote signal type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum VoteSignal {
   /// No signal.
   None,

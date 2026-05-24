@@ -17,6 +17,7 @@ use core::fmt;
 
 /// BLS signature scheme (determines the DST).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum Scheme {
   /// Basic scheme (NUL augmentation).
   Basic,

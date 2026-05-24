@@ -29,6 +29,7 @@ const MAX_VCH_SIG_SIZE: usize = 256;
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ProUpRegTx {
   /// 1=LegacyBLS, 2=BasicBLS.
   pub version: u16,
@@ -45,6 +46,7 @@ pub struct ProUpRegTx {
   /// Hash of all inputs.
   pub inputs_hash: InputsHash,
   /// Owner ECDSA signature (variable-length).
+  #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex"))]
   pub vch_sig: Vec<u8>,
 }
 

@@ -15,6 +15,7 @@ use core::fmt;
 
 /// LLMQ type (quorum size/threshold configuration).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum LlmqType {
   /// 50 members, 60% threshold.
   Llmq50_60,
@@ -106,6 +107,7 @@ impl fmt::Display for LlmqType {
 
 /// Revocation reason for provider update revocation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum RevocationReason {
   /// No specific reason.
   NotSpecified,
@@ -157,6 +159,7 @@ impl fmt::Display for RevocationReason {
 
 /// Network address type (BIP155).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetworkType {
   /// IPv4.
   Ipv4,
@@ -280,19 +283,23 @@ impl DynBitset {
   }
 
   /// Iterates over indices of set bits.
-  pub fn iter_set_bits(&self) -> DynBitsetIterator<'_> {
-    DynBitsetIterator { bitset: self, index: 0 }
+  pub fn iter_set_bits(&self) -> DynBitsetIterator {
+    DynBitsetIterator {
+      bitset: self.clone(),
+      index: 0,
+    }
   }
 }
 
 /// Iterator over set bit indices in a [`DynBitset`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DynBitsetIterator<'a> {
-  bitset: &'a DynBitset,
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub struct DynBitsetIterator {
+  bitset: DynBitset,
   index: u64,
 }
 
-impl Iterator for DynBitsetIterator<'_> {
+impl Iterator for DynBitsetIterator {
   type Item = u64;
 
   fn next(&mut self) -> Option<Self::Item> {
@@ -422,6 +429,7 @@ impl encoding::Decodable for CService {
 
 /// Purpose tag for an extended network info entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetInfoPurpose {
   /// Core P2P port.
   CoreP2p,
@@ -468,6 +476,7 @@ impl fmt::Display for NetInfoPurpose {
 
 /// A single network info entry within a purpose group.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetInfoEntry {
   /// ADDRv1-style IP + port.
   Service(CService),
@@ -487,6 +496,7 @@ pub enum NetInfoEntry {
 /// Contains a versioned list of purpose-grouped network entries (core P2P,
 /// platform P2P, platform HTTPS).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ExtendedNetInfo {
   /// Format version.
   pub version: u8,

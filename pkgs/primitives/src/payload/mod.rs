@@ -39,6 +39,7 @@ use core::fmt;
 /// Provides a unified dispatch over all Dash special transaction types. Unknown
 /// or future types are stored as opaque bytes for forward compatibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum SpecialPayload {
   /// Masternode registration (type 1).
   ProviderRegister(ProRegTx),

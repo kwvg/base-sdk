@@ -15,6 +15,7 @@ use core::fmt;
 
 /// A Dash block header (80 bytes on the wire).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct BlockHeader {
   /// Block version.
   pub version: i32,

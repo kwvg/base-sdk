@@ -230,6 +230,7 @@ def main() -> int:
         "--language=rust",
         f"--source-root={repo_root / 'pkgs'}",
         "--overwrite",
+        "--command=cargo check --features full,_internal",
       ],
       check=False,
     )

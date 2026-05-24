@@ -22,6 +22,7 @@ use core::fmt;
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ProUpRevTx {
   /// 1=LegacyBLS, 2=BasicBLS.
   pub version: u16,
