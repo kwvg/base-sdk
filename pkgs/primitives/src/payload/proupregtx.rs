@@ -58,17 +58,15 @@ impl fmt::Display for ProUpRegTx {
 
 impl ProUpRegTx {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-
-    let version = codec::read_u16_le(sl)?;
-    let pro_tx_hash = wire::read_hash(sl)?.into();
-    let mode = codec::read_u16_le(sl)?;
-    let pub_key_operator = codec::read_type(sl)?;
-    let key_id_voting = codec::read_type(sl)?;
-    let script_payout = wire::read_script(sl, 10_000)?;
-    let inputs_hash = wire::read_hash(sl)?.into();
-    let vch_sig = wire::read_vec(sl, MAX_VCH_SIG_SIZE)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u16_le(data)?;
+    let pro_tx_hash = wire::read_hash(data)?.into();
+    let mode = codec::read_u16_le(data)?;
+    let pub_key_operator = codec::read_type(data)?;
+    let key_id_voting = codec::read_type(data)?;
+    let script_payout = wire::read_script(data, 10_000)?;
+    let inputs_hash = wire::read_hash(data)?.into();
+    let vch_sig = wire::read_vec(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {
       version,

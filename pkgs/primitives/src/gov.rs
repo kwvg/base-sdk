@@ -161,21 +161,20 @@ impl GovObject {
   /// # Errors
   ///
   /// Returns `DecodeError` on malformed input.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-    let hash_parent = wire::read_hash(sl)?.into();
-    let revision = codec::read_i32_le(sl)?;
-    let time = codec::read_i64_le(sl)?;
-    let collateral_hash = wire::read_hash(sl)?.into();
-    let obj_data = wire::read_vec(sl, 16_384)?;
-    let object_type = GovObjectType::from_i32(codec::read_i32_le(sl)?);
-    let mn_hash: TxHash = wire::read_hash(sl)?.into();
-    let mn_index = codec::read_u32_le(sl)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let hash_parent = wire::read_hash(data)?.into();
+    let revision = codec::read_i32_le(data)?;
+    let time = codec::read_i64_le(data)?;
+    let collateral_hash = wire::read_hash(data)?.into();
+    let obj_data = wire::read_vec(data, 16_384)?;
+    let object_type = GovObjectType::from_i32(codec::read_i32_le(data)?);
+    let mn_hash: TxHash = wire::read_hash(data)?.into();
+    let mn_index = codec::read_u32_le(data)?;
     let masternode_outpoint = OutPoint {
       hash: mn_hash,
       index: mn_index,
     };
-    let sig = wire::read_vec(sl, 1024)?;
+    let sig = wire::read_vec(data, 1024)?;
 
     Ok(Self {
       hash_parent,
@@ -202,7 +201,7 @@ impl GovObject {
     buf.extend_from_slice(&self.revision.to_le_bytes());
     buf.extend_from_slice(&self.time.to_le_bytes());
     // data hex is serialized as a string (CompactSize + bytes)
-    crate::script::write_compact_size(data_hex.len(), &mut buf);
+    codec::write_compact_size(data_hex.len(), &mut buf);
     buf.extend_from_slice(data_hex.as_bytes());
     // outpoint + dummy padding for legacy hash compat
     buf.extend_from_slice(self.masternode_outpoint.hash.as_bytes());
@@ -210,7 +209,7 @@ impl GovObject {
     buf.push(0x00);
     buf.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
     // sig with CompactSize prefix
-    crate::script::write_compact_size(self.sig.len(), &mut buf);
+    codec::write_compact_size(self.sig.len(), &mut buf);
     buf.extend_from_slice(&self.sig);
 
     TxHash::from_bytes(sha256d::Hash::hash(&buf).to_byte_array())
@@ -257,19 +256,18 @@ impl GovVote {
   /// # Errors
   ///
   /// Returns `DecodeError` on malformed input.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-    let mn_hash: TxHash = wire::read_hash(sl)?.into();
-    let mn_index = codec::read_u32_le(sl)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let mn_hash: TxHash = wire::read_hash(data)?.into();
+    let mn_index = codec::read_u32_le(data)?;
     let masternode_outpoint = OutPoint {
       hash: mn_hash,
       index: mn_index,
     };
-    let parent_hash = wire::read_hash(sl)?.into();
-    let outcome = codec::read_i32_le(sl)?;
-    let signal = codec::read_i32_le(sl)?;
-    let time = codec::read_i64_le(sl)?;
-    let sig = wire::read_vec(sl, 1024)?;
+    let parent_hash = wire::read_hash(data)?.into();
+    let outcome = codec::read_i32_le(data)?;
+    let signal = codec::read_i32_le(data)?;
+    let time = codec::read_i64_le(data)?;
+    let sig = wire::read_vec(data, 1024)?;
 
     Ok(Self {
       masternode_outpoint,

@@ -44,15 +44,13 @@ impl fmt::Display for ProUpRevTx {
 
 impl ProUpRevTx {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-
-    let version = codec::read_u16_le(sl)?;
-    let pro_tx_hash = wire::read_hash(sl)?.into();
-    let reason_raw = codec::read_u16_le(sl)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u16_le(data)?;
+    let pro_tx_hash = wire::read_hash(data)?.into();
+    let reason_raw = codec::read_u16_le(data)?;
     let reason = RevocationReason::from_base(reason_raw);
-    let inputs_hash = wire::read_hash(sl)?.into();
-    let sig = codec::read_type(sl)?;
+    let inputs_hash = wire::read_hash(data)?.into();
+    let sig = codec::read_type(data)?;
 
     Ok(Self {
       version,

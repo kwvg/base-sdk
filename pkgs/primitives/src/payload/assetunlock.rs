@@ -42,15 +42,13 @@ impl fmt::Display for AssetUnlock {
 
 impl AssetUnlock {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-
-    let version = codec::read_u8(sl)?;
-    let index = codec::read_u64_le(sl)?;
-    let fee = codec::read_u32_le(sl)?;
-    let requested_height = codec::read_u32_le(sl)?;
-    let quorum_hash = wire::read_hash(sl)?.into();
-    let quorum_sig = codec::read_type(sl)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u8(data)?;
+    let index = codec::read_u64_le(data)?;
+    let fee = codec::read_u32_le(data)?;
+    let requested_height = codec::read_u32_le(data)?;
+    let quorum_hash = wire::read_hash(data)?.into();
+    let quorum_sig = codec::read_type(data)?;
 
     Ok(Self {
       version,

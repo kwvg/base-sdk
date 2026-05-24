@@ -7,13 +7,12 @@
 //! Governance sync request message.
 
 use crate::encode::MAX_P2P_PAYLOAD;
-use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
-use dash_types::codec;
+use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum bloom filter size in bytes.
 const MAX_BLOOM_FILTER: usize = 36_000;
@@ -32,34 +31,33 @@ pub struct GovSync {
   pub bloom_filter: Vec<u8>,
 }
 
-impl GovSync {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let hash = Hash256::from_bytes(codec::take(sl)?);
-    let len = codec::read_compact_size(sl, MAX_BLOOM_FILTER)?;
-    let bloom_filter = codec::read_bytes(sl, len)?.to_vec();
+impl Codec for GovSync {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let hash = Hash256::from_bytes(codec::take(data)?);
+    let len = codec::read_compact_size(data, MAX_BLOOM_FILTER)?;
+    let bloom_filter = codec::read_bytes(data, len)?.to_vec();
     Ok(Self { hash, bloom_filter })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
+  fn encode(&self, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&self.hash.to_bytes());
-    codec::write_compact_size(self.bloom_filter.len(), &mut buf);
+    codec::write_compact_size(self.bloom_filter.len(), buf);
     buf.extend_from_slice(&self.bloom_filter);
-    buf
   }
 }
 
 impl encoding::Encodable for GovSync {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for GovSync {
-  type Decoder = BufferDecoder<GovSync, P2pDecodeError>;
+  type Decoder = BufferDecoder<GovSync, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(GovSync::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }

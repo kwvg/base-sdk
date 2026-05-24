@@ -209,3 +209,16 @@ pub trait NumCodec<N>: Sized {
   /// Returns the base integer.
   fn to_base(&self) -> N;
 }
+
+/// Cursor-based encode/decode for consensus wire types.
+pub trait Codec: Sized {
+  /// Decodes from the cursor, advancing it past consumed bytes.
+  ///
+  /// # Errors
+  ///
+  /// Returns `DecodeError` on malformed input.
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError>;
+
+  /// Encodes into the buffer.
+  fn encode(&self, buf: &mut Vec<u8>);
+}

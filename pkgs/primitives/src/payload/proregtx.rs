@@ -88,35 +88,33 @@ impl fmt::Display for ProRegTx {
 
 impl ProRegTx {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-
-    let version = codec::read_u16_le(sl)?;
-    let mn_type_raw = codec::read_u16_le(sl)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u16_le(data)?;
+    let mn_type_raw = codec::read_u16_le(data)?;
     let mn_type = MnType::from_base(mn_type_raw);
-    let mode = codec::read_u16_le(sl)?;
-    let collateral_hash = wire::read_hash(sl)?.into();
-    let collateral_index = codec::read_u32_le(sl)?;
+    let mode = codec::read_u16_le(data)?;
+    let collateral_hash = wire::read_hash(data)?.into();
+    let collateral_index = codec::read_u32_le(data)?;
 
     let net_info = if version >= 3 {
-      let raw = wire::read_vec(sl, 1024)?;
+      let raw = wire::read_vec(data, 1024)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
-      NetInfo::Legacy(wire::read_cservice(sl)?)
+      NetInfo::Legacy(wire::read_cservice(data)?)
     };
 
-    let key_id_owner = codec::read_type(sl)?;
-    let pub_key_operator = codec::read_type(sl)?;
-    let key_id_voting = codec::read_type(sl)?;
-    let operator_reward = codec::read_u16_le(sl)?;
-    let script_payout = wire::read_script(sl, 10_000)?;
-    let inputs_hash = wire::read_hash(sl)?.into();
+    let key_id_owner = codec::read_type(data)?;
+    let pub_key_operator = codec::read_type(data)?;
+    let key_id_voting = codec::read_type(data)?;
+    let operator_reward = codec::read_u16_le(data)?;
+    let script_payout = wire::read_script(data, 10_000)?;
+    let inputs_hash = wire::read_hash(data)?.into();
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
-      let node_id = codec::read_type(sl)?;
+      let node_id = codec::read_type(data)?;
       if version < 3 {
-        let p2p = codec::read_u16_le(sl)?;
-        let http = codec::read_u16_le(sl)?;
+        let p2p = codec::read_u16_le(data)?;
+        let http = codec::read_u16_le(data)?;
         (Some(node_id), Some(p2p), Some(http))
       } else {
         (Some(node_id), None, None)
@@ -125,7 +123,7 @@ impl ProRegTx {
       (None, None, None)
     };
 
-    let vch_sig = wire::read_vec(sl, MAX_VCH_SIG_SIZE)?;
+    let vch_sig = wire::read_vec(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {
       version,

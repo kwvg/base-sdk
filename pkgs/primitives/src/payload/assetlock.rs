@@ -39,19 +39,17 @@ impl fmt::Display for AssetLock {
 
 impl AssetLock {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u8(data)?;
 
-    let version = codec::read_u8(sl)?;
-
-    let count = codec::read_compact_size(sl, 100)?;
+    let count = codec::read_compact_size(data, 100)?;
 
     let mut credit_outputs = Vec::with_capacity(count);
     for _ in 0..count {
-      let raw = codec::read_u64_le(sl)?;
+      let raw = codec::read_u64_le(data)?;
       let value = bitcoin_units::Amount::from_sat(raw)
         .map_err(|_| DecodeError::CompactSizeExceedsLimit { limit: 0, value: raw })?;
-      let script_pubkey = wire::read_script(sl, 10_000)?;
+      let script_pubkey = wire::read_script(data, 10_000)?;
       credit_outputs.push(TxOut { value, script_pubkey });
     }
 

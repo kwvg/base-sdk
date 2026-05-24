@@ -7,7 +7,6 @@
 //! Compressed header messages: getheaders2, headers2, sendheaders2.
 
 use crate::encode::MAX_P2P_PAYLOAD;
-use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::compressed_header::CompressionState;
 use crate::primitives::protocol_version::ProtocolVersion;
@@ -15,7 +14,7 @@ use crate::primitives::protocol_version::ProtocolVersion;
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::BlockHash;
-use dash_types::codec;
+use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum block locator hashes.
 const MAX_LOCATOR: usize = 101;
@@ -34,16 +33,15 @@ pub struct GetHeaders2 {
   pub hash_stop: BlockHash,
 }
 
-impl GetHeaders2 {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let version = ProtocolVersion(codec::read_u32_le(sl)?);
-    let count = codec::read_compact_size(sl, MAX_LOCATOR)?;
+impl Codec for GetHeaders2 {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = ProtocolVersion(codec::read_u32_le(data)?);
+    let count = codec::read_compact_size(data, MAX_LOCATOR)?;
     let mut locator_hashes = Vec::with_capacity(count);
     for _ in 0..count {
-      locator_hashes.push(BlockHash::from_bytes(codec::take(sl)?));
+      locator_hashes.push(BlockHash::from_bytes(codec::take(data)?));
     }
-    let hash_stop = BlockHash::from_bytes(codec::take(sl)?);
+    let hash_stop = BlockHash::from_bytes(codec::take(data)?);
     Ok(Self {
       version,
       locator_hashes,
@@ -51,29 +49,29 @@ impl GetHeaders2 {
     })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
+  fn encode(&self, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&self.version.0.to_le_bytes());
-    codec::write_compact_size(self.locator_hashes.len(), &mut buf);
+    codec::write_compact_size(self.locator_hashes.len(), buf);
     for h in &self.locator_hashes {
       buf.extend_from_slice(&h.to_bytes());
     }
     buf.extend_from_slice(&self.hash_stop.to_bytes());
-    buf
   }
 }
 
 impl encoding::Encodable for GetHeaders2 {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for GetHeaders2 {
-  type Decoder = BufferDecoder<GetHeaders2, P2pDecodeError>;
+  type Decoder = BufferDecoder<GetHeaders2, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(GetHeaders2::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }
 
@@ -85,39 +83,38 @@ pub struct Headers2 {
   pub headers: Vec<dash_primitives::BlockHeader>,
 }
 
-impl Headers2 {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let count = codec::read_compact_size(sl, MAX_HEADERS)?;
+impl Codec for Headers2 {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let count = codec::read_compact_size(data, MAX_HEADERS)?;
     let mut state = CompressionState::new();
     let mut headers = Vec::with_capacity(count);
     for _ in 0..count {
-      headers.push(state.decode_header(sl)?);
+      headers.push(state.decode_header(data)?);
     }
     Ok(Self { headers })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
-    codec::write_compact_size(self.headers.len(), &mut buf);
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_compact_size(self.headers.len(), buf);
     let mut state = CompressionState::new();
     for h in &self.headers {
-      state.encode_header(h, &mut buf);
+      state.encode_header(h, buf);
     }
-    buf
   }
 }
 
 impl encoding::Encodable for Headers2 {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for Headers2 {
-  type Decoder = BufferDecoder<Headers2, P2pDecodeError>;
+  type Decoder = BufferDecoder<Headers2, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(Headers2::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }

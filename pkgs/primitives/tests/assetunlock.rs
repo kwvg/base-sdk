@@ -25,7 +25,7 @@ fn decode_fields() {
     assert!(tx.validate(&Default::default()).is_ok());
     assert!(!tx.extra_payload.is_empty(), "{txid}");
 
-    let payload = AssetUnlock::decode(&tx.extra_payload).unwrap();
+    let payload = AssetUnlock::decode(&mut &tx.extra_payload[..]).unwrap();
     assert!(payload.validate(&Default::default()).is_ok());
     let d = &entry.details;
 

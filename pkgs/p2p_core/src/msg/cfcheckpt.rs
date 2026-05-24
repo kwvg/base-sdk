@@ -7,14 +7,13 @@
 //! BIP157 compact filter checkpoint messages: getcfcheckpt, cfcheckpt.
 
 use crate::encode::MAX_P2P_PAYLOAD;
-use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::filter_type::FilterType;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::BlockHash;
-use dash_types::codec;
+use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum checkpoints per message.
 const MAX_CFCHECKPT: usize = 1_000;
@@ -29,33 +28,32 @@ pub struct GetCFCheckpt {
   pub stop_hash: BlockHash,
 }
 
-impl GetCFCheckpt {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let filter_type = FilterType(codec::read_u8(sl)?);
-    let stop_hash = BlockHash::from_bytes(codec::take(sl)?);
+impl Codec for GetCFCheckpt {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let filter_type = FilterType(codec::read_u8(data)?);
+    let stop_hash = BlockHash::from_bytes(codec::take(data)?);
     Ok(Self { filter_type, stop_hash })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
+  fn encode(&self, buf: &mut Vec<u8>) {
     buf.push(self.filter_type.0);
     buf.extend_from_slice(&self.stop_hash.to_bytes());
-    buf
   }
 }
 
 impl encoding::Encodable for GetCFCheckpt {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for GetCFCheckpt {
-  type Decoder = BufferDecoder<GetCFCheckpt, P2pDecodeError>;
+  type Decoder = BufferDecoder<GetCFCheckpt, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(GetCFCheckpt::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }
 
@@ -71,15 +69,14 @@ pub struct CFCheckpt {
   pub filter_headers: Vec<BlockHash>,
 }
 
-impl CFCheckpt {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let filter_type = FilterType(codec::read_u8(sl)?);
-    let stop_hash = BlockHash::from_bytes(codec::take(sl)?);
-    let count = codec::read_compact_size(sl, MAX_CFCHECKPT)?;
+impl Codec for CFCheckpt {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let filter_type = FilterType(codec::read_u8(data)?);
+    let stop_hash = BlockHash::from_bytes(codec::take(data)?);
+    let count = codec::read_compact_size(data, MAX_CFCHECKPT)?;
     let mut filter_headers = Vec::with_capacity(count);
     for _ in 0..count {
-      filter_headers.push(BlockHash::from_bytes(codec::take(sl)?));
+      filter_headers.push(BlockHash::from_bytes(codec::take(data)?));
     }
     Ok(Self {
       filter_type,
@@ -88,28 +85,28 @@ impl CFCheckpt {
     })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
+  fn encode(&self, buf: &mut Vec<u8>) {
     buf.push(self.filter_type.0);
     buf.extend_from_slice(&self.stop_hash.to_bytes());
-    codec::write_compact_size(self.filter_headers.len(), &mut buf);
+    codec::write_compact_size(self.filter_headers.len(), buf);
     for h in &self.filter_headers {
       buf.extend_from_slice(&h.to_bytes());
     }
-    buf
   }
 }
 
 impl encoding::Encodable for CFCheckpt {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for CFCheckpt {
-  type Decoder = BufferDecoder<CFCheckpt, P2pDecodeError>;
+  type Decoder = BufferDecoder<CFCheckpt, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(CFCheckpt::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }

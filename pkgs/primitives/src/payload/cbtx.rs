@@ -49,23 +49,21 @@ impl fmt::Display for CoinbaseCommitment {
 
 impl CoinbaseCommitment {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-
-    let version = codec::read_u16_le(sl)?;
-    let height = BlockHeight::from_u32(codec::read_u32_le(sl)?);
-    let merkle_root_mn_list = wire::read_hash(sl)?.into();
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u16_le(data)?;
+    let height = BlockHeight::from_u32(codec::read_u32_le(data)?);
+    let merkle_root_mn_list = wire::read_hash(data)?.into();
 
     let merkle_root_quorums = if version >= 2 {
-      Some(wire::read_hash(sl)?.into())
+      Some(wire::read_hash(data)?.into())
     } else {
       None
     };
 
     let (best_cl_height_diff, best_cl_signature, credit_pool_balance) = if version >= 3 {
-      let diff = codec::read_compact_u64(sl)?;
-      let sig = codec::read_type(sl)?;
-      let balance = codec::read_i64_le(sl)?;
+      let diff = codec::read_compact_u64(data)?;
+      let sig = codec::read_type(data)?;
+      let balance = codec::read_i64_le(data)?;
       (Some(diff), Some(sig), Some(balance))
     } else {
       (None, None, None)

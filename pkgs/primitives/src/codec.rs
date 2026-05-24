@@ -21,7 +21,7 @@ use core::fmt;
 pub struct BufferDecoder<T, E> {
   buf: Vec<u8>,
   limit: usize,
-  decode_fn: fn(&[u8]) -> Result<T, E>,
+  decode_fn: fn(&mut &[u8]) -> Result<T, E>,
 }
 
 impl<T, E> fmt::Debug for BufferDecoder<T, E> {
@@ -36,7 +36,7 @@ impl<T, E> fmt::Debug for BufferDecoder<T, E> {
 impl<T, E> BufferDecoder<T, E> {
   /// Creates a new decoder with the given decode function and
   /// maximum buffer size.
-  pub fn new(decode_fn: fn(&[u8]) -> Result<T, E>, limit: usize) -> Self {
+  pub fn new(decode_fn: fn(&mut &[u8]) -> Result<T, E>, limit: usize) -> Self {
     Self {
       buf: Vec::new(),
       limit,
@@ -58,7 +58,7 @@ impl<T, E> encoding::Decoder for BufferDecoder<T, E> {
   }
 
   fn end(self) -> Result<Self::Output, Self::Error> {
-    (self.decode_fn)(&self.buf)
+    (self.decode_fn)(&mut &self.buf[..])
   }
 
   fn read_limit(&self) -> usize {

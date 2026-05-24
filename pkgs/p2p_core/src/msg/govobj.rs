@@ -7,11 +7,12 @@
 //! Governance object message.
 
 use crate::encode::MAX_P2P_PAYLOAD;
-use crate::error::P2pDecodeError;
+use crate::prelude::*;
 use crate::primitives::governance::GovernanceObject;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
+use dash_types::codec::{Codec, DecodeError};
 
 /// A governance object broadcast or response.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,8 +23,8 @@ pub struct GovObj {
 }
 
 impl GovObj {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let object = GovernanceObject::decode_from_slice(data)?;
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let object = <GovernanceObject as Codec>::decode(data)?;
     Ok(Self { object })
   }
 }
@@ -31,13 +32,15 @@ impl GovObj {
 impl encoding::Encodable for GovObj {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.object.encode_to_vec_buf())
+    let mut buf = Vec::new();
+    Codec::encode(&self.object, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for GovObj {
-  type Decoder = BufferDecoder<GovObj, P2pDecodeError>;
+  type Decoder = BufferDecoder<GovObj, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(GovObj::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(GovObj::decode, MAX_P2P_PAYLOAD)
   }
 }

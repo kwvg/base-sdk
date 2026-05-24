@@ -38,13 +38,11 @@ impl fmt::Display for MnHardFork {
 
 impl MnHardFork {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-
-    let version = codec::read_u8(sl)?;
-    let version_bit = codec::read_u8(sl)?;
-    let quorum_hash = wire::read_hash(sl)?.into();
-    let sig = codec::read_type(sl)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u8(data)?;
+    let version_bit = codec::read_u8(data)?;
+    let quorum_hash = wire::read_hash(data)?.into();
+    let sig = codec::read_type(data)?;
 
     Ok(Self {
       version,

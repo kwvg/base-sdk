@@ -226,21 +226,22 @@ impl Block {
 /// Returns an error if the block header, transaction count, or any individual
 /// transaction cannot be decoded.
 pub fn tx_byte_ranges(raw_block: &[u8]) -> Result<Vec<(usize, usize)>, DecodeError> {
-  let sl = &mut &raw_block[..];
+
+  let data = &mut &raw_block[..];
 
   // Skip 80-byte header.
-  let _ = codec::read_bytes(sl, 80)?;
+  let _ = codec::read_bytes(data, 80)?;
 
-  let tx_count = codec::read_compact_size(sl, 100_000)?;
+  let tx_count = codec::read_compact_size(data, 100_000)?;
   let mut ranges = Vec::with_capacity(tx_count);
 
   for _ in 0..tx_count {
-    let start = raw_block.len() - sl.len();
-    let _tx = encoding::decode_from_slice_unbounded::<Transaction>(sl).map_err(|_| DecodeError::Eof {
+    let start = raw_block.len() - data.len();
+    let _tx = encoding::decode_from_slice_unbounded::<Transaction>(data).map_err(|_| DecodeError::Eof {
       needed: 1,
       remaining: 0,
     })?;
-    let end = raw_block.len() - sl.len();
+    let end = raw_block.len() - data.len();
     ranges.push((start, end));
   }
 

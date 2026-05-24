@@ -7,12 +7,11 @@
 //! User agent string exchanged in version messages.
 
 use crate::encode::MAX_P2P_PAYLOAD;
-use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
-use dash_types::codec;
+use dash_types::codec::{self, Codec, DecodeError};
 
 use core::fmt;
 
@@ -69,19 +68,18 @@ impl UserAgent {
   pub fn is_empty(&self) -> bool {
     self.0.is_empty()
   }
+}
 
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let len = codec::read_compact_size(sl, MAX_USER_AGENT)?;
-    let bytes = codec::read_bytes(sl, len)?;
+impl Codec for UserAgent {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let len = codec::read_compact_size(data, MAX_USER_AGENT)?;
+    let bytes = codec::read_bytes(data, len)?;
     Ok(Self(bytes.to_vec()))
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
-    codec::write_compact_size(self.0.len(), &mut buf);
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_compact_size(self.0.len(), buf);
     buf.extend_from_slice(&self.0);
-    buf
   }
 }
 
@@ -97,13 +95,15 @@ impl fmt::Display for UserAgent {
 impl encoding::Encodable for UserAgent {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for UserAgent {
-  type Decoder = BufferDecoder<UserAgent, P2pDecodeError>;
+  type Decoder = BufferDecoder<UserAgent, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(UserAgent::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }

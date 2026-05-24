@@ -7,7 +7,6 @@
 //! Version handshake message (Dash-extended).
 
 use crate::encode::MAX_P2P_PAYLOAD;
-use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::net_addr::NetAddr;
 use crate::primitives::protocol_version::ProtocolVersion;
@@ -18,7 +17,7 @@ use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
-use dash_types::codec;
+use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum user agent length in bytes.
 const MAX_USER_AGENT: usize = 256;
@@ -54,35 +53,37 @@ pub struct Version {
   pub mn_connection: bool,
 }
 
-impl Version {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let protocol_version = ProtocolVersion(codec::read_u32_le(sl)?);
-    let services = ServiceFlags(codec::read_u64_le(sl)?);
-    let timestamp = codec::read_i64_le(sl)?;
+impl Codec for Version {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let protocol_version = ProtocolVersion(codec::read_u32_le(data)?);
+    let services = ServiceFlags(codec::read_u64_le(data)?);
+    let timestamp = codec::read_i64_le(data)?;
     // addr_recv: services(8) + addr(16) + port(2)
-    let recv_services = ServiceFlags(codec::read_u64_le(sl)?);
-    let recv_addr = wire::read_cservice(sl)?;
+    let recv_services = ServiceFlags(codec::read_u64_le(data)?);
+    let recv_addr = wire::read_cservice(data)?;
     let addr_recv = NetAddr {
       services: recv_services,
       addr: recv_addr,
     };
     // addr_send
-    let send_services = ServiceFlags(codec::read_u64_le(sl)?);
-    let send_addr = wire::read_cservice(sl)?;
+    let send_services = ServiceFlags(codec::read_u64_le(data)?);
+    let send_addr = wire::read_cservice(data)?;
     let addr_send = NetAddr {
       services: send_services,
       addr: send_addr,
     };
-    let nonce = codec::read_u64_le(sl)?;
+    let nonce = codec::read_u64_le(data)?;
     // user agent
-    let ua_len = codec::read_compact_size(sl, MAX_USER_AGENT)?;
-    let ua_bytes = codec::read_bytes(sl, ua_len)?.to_vec();
-    let user_agent = UserAgent::new(ua_bytes).map_err(|e| P2pDecodeError::Consensus(format!("{e}")))?;
-    let start_height = codec::read_i32_le(sl)?;
-    let relay = codec::read_bool(sl)?;
-    let mnauth_challenge = Hash256::from_bytes(codec::take(sl)?);
-    let mn_connection = codec::read_bool(sl)?;
+    let ua_len = codec::read_compact_size(data, MAX_USER_AGENT)?;
+    let ua_bytes = codec::read_bytes(data, ua_len)?.to_vec();
+    let user_agent = UserAgent::new(ua_bytes).map_err(|_| DecodeError::CompactSizeExceedsLimit {
+      limit: 256,
+      value: ua_len as u64,
+    })?;
+    let start_height = codec::read_i32_le(data)?;
+    let relay = codec::read_bool(data)?;
+    let mnauth_challenge = Hash256::from_bytes(codec::take(data)?);
+    let mn_connection = codec::read_bool(data)?;
     Ok(Self {
       protocol_version,
       services,
@@ -98,8 +99,7 @@ impl Version {
     })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
+  fn encode(&self, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&self.protocol_version.0.to_le_bytes());
     buf.extend_from_slice(&self.services.0.to_le_bytes());
     buf.extend_from_slice(&self.timestamp.to_le_bytes());
@@ -113,26 +113,27 @@ impl Version {
     buf.extend_from_slice(&self.addr_send.addr.port.to_be_bytes());
     buf.extend_from_slice(&self.nonce.to_le_bytes());
     // user agent
-    codec::write_compact_size(self.user_agent.len(), &mut buf);
+    codec::write_compact_size(self.user_agent.len(), buf);
     buf.extend_from_slice(self.user_agent.as_bytes());
     buf.extend_from_slice(&self.start_height.to_le_bytes());
     buf.push(u8::from(self.relay));
     buf.extend_from_slice(&self.mnauth_challenge.to_bytes());
     buf.push(u8::from(self.mn_connection));
-    buf
   }
 }
 
 impl encoding::Encodable for Version {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for Version {
-  type Decoder = BufferDecoder<Version, P2pDecodeError>;
+  type Decoder = BufferDecoder<Version, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(Version::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }

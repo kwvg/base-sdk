@@ -20,7 +20,7 @@ fn decode_and_hash() {
   let corpus = util::load_triggers();
   for (obj_hash_hex, entry) in &corpus {
     let raw = Vec::<u8>::from_hex(&entry.raw).unwrap();
-    let obj = GovObject::decode(&raw).unwrap();
+    let obj = GovObject::decode(&mut &raw[..]).unwrap();
     let d = &entry.details;
     let payload = &d["payload"];
 

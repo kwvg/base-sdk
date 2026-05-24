@@ -60,35 +60,33 @@ impl fmt::Display for ProUpServTx {
 
 impl ProUpServTx {
   /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    let sl = &mut &data[..];
-
-    let version = codec::read_u16_le(sl)?;
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u16_le(data)?;
 
     let mn_type = if version >= 2 {
-      let raw = codec::read_u16_le(sl)?;
+      let raw = codec::read_u16_le(data)?;
       MnType::from_base(raw)
     } else {
       MnType::Regular
     };
 
-    let pro_tx_hash = wire::read_hash(sl)?.into();
+    let pro_tx_hash = wire::read_hash(data)?.into();
 
     let net_info = if version >= 3 {
-      let raw = wire::read_vec(sl, 1024)?;
+      let raw = wire::read_vec(data, 1024)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
-      NetInfo::Legacy(wire::read_cservice(sl)?)
+      NetInfo::Legacy(wire::read_cservice(data)?)
     };
 
-    let script_operator_payout = wire::read_script(sl, 10_000)?;
-    let inputs_hash = wire::read_hash(sl)?.into();
+    let script_operator_payout = wire::read_script(data, 10_000)?;
+    let inputs_hash = wire::read_hash(data)?.into();
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
-      let node_id = codec::read_type(sl)?;
+      let node_id = codec::read_type(data)?;
       if version < 3 {
-        let p2p = codec::read_u16_le(sl)?;
-        let http = codec::read_u16_le(sl)?;
+        let p2p = codec::read_u16_le(data)?;
+        let http = codec::read_u16_le(data)?;
         (Some(node_id), Some(p2p), Some(http))
       } else {
         (Some(node_id), None, None)
@@ -97,7 +95,7 @@ impl ProUpServTx {
       (None, None, None)
     };
 
-    let sig = codec::read_type(sl)?;
+    let sig = codec::read_type(data)?;
 
     Ok(Self {
       version,

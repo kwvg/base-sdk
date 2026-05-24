@@ -25,7 +25,7 @@ fn decode_fields() {
     assert!(tx.validate(&Default::default()).is_ok());
     assert!(!tx.extra_payload.is_empty(), "{txid}");
 
-    let payload = MnHardFork::decode(&tx.extra_payload).unwrap();
+    let payload = MnHardFork::decode(&mut &tx.extra_payload[..]).unwrap();
     assert!(payload.validate(&Default::default()).is_ok());
     let d = &entry.details;
     let signal = &d["signal"];

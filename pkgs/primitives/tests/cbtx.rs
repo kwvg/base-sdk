@@ -25,7 +25,7 @@ fn decode_fields() {
     assert!(tx.validate(&Default::default()).is_ok());
     assert!(!tx.extra_payload.is_empty(), "{txid}");
 
-    let cbtx = CoinbaseCommitment::decode(&tx.extra_payload).unwrap();
+    let cbtx = CoinbaseCommitment::decode(&mut &tx.extra_payload[..]).unwrap();
     assert!(cbtx.validate(&Default::default()).is_ok());
     let d = &entry.details;
 

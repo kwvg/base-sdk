@@ -7,7 +7,6 @@
 //! Address messages: addr, addrv2 (getaddr and sendaddrv2 are empty).
 
 use crate::encode::MAX_P2P_PAYLOAD;
-use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
 use crate::primitives::service_flags::ServiceFlags;
@@ -15,7 +14,7 @@ use crate::primitives::service_flags::ServiceFlags;
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
-use dash_types::codec;
+use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum addresses per message.
 const MAX_ADDR: usize = 1_000;
@@ -28,44 +27,43 @@ pub struct Addr {
   pub addrs: Vec<TimestampedAddr>,
 }
 
-impl Addr {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let count = codec::read_compact_size(sl, MAX_ADDR)?;
+impl Codec for Addr {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let count = codec::read_compact_size(data, MAX_ADDR)?;
     let mut addrs = Vec::with_capacity(count);
     for _ in 0..count {
-      let time = codec::read_u32_le(sl)?;
-      let services = ServiceFlags(codec::read_u64_le(sl)?);
-      let addr = wire::read_cservice(sl)?;
+      let time = codec::read_u32_le(data)?;
+      let services = ServiceFlags(codec::read_u64_le(data)?);
+      let addr = wire::read_cservice(data)?;
       addrs.push(TimestampedAddr { time, services, addr });
     }
     Ok(Self { addrs })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
-    codec::write_compact_size(self.addrs.len(), &mut buf);
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_compact_size(self.addrs.len(), buf);
     for a in &self.addrs {
       buf.extend_from_slice(&a.time.to_le_bytes());
       buf.extend_from_slice(&a.services.0.to_le_bytes());
       buf.extend_from_slice(&a.addr.addr);
       buf.extend_from_slice(&a.addr.port.to_be_bytes());
     }
-    buf
   }
 }
 
 impl encoding::Encodable for Addr {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for Addr {
-  type Decoder = BufferDecoder<Addr, P2pDecodeError>;
+  type Decoder = BufferDecoder<Addr, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(Addr::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }
 
@@ -77,38 +75,36 @@ pub struct AddrV2Msg {
   pub addrs: Vec<AddrV2Entry>,
 }
 
-impl AddrV2Msg {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
-    let sl = &mut &data[..];
-    let count = codec::read_compact_size(sl, MAX_ADDR)?;
+impl Codec for AddrV2Msg {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let count = codec::read_compact_size(data, MAX_ADDR)?;
     let mut addrs = Vec::with_capacity(count);
     for _ in 0..count {
-      addrs.push(AddrV2Entry::decode_from_wire(sl)?);
+      addrs.push(<AddrV2Entry as Codec>::decode(data)?);
     }
     Ok(Self { addrs })
   }
 
-  fn encode_to_vec(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
-    codec::write_compact_size(self.addrs.len(), &mut buf);
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_compact_size(self.addrs.len(), buf);
     for a in &self.addrs {
-      let entry_bytes = encoding::encode_to_vec(a);
-      buf.extend_from_slice(&entry_bytes);
+      Codec::encode(a, buf);
     }
-    buf
   }
 }
 
 impl encoding::Encodable for AddrV2Msg {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    VecEncoder::new(self.encode_to_vec())
+    let mut buf = Vec::new();
+    Codec::encode(self, &mut buf);
+    VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for AddrV2Msg {
-  type Decoder = BufferDecoder<AddrV2Msg, P2pDecodeError>;
+  type Decoder = BufferDecoder<AddrV2Msg, DecodeError>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(AddrV2Msg::decode_from_slice, MAX_P2P_PAYLOAD)
+    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
   }
 }

@@ -135,22 +135,3 @@ impl encoding::Decodable for Script {
     ScriptDecoder::new()
   }
 }
-
-/// Encodes a `usize` as a CompactSize integer.
-pub(crate) fn write_compact_size(value: usize, buf: &mut Vec<u8>) {
-  match value {
-    0..=0xFC => buf.push(value as u8),
-    0xFD..=0xFFFF => {
-      buf.push(0xFD);
-      buf.extend_from_slice(&(value as u16).to_le_bytes());
-    }
-    0x1_0000..=0xFFFF_FFFF => {
-      buf.push(0xFE);
-      buf.extend_from_slice(&(value as u32).to_le_bytes());
-    }
-    _ => {
-      buf.push(0xFF);
-      buf.extend_from_slice(&(value as u64).to_le_bytes());
-    }
-  }
-}

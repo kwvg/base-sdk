@@ -75,7 +75,7 @@ impl Transaction {
     }
     Some(crate::payload::SpecialPayload::decode(
       self.tx_type,
-      &self.extra_payload,
+      &mut &self.extra_payload[..],
     ))
   }
 }
