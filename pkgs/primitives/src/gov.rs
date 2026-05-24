@@ -6,7 +6,6 @@
 
 //! Governance object and vote types as defined by the Dash protocol.
 
-use crate::error::DecodeError;
 use crate::outpoint::OutPoint;
 use crate::prelude::*;
 use crate::validation::{MAX_PROPOSAL_NAME_LEN, MIN_URL_LEN, PROPOSAL_NAME_CHARS};
@@ -14,6 +13,7 @@ use crate::wire;
 use crate::TxHash;
 
 use bitcoin_hashes::sha256d;
+use dash_types::codec::DecodeError;
 use hex_conservative::DisplayHex;
 
 use core::fmt;

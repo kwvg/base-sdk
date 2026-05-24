@@ -8,6 +8,8 @@
 
 use crate::prelude::*;
 
+use dash_types::codec::DecodeError;
+
 use core::fmt;
 
 /// An error encountered during P2P message decoding.
@@ -41,8 +43,8 @@ pub enum P2pDecodeError {
   },
 }
 
-impl From<dash_primitives::codec::DecodeError> for P2pDecodeError {
-  fn from(e: dash_primitives::codec::DecodeError) -> Self {
+impl From<DecodeError> for P2pDecodeError {
+  fn from(e: DecodeError) -> Self {
     Self::Consensus(format!("{e}"))
   }
 }

@@ -22,6 +22,7 @@ mod quorum;
 use crate::prelude::*;
 use crate::tx_types::TxType;
 
+use dash_types::codec::DecodeError;
 pub use assetlock::AssetLock;
 pub use assetunlock::AssetUnlock;
 pub use cbtx::CoinbaseCommitment;
@@ -93,7 +94,7 @@ impl SpecialPayload {
   ///
   /// Returns `PayloadError` if a recognized type fails to decode.
   pub fn decode(tx_type: TxType, data: &[u8]) -> Result<Self, PayloadError> {
-    let err = |e: crate::error::DecodeError| PayloadError {
+    let err = |e: DecodeError| PayloadError {
       tx_type,
       message: format!("{e}"),
     };

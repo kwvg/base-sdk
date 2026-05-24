@@ -7,7 +7,6 @@
 //! ProUpServTx service-update payload (type 2).
 
 use super::proregtx::NetInfo;
-use crate::error::DecodeError;
 use crate::script::Script;
 use crate::tx_types::MnType;
 use crate::validation::{
@@ -18,6 +17,7 @@ use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
+use dash_types::codec::DecodeError;
 use dash_types::{BlsSignatureBytes, PlatformNodeId};
 
 use core::fmt;
@@ -59,10 +59,6 @@ impl fmt::Display for ProUpServTx {
 }
 
 impl ProUpServTx {
-  fn decode_for_codec(data: &[u8]) -> Result<Self, crate::codec::DecodeError> {
-    Self::decode(data).map_err(Into::into)
-  }
-
   /// Decodes from the extra_payload byte slice.
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
@@ -119,9 +115,9 @@ impl ProUpServTx {
 }
 
 impl encoding::Decodable for ProUpServTx {
-  type Decoder = crate::codec::BufferDecoder<Self, crate::codec::DecodeError>;
+  type Decoder = crate::codec::BufferDecoder<Self, DecodeError>;
   fn decoder() -> Self::Decoder {
-    crate::codec::BufferDecoder::new(Self::decode_for_codec, crate::MAX_EXTRA_PAYLOAD_SIZE)
+    crate::codec::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }
 

@@ -9,6 +9,7 @@
 use crate::prelude::*;
 
 pub use dash_primitives::codec::{BufferDecoder, VecEncoder};
+use dash_types::codec::DecodeError;
 
 use core::fmt;
 
@@ -44,14 +45,8 @@ impl fmt::Display for WireDecodeError {
   }
 }
 
-impl From<dash_primitives::codec::DecodeError> for WireDecodeError {
-  fn from(e: dash_primitives::codec::DecodeError) -> Self {
-    Self(format!("{e}"))
-  }
-}
-
-impl From<dash_primitives::error::DecodeError> for WireDecodeError {
-  fn from(e: dash_primitives::error::DecodeError) -> Self {
+impl From<DecodeError> for WireDecodeError {
+  fn from(e: DecodeError) -> Self {
     Self(format!("{e}"))
   }
 }

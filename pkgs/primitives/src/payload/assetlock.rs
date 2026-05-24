@@ -6,13 +6,13 @@
 
 //! AssetLock (type 8): L1 to Platform.
 
-use crate::error::DecodeError;
 use crate::prelude::*;
 use crate::tx_out::TxOut;
 use crate::validation::DeploymentContext;
 use crate::wire;
 
 use bitcoin_consensus_encoding as encoding;
+use dash_types::codec::DecodeError;
 
 use core::fmt;
 
@@ -38,10 +38,6 @@ impl fmt::Display for AssetLock {
 }
 
 impl AssetLock {
-  fn decode_for_codec(data: &[u8]) -> Result<Self, crate::codec::DecodeError> {
-    Self::decode(data).map_err(Into::into)
-  }
-
   /// Decodes from the extra_payload byte slice.
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
@@ -67,9 +63,9 @@ impl AssetLock {
 }
 
 impl encoding::Decodable for AssetLock {
-  type Decoder = crate::codec::BufferDecoder<Self, crate::codec::DecodeError>;
+  type Decoder = crate::codec::BufferDecoder<Self, DecodeError>;
   fn decoder() -> Self::Decoder {
-    crate::codec::BufferDecoder::new(Self::decode_for_codec, crate::MAX_EXTRA_PAYLOAD_SIZE)
+    crate::codec::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }
 

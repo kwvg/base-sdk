@@ -12,6 +12,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub mod codec;
 mod hex;
 mod prelude;
 mod uint;

@@ -10,8 +10,9 @@
 //! decode. This matches the convention used by
 //! `bitcoin_consensus_encoding::decode_from_slice_unbounded`.
 
-use crate::error::DecodeError;
 use crate::prelude::*;
+
+use dash_types::codec::DecodeError;
 
 fn ensure(sl: &[u8], n: usize) -> Result<(), DecodeError> {
   if sl.len() < n {

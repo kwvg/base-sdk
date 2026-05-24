@@ -99,20 +99,3 @@ impl encoding::Encoder for VecEncoder {
   }
 }
 
-/// Decode error for cursor-based types exposed through ecosystem traits.
-///
-/// Wraps `crate::error::DecodeError` so it can be used as a `Decoder::Error`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecodeError(crate::error::DecodeError);
-
-impl From<crate::error::DecodeError> for DecodeError {
-  fn from(e: crate::error::DecodeError) -> Self {
-    Self(e)
-  }
-}
-
-impl fmt::Display for DecodeError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}", self.0)
-  }
-}

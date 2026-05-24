@@ -4,7 +4,7 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Consensus decoding errors.
+//! Codec traits and helpers for cursor-based encoding and decoding.
 
 use core::fmt;
 
@@ -35,9 +35,15 @@ pub enum DecodeError {
 impl fmt::Display for DecodeError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::Eof { needed, remaining } => write!(f, "unexpected eof: needed {needed} bytes, {remaining} remaining",),
-      Self::NonMinimalCompactSize { value } => write!(f, "non-minimal compact size encoding for value {value}",),
-      Self::CompactSizeExceedsLimit { limit, value } => write!(f, "compact size value {value} exceeds limit {limit}",),
+      Self::Eof { needed, remaining } => {
+        write!(f, "unexpected eof: needed {needed} bytes, {remaining} remaining",)
+      }
+      Self::NonMinimalCompactSize { value } => {
+        write!(f, "non-minimal compact size encoding for value {value}",)
+      }
+      Self::CompactSizeExceedsLimit { limit, value } => {
+        write!(f, "compact size value {value} exceeds limit {limit}",)
+      }
     }
   }
 }

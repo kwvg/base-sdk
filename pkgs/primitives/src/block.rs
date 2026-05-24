@@ -12,6 +12,7 @@ use crate::transaction::{Transaction, TransactionDecoderError, TxInvalid};
 use crate::validation::{DeploymentContext, MAX_DIP0001_BLOCK_SIZE, MAX_LEGACY_BLOCK_SIZE};
 
 use bitcoin_consensus_encoding as encoding;
+use dash_types::codec::DecodeError;
 
 use core::fmt;
 
@@ -224,7 +225,7 @@ impl Block {
 ///
 /// Returns an error if the block header, transaction count, or any individual
 /// transaction cannot be decoded.
-pub fn tx_byte_ranges(raw_block: &[u8]) -> Result<Vec<(usize, usize)>, crate::error::DecodeError> {
+pub fn tx_byte_ranges(raw_block: &[u8]) -> Result<Vec<(usize, usize)>, DecodeError> {
   use crate::wire;
 
   let sl = &mut &raw_block[..];
@@ -237,7 +238,7 @@ pub fn tx_byte_ranges(raw_block: &[u8]) -> Result<Vec<(usize, usize)>, crate::er
 
   for _ in 0..tx_count {
     let start = raw_block.len() - sl.len();
-    let _tx = encoding::decode_from_slice_unbounded::<Transaction>(sl).map_err(|_| crate::error::DecodeError::Eof {
+    let _tx = encoding::decode_from_slice_unbounded::<Transaction>(sl).map_err(|_| DecodeError::Eof {
       needed: 1,
       remaining: 0,
     })?;

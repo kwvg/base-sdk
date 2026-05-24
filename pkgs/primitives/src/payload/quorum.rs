@@ -6,13 +6,13 @@
 
 //! LLMQ final commitment payload (type 6).
 
-use crate::error::DecodeError;
 use crate::prelude::*;
 use crate::support::{DynBitset, LlmqType};
 use crate::wire;
 use crate::{QuorumHash, QuorumVvecHash};
 
 use bitcoin_consensus_encoding as encoding;
+use dash_types::codec::DecodeError;
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes};
 
 use core::fmt;
@@ -54,10 +54,6 @@ impl Commitment {
   #[inline]
   pub fn is_indexed(&self) -> bool {
     self.version == 2 || self.version == 4
-  }
-
-  fn decode_for_codec(data: &[u8]) -> Result<Self, crate::codec::DecodeError> {
-    Self::decode(data).map_err(Into::into)
   }
 
   /// Decodes from a byte slice.
@@ -142,10 +138,6 @@ impl fmt::Display for FinalCommitment {
 }
 
 impl FinalCommitment {
-  fn decode_for_codec(data: &[u8]) -> Result<Self, crate::codec::DecodeError> {
-    Self::decode(data).map_err(Into::into)
-  }
-
   /// Decodes from the extra_payload byte slice.
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
@@ -163,9 +155,9 @@ impl FinalCommitment {
 }
 
 impl encoding::Decodable for Commitment {
-  type Decoder = crate::codec::BufferDecoder<Self, crate::codec::DecodeError>;
+  type Decoder = crate::codec::BufferDecoder<Self, DecodeError>;
   fn decoder() -> Self::Decoder {
-    crate::codec::BufferDecoder::new(Self::decode_for_codec, crate::MAX_EXTRA_PAYLOAD_SIZE)
+    crate::codec::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }
 
@@ -179,8 +171,8 @@ impl encoding::Encodable for Commitment {
 }
 
 impl encoding::Decodable for FinalCommitment {
-  type Decoder = crate::codec::BufferDecoder<Self, crate::codec::DecodeError>;
+  type Decoder = crate::codec::BufferDecoder<Self, DecodeError>;
   fn decoder() -> Self::Decoder {
-    crate::codec::BufferDecoder::new(Self::decode_for_codec, crate::MAX_EXTRA_PAYLOAD_SIZE)
+    crate::codec::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }
