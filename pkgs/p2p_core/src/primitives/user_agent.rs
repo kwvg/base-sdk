@@ -6,7 +6,8 @@
 
 //! User agent string exchanged in version messages.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
@@ -68,7 +69,7 @@ impl UserAgent {
     self.0.is_empty()
   }
 
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let len = wire::read_compact_size(sl, MAX_USER_AGENT)?;
     let bytes = wire::read_bytes(sl, len)?;
@@ -100,7 +101,7 @@ impl encoding::Encodable for UserAgent {
 }
 
 impl encoding::Decodable for UserAgent {
-  type Decoder = BufferDecoder<UserAgent, WireDecodeError>;
+  type Decoder = BufferDecoder<UserAgent, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(UserAgent::decode_from_slice, MAX_P2P_PAYLOAD)
   }

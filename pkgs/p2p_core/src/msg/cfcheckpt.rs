@@ -6,7 +6,8 @@
 
 //! BIP157 compact filter checkpoint messages: getcfcheckpt, cfcheckpt.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::filter_type::FilterType;
 
@@ -28,7 +29,7 @@ pub struct GetCFCheckpt {
 }
 
 impl GetCFCheckpt {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let filter_type = FilterType(wire::read_u8(sl)?);
     let stop_hash = BlockHash::from_bytes(wire::read_array(sl)?);
@@ -51,7 +52,7 @@ impl encoding::Encodable for GetCFCheckpt {
 }
 
 impl encoding::Decodable for GetCFCheckpt {
-  type Decoder = BufferDecoder<GetCFCheckpt, WireDecodeError>;
+  type Decoder = BufferDecoder<GetCFCheckpt, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GetCFCheckpt::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -70,7 +71,7 @@ pub struct CFCheckpt {
 }
 
 impl CFCheckpt {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let filter_type = FilterType(wire::read_u8(sl)?);
     let stop_hash = BlockHash::from_bytes(wire::read_array(sl)?);
@@ -106,7 +107,7 @@ impl encoding::Encodable for CFCheckpt {
 }
 
 impl encoding::Decodable for CFCheckpt {
-  type Decoder = BufferDecoder<CFCheckpt, WireDecodeError>;
+  type Decoder = BufferDecoder<CFCheckpt, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(CFCheckpt::decode_from_slice, MAX_P2P_PAYLOAD)
   }

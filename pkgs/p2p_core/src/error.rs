@@ -49,12 +49,6 @@ impl From<DecodeError> for P2pDecodeError {
   }
 }
 
-impl From<crate::encode::WireDecodeError> for P2pDecodeError {
-  fn from(e: crate::encode::WireDecodeError) -> Self {
-    Self::Consensus(e.0)
-  }
-}
-
 impl fmt::Display for P2pDecodeError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {

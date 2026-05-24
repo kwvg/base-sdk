@@ -6,7 +6,7 @@
 
 //! DIP-0025 compressed block header (headers2 format).
 
-use crate::encode::WireDecodeError;
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use dash_primitives::wire;
@@ -75,7 +75,7 @@ impl CompressionState {
   }
 
   /// Decodes one compressed header, advancing the slice and state.
-  pub(crate) fn decode_header(&mut self, sl: &mut &[u8]) -> Result<BlockHeader, WireDecodeError> {
+  pub(crate) fn decode_header(&mut self, sl: &mut &[u8]) -> Result<BlockHeader, P2pDecodeError> {
     let flags = wire::read_u8(sl)?;
     let version_offset = flags & VERSION_OFFSET_MASK;
 
@@ -86,7 +86,7 @@ impl CompressionState {
     } else {
       let pos = (version_offset - 1) as usize;
       if pos >= self.version_cache.len() {
-        return Err(WireDecodeError(format!("version offset {pos} out of range")));
+        return Err(P2pDecodeError::Consensus(format!("version offset {pos} out of range")));
       }
       let v = self.version_cache[pos];
       self.mark_version_mru(pos);

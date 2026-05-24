@@ -6,7 +6,8 @@
 
 //! Governance object and vote types.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
@@ -180,7 +181,7 @@ pub struct GovernanceObject {
 }
 
 impl GovernanceObject {
-  pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let parent_hash = wire::read_hash(sl)?;
     let revision = wire::read_u32_le(sl)?;
@@ -229,7 +230,7 @@ impl encoding::Encodable for GovernanceObject {
 }
 
 impl encoding::Decodable for GovernanceObject {
-  type Decoder = BufferDecoder<GovernanceObject, WireDecodeError>;
+  type Decoder = BufferDecoder<GovernanceObject, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GovernanceObject::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -256,7 +257,7 @@ pub struct GovernanceVote {
 }
 
 impl GovernanceVote {
-  pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let outpoint_hash: dash_primitives::TxHash = wire::read_hash(sl)?.into();
     let outpoint_n = wire::read_u32_le(sl)?;
@@ -300,7 +301,7 @@ impl encoding::Encodable for GovernanceVote {
 }
 
 impl encoding::Decodable for GovernanceVote {
-  type Decoder = BufferDecoder<GovernanceVote, WireDecodeError>;
+  type Decoder = BufferDecoder<GovernanceVote, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GovernanceVote::decode_from_slice, MAX_P2P_PAYLOAD)
   }

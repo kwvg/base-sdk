@@ -6,7 +6,8 @@
 
 //! Governance object message.
 
-use crate::encode::{BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::primitives::governance::GovernanceObject;
 
 use bitcoin_consensus_encoding as encoding;
@@ -20,7 +21,7 @@ pub struct GovObj {
 }
 
 impl GovObj {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let object = GovernanceObject::decode_from_slice(data)?;
     Ok(Self { object })
   }
@@ -34,7 +35,7 @@ impl encoding::Encodable for GovObj {
 }
 
 impl encoding::Decodable for GovObj {
-  type Decoder = BufferDecoder<GovObj, WireDecodeError>;
+  type Decoder = BufferDecoder<GovObj, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GovObj::decode_from_slice, MAX_P2P_PAYLOAD)
   }

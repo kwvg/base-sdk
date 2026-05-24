@@ -6,7 +6,8 @@
 
 //! Governance sync request message.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
@@ -31,7 +32,7 @@ pub struct GovSync {
 }
 
 impl GovSync {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let hash = Hash256::from_bytes(wire::read_array(sl)?);
     let len = wire::read_compact_size(sl, MAX_BLOOM_FILTER)?;
@@ -56,7 +57,7 @@ impl encoding::Encodable for GovSync {
 }
 
 impl encoding::Decodable for GovSync {
-  type Decoder = BufferDecoder<GovSync, WireDecodeError>;
+  type Decoder = BufferDecoder<GovSync, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GovSync::decode_from_slice, MAX_P2P_PAYLOAD)
   }

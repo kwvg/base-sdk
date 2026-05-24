@@ -6,7 +6,8 @@
 
 //! Network address types for P2P messages.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::service_flags::ServiceFlags;
 
@@ -30,7 +31,7 @@ pub struct NetAddr {
 }
 
 impl NetAddr {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let services = ServiceFlags(wire::read_u64_le(sl)?);
     let addr = wire::read_cservice(sl)?;
@@ -54,7 +55,7 @@ impl encoding::Encodable for NetAddr {
 }
 
 impl encoding::Decodable for NetAddr {
-  type Decoder = BufferDecoder<NetAddr, WireDecodeError>;
+  type Decoder = BufferDecoder<NetAddr, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(NetAddr::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -79,7 +80,7 @@ pub struct TimestampedAddr {
 }
 
 impl TimestampedAddr {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let time = wire::read_u32_le(sl)?;
     let services = ServiceFlags(wire::read_u64_le(sl)?);
@@ -105,7 +106,7 @@ impl encoding::Encodable for TimestampedAddr {
 }
 
 impl encoding::Decodable for TimestampedAddr {
-  type Decoder = BufferDecoder<TimestampedAddr, WireDecodeError>;
+  type Decoder = BufferDecoder<TimestampedAddr, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(TimestampedAddr::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -134,7 +135,7 @@ impl AddrV2 {
     }
   }
 
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let net_byte = wire::read_u8(sl)?;
     let network = NetworkType::from_u8(net_byte);
@@ -142,9 +143,8 @@ impl AddrV2 {
     let addr = wire::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = Self::expected_len(network) {
       if addr.len() != expected {
-        return Err(WireDecodeError(format!(
-          "addrv2: expected {expected} bytes for network {:?}, got {}",
-          network,
+        return Err(P2pDecodeError::Consensus(format!(
+          "addrv2: expected {expected} bytes for network {network:?}, got {}",
           addr.len()
         )));
       }
@@ -169,7 +169,7 @@ impl encoding::Encodable for AddrV2 {
 }
 
 impl encoding::Decodable for AddrV2 {
-  type Decoder = BufferDecoder<AddrV2, WireDecodeError>;
+  type Decoder = BufferDecoder<AddrV2, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(AddrV2::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -192,7 +192,7 @@ pub struct AddrV2Entry {
 impl AddrV2Entry {
   /// Decodes one entry from a wire-format cursor, advancing it past
   /// the consumed bytes.
-  pub(crate) fn decode_from_wire(sl: &mut &[u8]) -> Result<Self, WireDecodeError> {
+  pub(crate) fn decode_from_wire(sl: &mut &[u8]) -> Result<Self, P2pDecodeError> {
     let time = wire::read_u32_le(sl)?;
     let services = ServiceFlags(wire::read_compact_u64(sl)?);
     let net_byte = wire::read_u8(sl)?;
@@ -201,9 +201,8 @@ impl AddrV2Entry {
     let addr_bytes = wire::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = AddrV2::expected_len(network) {
       if addr_bytes.len() != expected {
-        return Err(WireDecodeError(format!(
-          "addrv2 entry: expected {expected} bytes for network {:?}, got {}",
-          network,
+        return Err(P2pDecodeError::Consensus(format!(
+          "addrv2 entry: expected {expected} bytes for network {network:?}, got {}",
           addr_bytes.len()
         )));
       }
@@ -221,7 +220,7 @@ impl AddrV2Entry {
     })
   }
 
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     Self::decode_from_wire(sl)
   }
@@ -246,7 +245,7 @@ impl encoding::Encodable for AddrV2Entry {
 }
 
 impl encoding::Decodable for AddrV2Entry {
-  type Decoder = BufferDecoder<AddrV2Entry, WireDecodeError>;
+  type Decoder = BufferDecoder<AddrV2Entry, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(AddrV2Entry::decode_from_slice, MAX_P2P_PAYLOAD)
   }

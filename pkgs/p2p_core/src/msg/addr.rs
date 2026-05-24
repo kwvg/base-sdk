@@ -6,7 +6,8 @@
 
 //! Address messages: addr, addrv2 (getaddr and sendaddrv2 are empty).
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
 use crate::primitives::service_flags::ServiceFlags;
@@ -26,7 +27,7 @@ pub struct Addr {
 }
 
 impl Addr {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let count = wire::read_compact_size(sl, MAX_ADDR)?;
     let mut addrs = Vec::with_capacity(count);
@@ -60,7 +61,7 @@ impl encoding::Encodable for Addr {
 }
 
 impl encoding::Decodable for Addr {
-  type Decoder = BufferDecoder<Addr, WireDecodeError>;
+  type Decoder = BufferDecoder<Addr, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(Addr::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -75,7 +76,7 @@ pub struct AddrV2Msg {
 }
 
 impl AddrV2Msg {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let count = wire::read_compact_size(sl, MAX_ADDR)?;
     let mut addrs = Vec::with_capacity(count);
@@ -104,7 +105,7 @@ impl encoding::Encodable for AddrV2Msg {
 }
 
 impl encoding::Decodable for AddrV2Msg {
-  type Decoder = BufferDecoder<AddrV2Msg, WireDecodeError>;
+  type Decoder = BufferDecoder<AddrV2Msg, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(AddrV2Msg::decode_from_slice, MAX_P2P_PAYLOAD)
   }

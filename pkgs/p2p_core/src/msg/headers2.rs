@@ -6,7 +6,8 @@
 
 //! Compressed header messages: getheaders2, headers2, sendheaders2.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::compressed_header::CompressionState;
 use crate::primitives::protocol_version::ProtocolVersion;
@@ -33,7 +34,7 @@ pub struct GetHeaders2 {
 }
 
 impl GetHeaders2 {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let version = ProtocolVersion(wire::read_u32_le(sl)?);
     let count = wire::read_compact_size(sl, MAX_LOCATOR)?;
@@ -69,7 +70,7 @@ impl encoding::Encodable for GetHeaders2 {
 }
 
 impl encoding::Decodable for GetHeaders2 {
-  type Decoder = BufferDecoder<GetHeaders2, WireDecodeError>;
+  type Decoder = BufferDecoder<GetHeaders2, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GetHeaders2::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -84,7 +85,7 @@ pub struct Headers2 {
 }
 
 impl Headers2 {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let count = wire::read_compact_size(sl, MAX_HEADERS)?;
     let mut state = CompressionState::new();
@@ -114,7 +115,7 @@ impl encoding::Encodable for Headers2 {
 }
 
 impl encoding::Decodable for Headers2 {
-  type Decoder = BufferDecoder<Headers2, WireDecodeError>;
+  type Decoder = BufferDecoder<Headers2, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(Headers2::decode_from_slice, MAX_P2P_PAYLOAD)
   }

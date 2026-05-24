@@ -6,7 +6,8 @@
 
 //! Simplified masternode list types for `getmnlistd`/`mnlistdiff`.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
@@ -58,7 +59,7 @@ pub struct SimplifiedMnListEntry {
 
 impl SimplifiedMnListEntry {
   /// Decodes an entry from the wire format.
-  pub(crate) fn decode(sl: &mut &[u8]) -> Result<Self, WireDecodeError> {
+  pub(crate) fn decode(sl: &mut &[u8]) -> Result<Self, P2pDecodeError> {
     let version = wire::read_u16_le(sl)?;
     let pro_reg_tx_hash = TxHash::from_bytes(wire::read_array(sl)?);
     let confirmed_hash = BlockHash::from_bytes(wire::read_array(sl)?);
@@ -179,7 +180,7 @@ pub struct MnListDiffPayload {
 }
 
 impl MnListDiffPayload {
-  pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let version = wire::read_u16_le(sl)?;
     let base_block_hash = BlockHash::from_bytes(wire::read_array(sl)?);
@@ -197,7 +198,7 @@ impl MnListDiffPayload {
 
     // Transaction uses encoding::Decodable. Decode from remaining bytes.
     let cb_tx = encoding::decode_from_slice_unbounded::<Transaction>(sl)
-      .map_err(|e| WireDecodeError(format!("transaction decode: {e}")))?;
+      .map_err(|e| P2pDecodeError::Consensus(format!("transaction decode: {e}")))?;
 
     let del_count = wire::read_compact_size(sl, MAX_DELETED_MNS)?;
     let mut deleted_mns = Vec::with_capacity(del_count);
@@ -222,7 +223,8 @@ impl MnListDiffPayload {
     let nq_count = wire::read_compact_size(sl, MAX_QUORUMS)?;
     let mut new_quorums = Vec::with_capacity(nq_count);
     for _ in 0..nq_count {
-      let commitment = Commitment::decode_inner(sl).map_err(|e| WireDecodeError(format!("commitment decode: {e}")))?;
+      let commitment =
+        Commitment::decode_inner(sl).map_err(|e| P2pDecodeError::Consensus(format!("commitment decode: {e}")))?;
       new_quorums.push(commitment);
     }
 
@@ -315,7 +317,7 @@ impl encoding::Encodable for MnListDiffPayload {
 }
 
 impl encoding::Decodable for MnListDiffPayload {
-  type Decoder = BufferDecoder<MnListDiffPayload, WireDecodeError>;
+  type Decoder = BufferDecoder<MnListDiffPayload, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(MnListDiffPayload::decode_from_slice, MAX_P2P_PAYLOAD)
   }

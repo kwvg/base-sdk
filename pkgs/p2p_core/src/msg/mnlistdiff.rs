@@ -6,7 +6,8 @@
 
 //! Masternode list diff messages: getmnlistd, mnlistdiff.
 
-use crate::encode::{BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::primitives::mn_list::MnListDiffPayload;
 
 use bitcoin_consensus_encoding as encoding;
@@ -97,7 +98,7 @@ pub struct MnListDiff {
 }
 
 impl MnListDiff {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     MnListDiffPayload::decode_from_slice(data).map(|payload| Self { payload })
   }
 }
@@ -110,7 +111,7 @@ impl encoding::Encodable for MnListDiff {
 }
 
 impl encoding::Decodable for MnListDiff {
-  type Decoder = BufferDecoder<MnListDiff, WireDecodeError>;
+  type Decoder = BufferDecoder<MnListDiff, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(MnListDiff::decode_from_slice, MAX_P2P_PAYLOAD)
   }

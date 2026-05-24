@@ -6,7 +6,8 @@
 
 //! Inventory messages: inv, getdata, notfound.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::inventory::{InvType, Inventory};
 
@@ -18,7 +19,7 @@ use dash_primitives::wire;
 const MAX_INV_ITEMS: usize = 50_000;
 
 /// Helper: decode a CompactSize-prefixed vector of inventory items.
-fn decode_inv_list(sl: &mut &[u8]) -> Result<Vec<Inventory>, WireDecodeError> {
+fn decode_inv_list(sl: &mut &[u8]) -> Result<Vec<Inventory>, P2pDecodeError> {
   let count = wire::read_compact_size(sl, MAX_INV_ITEMS)?;
   let mut items = Vec::with_capacity(count);
   for _ in 0..count {
@@ -50,7 +51,7 @@ pub struct Inv {
 }
 
 impl Inv {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     decode_inv_list(sl).map(|inventory| Self { inventory })
   }
@@ -66,7 +67,7 @@ impl encoding::Encodable for Inv {
 }
 
 impl encoding::Decodable for Inv {
-  type Decoder = BufferDecoder<Inv, WireDecodeError>;
+  type Decoder = BufferDecoder<Inv, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(Inv::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -81,7 +82,7 @@ pub struct GetData {
 }
 
 impl GetData {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     decode_inv_list(sl).map(|inventory| Self { inventory })
   }
@@ -97,7 +98,7 @@ impl encoding::Encodable for GetData {
 }
 
 impl encoding::Decodable for GetData {
-  type Decoder = BufferDecoder<GetData, WireDecodeError>;
+  type Decoder = BufferDecoder<GetData, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GetData::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -112,7 +113,7 @@ pub struct NotFound {
 }
 
 impl NotFound {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     decode_inv_list(sl).map(|inventory| Self { inventory })
   }
@@ -128,7 +129,7 @@ impl encoding::Encodable for NotFound {
 }
 
 impl encoding::Decodable for NotFound {
-  type Decoder = BufferDecoder<NotFound, WireDecodeError>;
+  type Decoder = BufferDecoder<NotFound, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(NotFound::decode_from_slice, MAX_P2P_PAYLOAD)
   }

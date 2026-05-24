@@ -6,7 +6,8 @@
 
 //! BIP157 compact filter header messages: getcfheaders, cfheaders.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::filter_type::FilterType;
 
@@ -31,7 +32,7 @@ pub struct GetCFHeaders {
 }
 
 impl GetCFHeaders {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let filter_type = FilterType(wire::read_u8(sl)?);
     let start_height = BlockHeight::from_u32(wire::read_u32_le(sl)?);
@@ -60,7 +61,7 @@ impl encoding::Encodable for GetCFHeaders {
 }
 
 impl encoding::Decodable for GetCFHeaders {
-  type Decoder = BufferDecoder<GetCFHeaders, WireDecodeError>;
+  type Decoder = BufferDecoder<GetCFHeaders, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GetCFHeaders::decode_from_slice, MAX_P2P_PAYLOAD)
   }
@@ -81,7 +82,7 @@ pub struct CFHeaders {
 }
 
 impl CFHeaders {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let filter_type = FilterType(wire::read_u8(sl)?);
     let stop_hash = BlockHash::from_bytes(wire::read_array(sl)?);
@@ -120,7 +121,7 @@ impl encoding::Encodable for CFHeaders {
 }
 
 impl encoding::Decodable for CFHeaders {
-  type Decoder = BufferDecoder<CFHeaders, WireDecodeError>;
+  type Decoder = BufferDecoder<CFHeaders, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(CFHeaders::decode_from_slice, MAX_P2P_PAYLOAD)
   }

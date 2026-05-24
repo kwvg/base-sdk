@@ -6,7 +6,8 @@
 
 //! Governance vote message.
 
-use crate::encode::{BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::primitives::governance::GovernanceVote;
 
 use bitcoin_consensus_encoding as encoding;
@@ -20,7 +21,7 @@ pub struct GovObjVote {
 }
 
 impl GovObjVote {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let vote = GovernanceVote::decode_from_slice(data)?;
     Ok(Self { vote })
   }
@@ -34,7 +35,7 @@ impl encoding::Encodable for GovObjVote {
 }
 
 impl encoding::Decodable for GovObjVote {
-  type Decoder = BufferDecoder<GovObjVote, WireDecodeError>;
+  type Decoder = BufferDecoder<GovObjVote, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(GovObjVote::decode_from_slice, MAX_P2P_PAYLOAD)
   }

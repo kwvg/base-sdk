@@ -6,7 +6,8 @@
 
 //! Version handshake message (Dash-extended).
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
+use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::net_addr::NetAddr;
 use crate::primitives::protocol_version::ProtocolVersion;
@@ -52,7 +53,7 @@ pub struct Version {
 }
 
 impl Version {
-  fn decode_from_slice(data: &[u8]) -> Result<Self, WireDecodeError> {
+  fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let protocol_version = ProtocolVersion(wire::read_u32_le(sl)?);
     let services = ServiceFlags(wire::read_u64_le(sl)?);
@@ -75,7 +76,7 @@ impl Version {
     // user agent
     let ua_len = wire::read_compact_size(sl, MAX_USER_AGENT)?;
     let ua_bytes = wire::read_bytes(sl, ua_len)?.to_vec();
-    let user_agent = UserAgent::new(ua_bytes).map_err(|e| WireDecodeError(format!("{e}")))?;
+    let user_agent = UserAgent::new(ua_bytes).map_err(|e| P2pDecodeError::Consensus(format!("{e}")))?;
     let start_height = wire::read_i32_le(sl)?;
     let relay = wire::read_bool(sl)?;
     let mnauth_challenge = Hash256::from_bytes(wire::read_array(sl)?);
@@ -128,7 +129,7 @@ impl encoding::Encodable for Version {
 }
 
 impl encoding::Decodable for Version {
-  type Decoder = BufferDecoder<Version, WireDecodeError>;
+  type Decoder = BufferDecoder<Version, P2pDecodeError>;
   fn decoder() -> Self::Decoder {
     BufferDecoder::new(Version::decode_from_slice, MAX_P2P_PAYLOAD)
   }
