@@ -31,7 +31,7 @@ const MAX_MERKLE_FLAGS: usize = 100_000;
 
 /// A single entry in the simplified masternode list.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct SimplifiedMnListEntry {
   /// Entry serialisation version.
   pub version: u16,
@@ -125,7 +125,7 @@ impl fmt::Display for SimplifiedMnListEntry {
 
 /// Deleted quorum identifier (type + hash).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct DeletedQuorum {
   /// LLMQ type.
   #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::uint::w8"))]
@@ -139,7 +139,7 @@ pub struct DeletedQuorum {
 /// Each entry maps a BLS signature to the indices (within
 /// `new_quorums`) of the quorums it covers.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct QuorumClSig {
   /// BLS signature.
   pub sig: BlsSignatureBytes,
@@ -149,7 +149,7 @@ pub struct QuorumClSig {
 
 /// Full masternode list diff payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct MnListDiffPayload {
   /// Serialisation version.
   pub version: u16,

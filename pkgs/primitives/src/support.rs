@@ -200,7 +200,7 @@ impl NetworkType {
 
 /// LSB-first dynamic bitset.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(into = "DynBitsetSerde"))]
 pub struct DynBitset {
   /// Number of bits in the bitset.
@@ -211,7 +211,7 @@ pub struct DynBitset {
 
 /// Serde helper for [`DynBitset`] that validates on deserialisation.
 #[cfg(feature = "serde")]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
 struct DynBitsetSerde {
   num_bits: u64,
   #[serde(with = "dash_types::serialize::hex")]
@@ -229,16 +229,16 @@ impl From<DynBitset> for DynBitsetSerde {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for DynBitset {
-  fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+impl<'de> ::serde::Deserialize<'de> for DynBitset {
+  fn deserialize<D: ::serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
     let raw = DynBitsetSerde::deserialize(deserializer)?;
     let num_bits: usize = raw
       .num_bits
       .try_into()
-      .map_err(|_| serde::de::Error::custom("DynBitset num_bits too large"))?;
+      .map_err(|_| ::serde::de::Error::custom("DynBitset num_bits too large"))?;
     let required = num_bits.div_ceil(8);
     if raw.data.len() != required {
-      return Err(serde::de::Error::custom(format!(
+      return Err(::serde::de::Error::custom(format!(
         "DynBitset data length mismatch: {0} bytes for {1} bits (expected {2})",
         raw.data.len(),
         raw.num_bits,
@@ -249,7 +249,7 @@ impl<'de> serde::Deserialize<'de> for DynBitset {
     if remainder != 0 {
       let mask = !((1u8 << remainder) - 1);
       if raw.data[required - 1] & mask != 0 {
-        return Err(serde::de::Error::custom(format!(
+        return Err(::serde::de::Error::custom(format!(
           "DynBitset padding bits set in last byte: {:#04x} for {1} bits",
           raw.data[required - 1],
           raw.num_bits,
@@ -332,7 +332,7 @@ impl encoding::Encodable for DynBitset {
 
 /// Legacy CService network address (ADDRv1 format, 18 bytes).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CService {
   /// 16-byte address (IPv4-mapped IPv6 or native IPv6).
   #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex::w16"))]

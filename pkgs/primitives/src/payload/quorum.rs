@@ -24,7 +24,7 @@ use core::fmt;
 /// - v3: basic
 /// - v4: basic + indexed (quorum_index)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Commitment {
   /// 1=legacy, 2=+indexed, 3=basic, 4=basic+idx.
   pub version: u16,

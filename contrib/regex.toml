@@ -1,0 +1,5 @@
+[rules.disambiguate-serde-derive]
+include = ["pkgs/**/*.rs"]
+block = ['derive\(serde::']
+allow = ['derive\(::serde::']
+message = "use ::serde:: instead of serde:: in derive"
