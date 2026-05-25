@@ -8,7 +8,7 @@
 
 use crate::prelude::*;
 
-use bitcoin_consensus_encoding as encoding;
+use dash_types::codec::{self, Codec, DecodeError};
 
 use core::fmt;
 
@@ -62,76 +62,15 @@ impl fmt::Display for Script {
   }
 }
 
-// Consensus encoding (new ecosystem traits).
+impl Codec for Script {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    codec::read_vec(data, MAX_SIZE).map(Self)
+  }
 
-encoding::encoder_newtype! {
-  /// Encoder for [`Script`].
-  pub struct ScriptEncoder<'e>(
-    encoding::Encoder2<encoding::CompactSizeEncoder, encoding::BytesEncoder<'e>>
-  );
-}
-
-impl encoding::Encodable for Script {
-  type Encoder<'e> = ScriptEncoder<'e>;
-
-  fn encoder(&self) -> Self::Encoder<'_> {
-    ScriptEncoder::new(encoding::Encoder2::new(
-      encoding::CompactSizeEncoder::new(self.0.len()),
-      encoding::BytesEncoder::without_length_prefix(&self.0),
-    ))
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_compact_size(self.0.len(), buf);
+    buf.extend_from_slice(&self.0);
   }
 }
 
-/// Decoder for [`Script`].
-#[derive(Debug)]
-pub struct ScriptDecoder(encoding::ByteVecDecoder);
-
-impl ScriptDecoder {
-  /// Constructs a new decoder with the default script size limit.
-  pub const fn new() -> Self {
-    Self(encoding::ByteVecDecoder::new_with_limit(MAX_SIZE))
-  }
-}
-
-impl Default for ScriptDecoder {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for [`Script`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScriptDecoderError(encoding::ByteVecDecoderError);
-
-impl fmt::Display for ScriptDecoderError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "script decode failed: {}", self.0)
-  }
-}
-
-impl encoding::Decoder for ScriptDecoder {
-  type Output = Script;
-  type Error = ScriptDecoderError;
-
-  #[inline]
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(ScriptDecoderError)
-  }
-
-  #[inline]
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    self.0.end().map(Script).map_err(ScriptDecoderError)
-  }
-
-  #[inline]
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
-}
-
-impl encoding::Decodable for Script {
-  type Decoder = ScriptDecoder;
-  fn decoder() -> Self::Decoder {
-    ScriptDecoder::new()
-  }
-}
+dash_types::impl_type!(Script);

@@ -6,7 +6,7 @@
 
 //! Transaction output.
 
-use crate::script::{Script, ScriptDecoder, ScriptDecoderError, ScriptEncoder};
+use crate::script::Script;
 
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::Amount;
@@ -33,7 +33,7 @@ impl fmt::Display for TxOut {
 encoding::encoder_newtype! {
   /// Encoder for [`TxOut`].
   pub struct TxOutEncoder<'e>(
-    encoding::Encoder2<encoding::ArrayEncoder<8>, ScriptEncoder<'e>>
+    encoding::Encoder2<encoding::ArrayEncoder<8>, dash_types::VecEncoder>
   );
 }
 
@@ -50,14 +50,14 @@ impl encoding::Encodable for TxOut {
 
 /// Decoder for [`TxOut`].
 #[derive(Debug)]
-pub struct TxOutDecoder(encoding::Decoder2<encoding::ArrayDecoder<8>, ScriptDecoder>);
+pub struct TxOutDecoder(encoding::Decoder2<encoding::ArrayDecoder<8>, encoding::ByteVecDecoder>);
 
 impl TxOutDecoder {
   /// Constructs a new decoder.
   pub const fn new() -> Self {
     Self(encoding::Decoder2::new(
       encoding::ArrayDecoder::new(),
-      ScriptDecoder::new(),
+      encoding::ByteVecDecoder::new_with_limit(dash_types::MAX_SER_SIZE),
     ))
   }
 }
@@ -74,7 +74,7 @@ pub enum TxOutDecoderError {
   /// Failed to decode the value field.
   Value(encoding::UnexpectedEofError),
   /// Failed to decode the script field.
-  Script(ScriptDecoderError),
+  Script(encoding::ByteVecDecoderError),
   /// Value exceeds MAX_MONEY.
   OutOfRange(u64),
 }
@@ -103,7 +103,7 @@ impl encoding::Decoder for TxOutDecoder {
 
   #[inline]
   fn end(self) -> Result<Self::Output, Self::Error> {
-    let (value_bytes, script) = self.0.end().map_err(|e| match e {
+    let (value_bytes, script_bytes) = self.0.end().map_err(|e| match e {
       encoding::Decoder2Error::First(e) => TxOutDecoderError::Value(e),
       encoding::Decoder2Error::Second(e) => TxOutDecoderError::Script(e),
     })?;
@@ -111,7 +111,7 @@ impl encoding::Decoder for TxOutDecoder {
     let value = Amount::from_sat(raw).map_err(|_| TxOutDecoderError::OutOfRange(raw))?;
     Ok(TxOut {
       value,
-      script_pubkey: script,
+      script_pubkey: Script::new(script_bytes),
     })
   }
 

@@ -7,12 +7,12 @@
 //! AssetLock (type 8): L1 to Platform.
 
 use crate::prelude::*;
+use crate::script::Script;
 use crate::tx_out::TxOut;
 use crate::validation::DeploymentContext;
-use crate::wire;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, Codec, DecodeError};
 
 use core::fmt;
 
@@ -49,7 +49,7 @@ impl AssetLock {
       let raw = codec::read_u64_le(data)?;
       let value = bitcoin_units::Amount::from_sat(raw)
         .map_err(|_| DecodeError::CompactSizeExceedsLimit { limit: 0, value: raw })?;
-      let script_pubkey = wire::read_script(data, 10_000)?;
+      let script_pubkey = Script::decode(data)?;
       credit_outputs.push(TxOut { value, script_pubkey });
     }
 

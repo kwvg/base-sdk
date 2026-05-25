@@ -10,7 +10,6 @@ use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::payload::Commitment;
-use dash_primitives::wire;
 use dash_primitives::{BlockHash, CService, LlmqType, MnType, Transaction, TxHash};
 use dash_script::KeyId;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
@@ -60,7 +59,7 @@ impl Codec for SimplifiedMnListEntry {
     let version = codec::read_u16_le(data)?;
     let pro_reg_tx_hash = TxHash::from_bytes(codec::take(data)?);
     let confirmed_hash = BlockHash::from_bytes(codec::take(data)?);
-    let service = wire::read_cservice(data)?;
+    let service = CService::decode(data)?;
     let operator_key = BlsPublicKeyBytes(codec::take(data)?);
     let voting_key_id = KeyId(codec::take(data)?);
     let is_valid = codec::read_bool(data)?;

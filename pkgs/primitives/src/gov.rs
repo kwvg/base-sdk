@@ -9,7 +9,6 @@
 use crate::outpoint::OutPoint;
 use crate::prelude::*;
 use crate::validation::{MAX_PROPOSAL_NAME_LEN, MIN_URL_LEN, PROPOSAL_NAME_CHARS};
-use crate::wire;
 use crate::TxHash;
 
 use bitcoin_hashes::sha256d;
@@ -166,7 +165,7 @@ impl GovObject {
     let revision = codec::read_i32_le(data)?;
     let time = codec::read_i64_le(data)?;
     let collateral_hash = TxHash::decode(data)?;
-    let obj_data = wire::read_vec(data, 16_384)?;
+    let obj_data = codec::read_vec(data, 16_384)?;
     let object_type = GovObjectType::from_i32(codec::read_i32_le(data)?);
     let mn_hash = TxHash::decode(data)?;
     let mn_index = codec::read_u32_le(data)?;
@@ -174,7 +173,7 @@ impl GovObject {
       hash: mn_hash,
       index: mn_index,
     };
-    let sig = wire::read_vec(data, 1024)?;
+    let sig = codec::read_vec(data, 1024)?;
 
     Ok(Self {
       hash_parent,
@@ -267,7 +266,7 @@ impl GovVote {
     let outcome = codec::read_i32_le(data)?;
     let signal = codec::read_i32_le(data)?;
     let time = codec::read_i64_le(data)?;
-    let sig = wire::read_vec(data, 1024)?;
+    let sig = codec::read_vec(data, 1024)?;
 
     Ok(Self {
       masternode_outpoint,

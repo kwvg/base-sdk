@@ -13,7 +13,7 @@ use crate::primitives::service_flags::ServiceFlags;
 use crate::primitives::user_agent::UserAgent;
 
 use dash_num::Hash256;
-use dash_primitives::wire;
+use dash_primitives::CService;
 use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum user agent length in bytes.
@@ -57,14 +57,14 @@ impl Codec for Version {
     let timestamp = codec::read_i64_le(data)?;
     // addr_recv: services(8) + addr(16) + port(2)
     let recv_services = ServiceFlags(codec::read_u64_le(data)?);
-    let recv_addr = wire::read_cservice(data)?;
+    let recv_addr = CService::decode(data)?;
     let addr_recv = NetAddr {
       services: recv_services,
       addr: recv_addr,
     };
     // addr_send
     let send_services = ServiceFlags(codec::read_u64_le(data)?);
-    let send_addr = wire::read_cservice(data)?;
+    let send_addr = CService::decode(data)?;
     let addr_send = NetAddr {
       services: send_services,
       addr: send_addr,

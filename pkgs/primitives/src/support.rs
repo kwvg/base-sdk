@@ -8,9 +8,7 @@
 
 use crate::prelude::*;
 
-use bitcoin_consensus_encoding as encoding;
-use bitcoin_internals::array::ArrayExt as _;
-use dash_types::codec::{self, DecodeError, NumCodec};
+use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 
 use core::fmt;
 
@@ -312,28 +310,24 @@ impl Iterator for DynBitsetIterator {
   }
 }
 
-// Ecosystem encoding traits for DynBitset.
+impl Codec for DynBitset {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let num_bits = codec::read_compact_u64(data)?;
+    let byte_len = num_bits.div_ceil(8) as usize;
+    let raw = codec::read_bytes(data, byte_len)?;
+    Ok(Self {
+      num_bits,
+      data: raw.to_vec(),
+    })
+  }
 
-encoding::encoder_newtype! {
-  /// Encoder for [`DynBitset`].
-  pub struct DynBitsetEncoder<'e>(
-    encoding::Encoder2<
-      encoding::CompactSizeEncoder,
-      encoding::BytesEncoder<'e>,
-    >
-  );
-}
-
-impl encoding::Encodable for DynBitset {
-  type Encoder<'e> = DynBitsetEncoder<'e>;
-
-  fn encoder(&self) -> Self::Encoder<'_> {
-    DynBitsetEncoder::new(encoding::Encoder2::new(
-      encoding::CompactSizeEncoder::new_u64(self.num_bits),
-      encoding::BytesEncoder::without_length_prefix(&self.data),
-    ))
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_compact_size(self.num_bits as usize, buf);
+    buf.extend_from_slice(&self.data);
   }
 }
+
+dash_types::impl_type!(DynBitset);
 
 /// Legacy CService network address (ADDRv1 format, 18 bytes).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -346,84 +340,21 @@ pub struct CService {
   pub port: u16,
 }
 
-// Ecosystem encoding traits for CService.
-
-encoding::encoder_newtype_exact! {
-  /// Encoder for [`CService`].
-  pub struct CServiceEncoder<'e>(
-    encoding::Encoder2<encoding::BytesEncoder<'e>, encoding::ArrayEncoder<2>>
-  );
-}
-
-impl encoding::Encodable for CService {
-  type Encoder<'e> = CServiceEncoder<'e>;
-
-  fn encoder(&self) -> Self::Encoder<'_> {
-    CServiceEncoder::new(encoding::Encoder2::new(
-      encoding::BytesEncoder::without_length_prefix(&self.addr),
-      encoding::ArrayEncoder::without_length_prefix(self.port.to_be_bytes()),
-    ))
-  }
-}
-
-/// Decoder for [`CService`].
-#[derive(Debug)]
-pub struct CServiceDecoder(encoding::ArrayDecoder<18>);
-
-impl CServiceDecoder {
-  /// Constructs a new decoder.
-  pub const fn new() -> Self {
-    Self(encoding::ArrayDecoder::new())
-  }
-}
-
-impl Default for CServiceDecoder {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for [`CService`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CServiceDecoderError(encoding::UnexpectedEofError);
-
-impl fmt::Display for CServiceDecoderError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "cservice decode: {}", self.0)
-  }
-}
-
-impl encoding::Decoder for CServiceDecoder {
-  type Output = CService;
-  type Error = CServiceDecoderError;
-
-  #[inline]
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(CServiceDecoderError)
-  }
-
-  #[inline]
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    let buf = self.0.end().map_err(CServiceDecoderError)?;
-    let (addr_buf, port_buf) = buf.split_array::<16, 2>();
-    Ok(CService {
-      addr: *addr_buf,
-      port: u16::from_be_bytes(*port_buf),
+impl Codec for CService {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    Ok(Self {
+      addr: codec::take(data)?,
+      port: codec::read_u16_be(data)?,
     })
   }
 
-  #[inline]
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.addr);
+    buf.extend_from_slice(&self.port.to_be_bytes());
   }
 }
 
-impl encoding::Decodable for CService {
-  type Decoder = CServiceDecoder;
-  fn decoder() -> Self::Decoder {
-    CServiceDecoder::new()
-  }
-}
+dash_types::impl_type!(CService);
 
 /// Purpose tag for an extended network info entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

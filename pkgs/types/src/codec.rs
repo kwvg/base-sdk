@@ -201,6 +201,17 @@ pub fn write_compact_size(value: usize, buf: &mut Vec<u8>) {
   }
 }
 
+/// Reads a CompactSize-prefixed byte vector.
+///
+/// # Errors
+///
+/// Returns `DecodeError` when the prefix or payload is
+/// malformed or exceeds `limit`.
+pub fn read_vec(data: &mut &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
+  let len = read_compact_size(data, limit)?;
+  Ok(read_bytes(data, len)?.to_vec())
+}
+
 /// Links a type to its underlying base integer type.
 pub trait NumCodec<N>: Sized {
   /// Constructs from the base integer.

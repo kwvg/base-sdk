@@ -30,7 +30,6 @@ pub mod tx_in;
 pub mod tx_out;
 pub mod tx_types;
 pub mod validation;
-pub mod wire;
 
 dash_num::make_hash256! {
   /// Hash of a block header.

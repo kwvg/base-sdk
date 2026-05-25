@@ -7,7 +7,7 @@
 //! Transaction input.
 
 use crate::outpoint::{OutPoint, OutPointDecoder, OutPointDecoderError, OutPointEncoder};
-use crate::script::{Script, ScriptDecoder, ScriptDecoderError, ScriptEncoder};
+use crate::script::Script;
 
 use bitcoin_consensus_encoding as encoding;
 
@@ -36,7 +36,7 @@ impl fmt::Display for TxIn {
 encoding::encoder_newtype! {
   /// Encoder for [`TxIn`].
   pub struct TxInEncoder<'e>(
-    encoding::Encoder3<OutPointEncoder<'e>, ScriptEncoder<'e>, encoding::ArrayEncoder<4>>
+    encoding::Encoder3<OutPointEncoder<'e>, dash_types::VecEncoder, encoding::ArrayEncoder<4>>
   );
 }
 
@@ -54,14 +54,14 @@ impl encoding::Encodable for TxIn {
 
 /// Decoder for [`TxIn`].
 #[derive(Debug)]
-pub struct TxInDecoder(encoding::Decoder3<OutPointDecoder, ScriptDecoder, encoding::ArrayDecoder<4>>);
+pub struct TxInDecoder(encoding::Decoder3<OutPointDecoder, encoding::ByteVecDecoder, encoding::ArrayDecoder<4>>);
 
 impl TxInDecoder {
   /// Constructs a new decoder.
   pub const fn new() -> Self {
     Self(encoding::Decoder3::new(
       OutPointDecoder::new(),
-      ScriptDecoder::new(),
+      encoding::ByteVecDecoder::new_with_limit(dash_types::MAX_SER_SIZE),
       encoding::ArrayDecoder::new(),
     ))
   }
@@ -79,7 +79,7 @@ pub enum TxInDecoderError {
   /// Failed to decode the outpoint.
   Outpoint(OutPointDecoderError),
   /// Failed to decode the script sig.
-  ScriptSig(ScriptDecoderError),
+  ScriptSig(encoding::ByteVecDecoderError),
   /// Failed to decode the sequence number.
   Sequence(encoding::UnexpectedEofError),
 }
@@ -109,14 +109,14 @@ impl encoding::Decoder for TxInDecoder {
 
   #[inline]
   fn end(self) -> Result<Self::Output, Self::Error> {
-    let (outpoint, script_sig, seq_bytes) = self.0.end().map_err(|e| match e {
+    let (outpoint, script_bytes, seq_bytes) = self.0.end().map_err(|e| match e {
       encoding::Decoder3Error::First(e) => TxInDecoderError::Outpoint(e),
       encoding::Decoder3Error::Second(e) => TxInDecoderError::ScriptSig(e),
       encoding::Decoder3Error::Third(e) => TxInDecoderError::Sequence(e),
     })?;
     Ok(TxIn {
       prevout: outpoint,
-      script_sig,
+      script_sig: Script::new(script_bytes),
       sequence: u32::from_le_bytes(seq_bytes),
     })
   }

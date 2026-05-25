@@ -11,7 +11,6 @@ use crate::script::Script;
 use crate::validation::{
   check_operator_key_not_null, check_protx_version, max_protx_version_no_ext, DeploymentContext, ProTxInvalid,
 };
-use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
@@ -64,9 +63,9 @@ impl ProUpRegTx {
     let mode = codec::read_u16_le(data)?;
     let pub_key_operator = codec::read_type(data)?;
     let key_id_voting = codec::read_type(data)?;
-    let script_payout = wire::read_script(data, 10_000)?;
+    let script_payout = Script::decode(data)?;
     let inputs_hash = InputsHash::decode(data)?;
-    let vch_sig = wire::read_vec(data, MAX_VCH_SIG_SIZE)?;
+    let vch_sig = codec::read_vec(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {
       version,

@@ -8,12 +8,12 @@
 
 use super::proregtx::NetInfo;
 use crate::script::Script;
+use crate::support::CService;
 use crate::tx_types::MnType;
 use crate::validation::{
   check_net_info_trivially_valid, check_protx_version, max_protx_version, DeploymentContext, ProTxInvalid,
   PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
 };
-use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
@@ -73,13 +73,13 @@ impl ProUpServTx {
     let pro_tx_hash = TxHash::decode(data)?;
 
     let net_info = if version >= 3 {
-      let raw = wire::read_vec(data, 1024)?;
+      let raw = codec::read_vec(data, 1024)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
-      NetInfo::Legacy(wire::read_cservice(data)?)
+      NetInfo::Legacy(CService::decode(data)?)
     };
 
-    let script_operator_payout = wire::read_script(data, 10_000)?;
+    let script_operator_payout = Script::decode(data)?;
     let inputs_hash = InputsHash::decode(data)?;
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {

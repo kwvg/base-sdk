@@ -14,7 +14,6 @@ use crate::validation::{
   check_net_info_trivially_valid, check_operator_key_not_null, check_protx_version, max_protx_version,
   DeploymentContext, ProTxInvalid, MAX_OPERATOR_REWARD, PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
 };
-use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
@@ -97,17 +96,17 @@ impl ProRegTx {
     let collateral_index = codec::read_u32_le(data)?;
 
     let net_info = if version >= 3 {
-      let raw = wire::read_vec(data, 1024)?;
+      let raw = codec::read_vec(data, 1024)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
-      NetInfo::Legacy(wire::read_cservice(data)?)
+      NetInfo::Legacy(CService::decode(data)?)
     };
 
     let key_id_owner = codec::read_type(data)?;
     let pub_key_operator = codec::read_type(data)?;
     let key_id_voting = codec::read_type(data)?;
     let operator_reward = codec::read_u16_le(data)?;
-    let script_payout = wire::read_script(data, 10_000)?;
+    let script_payout = Script::decode(data)?;
     let inputs_hash = InputsHash::decode(data)?;
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
@@ -123,7 +122,7 @@ impl ProRegTx {
       (None, None, None)
     };
 
-    let vch_sig = wire::read_vec(data, MAX_VCH_SIG_SIZE)?;
+    let vch_sig = codec::read_vec(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {
       version,

@@ -9,7 +9,6 @@
 use crate::prelude::*;
 use crate::primitives::service_flags::ServiceFlags;
 
-use dash_primitives::wire;
 use dash_primitives::CService;
 use dash_primitives::NetworkType;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
@@ -31,7 +30,7 @@ pub struct NetAddr {
 impl Codec for NetAddr {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let services = ServiceFlags(codec::read_u64_le(data)?);
-    let addr = wire::read_cservice(data)?;
+    let addr = CService::decode(data)?;
     Ok(Self { services, addr })
   }
 
@@ -66,7 +65,7 @@ impl Codec for TimestampedAddr {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let time = codec::read_u32_le(data)?;
     let services = ServiceFlags(codec::read_u64_le(data)?);
-    let addr = wire::read_cservice(data)?;
+    let addr = CService::decode(data)?;
     Ok(Self { time, services, addr })
   }
 

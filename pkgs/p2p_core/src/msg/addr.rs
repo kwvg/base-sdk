@@ -10,7 +10,7 @@ use crate::prelude::*;
 use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
 use crate::primitives::service_flags::ServiceFlags;
 
-use dash_primitives::wire;
+use dash_primitives::CService;
 use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum addresses per message.
@@ -31,7 +31,7 @@ impl Codec for Addr {
     for _ in 0..count {
       let time = codec::read_u32_le(data)?;
       let services = ServiceFlags(codec::read_u64_le(data)?);
-      let addr = wire::read_cservice(data)?;
+      let addr = CService::decode(data)?;
       addrs.push(TimestampedAddr { time, services, addr });
     }
     Ok(Self { addrs })
