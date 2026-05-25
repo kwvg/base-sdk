@@ -7,12 +7,11 @@
 //! CoinbaseCommitment coinbase commitment payload (type 5).
 
 use crate::validation::DeploymentContext;
-use crate::wire;
 use crate::MerkleRoot;
 
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::BlockHeight;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, Codec, DecodeError};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -52,10 +51,10 @@ impl CoinbaseCommitment {
   pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
     let height = BlockHeight::from_u32(codec::read_u32_le(data)?);
-    let merkle_root_mn_list = wire::read_hash(data)?.into();
+    let merkle_root_mn_list = MerkleRoot::decode(data)?;
 
     let merkle_root_quorums = if version >= 2 {
-      Some(wire::read_hash(data)?.into())
+      Some(MerkleRoot::decode(data)?)
     } else {
       None
     };

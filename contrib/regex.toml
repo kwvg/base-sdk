@@ -2,6 +2,8 @@
 include = ["pkgs/**/*.rs"]
 exclude = [
   "**/prelude.rs",
+  "pkgs/num/src/hash.rs",
+  "pkgs/num/src/util.rs",
   "pkgs/types/src/entity.rs",
   "pkgs/types/src/hex.rs",
   "pkgs/types/src/uint.rs",

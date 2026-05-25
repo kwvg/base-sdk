@@ -30,7 +30,7 @@ pub struct GovSync {
 
 impl Codec for GovSync {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let hash = Hash256::from_bytes(codec::take(data)?);
+    let hash = Hash256::decode(data)?;
     let len = codec::read_compact_size(data, MAX_BLOOM_FILTER)?;
     let bloom_filter = codec::read_bytes(data, len)?.to_vec();
     Ok(Self { hash, bloom_filter })

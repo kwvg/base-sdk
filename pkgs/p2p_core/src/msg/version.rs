@@ -79,7 +79,7 @@ impl Codec for Version {
     })?;
     let start_height = codec::read_i32_le(data)?;
     let relay = codec::read_bool(data)?;
-    let mnauth_challenge = Hash256::from_bytes(codec::take(data)?);
+    let mnauth_challenge = Hash256::decode(data)?;
     let mn_connection = codec::read_bool(data)?;
     Ok(Self {
       protocol_version,

@@ -20,7 +20,6 @@ mod arith256;
 mod compact;
 mod error;
 mod hash;
-mod hash_encoding;
 mod prelude;
 #[cfg(feature = "serde")]
 #[doc(hidden)]
@@ -37,4 +36,3 @@ pub use crate::arith256::Arith256;
 pub use crate::compact::{CompactTarget, DecodedTarget};
 pub use crate::error::ParseHexError;
 pub use crate::hash::{Hash160, Hash256, Hash512, HashBlob};
-pub use crate::hash_encoding::{HashDecoder, HashDecoderError, HashTypeDecoder};

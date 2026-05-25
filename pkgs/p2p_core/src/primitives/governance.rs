@@ -10,7 +10,6 @@ use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
 
 use dash_num::Hash256;
-use dash_primitives::wire;
 use dash_primitives::OutPoint;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::BlsSignatureBytes;
@@ -147,11 +146,11 @@ pub struct GovernanceObject {
 
 impl Codec for GovernanceObject {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let parent_hash = wire::read_hash(data)?;
+    let parent_hash = Hash256::decode(data)?;
     let revision = codec::read_u32_le(data)?;
     let time = codec::read_i64_le(data)?;
-    let collateral_hash = wire::read_hash(data)?;
-    let outpoint_hash: dash_primitives::TxHash = wire::read_hash(data)?.into();
+    let collateral_hash = Hash256::decode(data)?;
+    let outpoint_hash = dash_primitives::TxHash::decode(data)?;
     let outpoint_n = codec::read_u32_le(data)?;
     let mn_outpoint = OutPoint {
       hash: outpoint_hash,
@@ -206,13 +205,13 @@ pub struct GovernanceVote {
 
 impl Codec for GovernanceVote {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let outpoint_hash: dash_primitives::TxHash = wire::read_hash(data)?.into();
+    let outpoint_hash = dash_primitives::TxHash::decode(data)?;
     let outpoint_n = codec::read_u32_le(data)?;
     let mn_outpoint = OutPoint {
       hash: outpoint_hash,
       index: outpoint_n,
     };
-    let parent_hash = wire::read_hash(data)?;
+    let parent_hash = Hash256::decode(data)?;
     let outcome = VoteOutcome::from_base(codec::read_u32_le(data)?);
     let signal = VoteSignal::from_base(codec::read_u32_le(data)?);
     let time = codec::read_i64_le(data)?;

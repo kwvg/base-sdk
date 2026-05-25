@@ -13,7 +13,7 @@ use crate::wire;
 use crate::TxHash;
 
 use bitcoin_hashes::sha256d;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, Codec, DecodeError};
 use hex_conservative::DisplayHex;
 
 use core::fmt;
@@ -162,13 +162,13 @@ impl GovObject {
   ///
   /// Returns `DecodeError` on malformed input.
   pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let hash_parent = wire::read_hash(data)?.into();
+    let hash_parent = TxHash::decode(data)?;
     let revision = codec::read_i32_le(data)?;
     let time = codec::read_i64_le(data)?;
-    let collateral_hash = wire::read_hash(data)?.into();
+    let collateral_hash = TxHash::decode(data)?;
     let obj_data = wire::read_vec(data, 16_384)?;
     let object_type = GovObjectType::from_i32(codec::read_i32_le(data)?);
-    let mn_hash: TxHash = wire::read_hash(data)?.into();
+    let mn_hash = TxHash::decode(data)?;
     let mn_index = codec::read_u32_le(data)?;
     let masternode_outpoint = OutPoint {
       hash: mn_hash,
@@ -257,13 +257,13 @@ impl GovVote {
   ///
   /// Returns `DecodeError` on malformed input.
   pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let mn_hash: TxHash = wire::read_hash(data)?.into();
+    let mn_hash = TxHash::decode(data)?;
     let mn_index = codec::read_u32_le(data)?;
     let masternode_outpoint = OutPoint {
       hash: mn_hash,
       index: mn_index,
     };
-    let parent_hash = wire::read_hash(data)?.into();
+    let parent_hash = TxHash::decode(data)?;
     let outcome = codec::read_i32_le(data)?;
     let signal = codec::read_i32_le(data)?;
     let time = codec::read_i64_le(data)?;

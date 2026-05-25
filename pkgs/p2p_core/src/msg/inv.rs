@@ -12,7 +12,7 @@ use crate::primitives::inventory::{InvType, Inventory};
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
-use dash_types::codec::{self, DecodeError, NumCodec};
+use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum inventory items per message.
@@ -24,7 +24,7 @@ fn decode_inv_list(data: &mut &[u8]) -> Result<Vec<Inventory>, DecodeError> {
   let mut items = Vec::with_capacity(count);
   for _ in 0..count {
     let raw_type = codec::read_u32_le(data)?;
-    let hash = Hash256::from_bytes(codec::take(data)?);
+    let hash = Hash256::decode(data)?;
     items.push(Inventory {
       inv_type: InvType::from_base(raw_type),
       hash,

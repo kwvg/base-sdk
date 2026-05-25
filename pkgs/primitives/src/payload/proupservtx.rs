@@ -17,7 +17,7 @@ use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::{self, DecodeError, NumCodec};
+use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::{BlsSignatureBytes, PlatformNodeId};
 
 use core::fmt;
@@ -70,7 +70,7 @@ impl ProUpServTx {
       MnType::Regular
     };
 
-    let pro_tx_hash = wire::read_hash(data)?.into();
+    let pro_tx_hash = TxHash::decode(data)?;
 
     let net_info = if version >= 3 {
       let raw = wire::read_vec(data, 1024)?;
@@ -80,7 +80,7 @@ impl ProUpServTx {
     };
 
     let script_operator_payout = wire::read_script(data, 10_000)?;
-    let inputs_hash = wire::read_hash(data)?.into();
+    let inputs_hash = InputsHash::decode(data)?;
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
       let node_id = codec::read_type(data)?;

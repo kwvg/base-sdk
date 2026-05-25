@@ -19,7 +19,7 @@ use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
 use dash_script::KeyId;
-use dash_types::codec::{self, DecodeError, NumCodec};
+use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, PlatformNodeId};
 
 use core::fmt;
@@ -93,7 +93,7 @@ impl ProRegTx {
     let mn_type_raw = codec::read_u16_le(data)?;
     let mn_type = MnType::from_base(mn_type_raw);
     let mode = codec::read_u16_le(data)?;
-    let collateral_hash = wire::read_hash(data)?.into();
+    let collateral_hash = TxHash::decode(data)?;
     let collateral_index = codec::read_u32_le(data)?;
 
     let net_info = if version >= 3 {
@@ -108,7 +108,7 @@ impl ProRegTx {
     let key_id_voting = codec::read_type(data)?;
     let operator_reward = codec::read_u16_le(data)?;
     let script_payout = wire::read_script(data, 10_000)?;
-    let inputs_hash = wire::read_hash(data)?.into();
+    let inputs_hash = InputsHash::decode(data)?;
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
       let node_id = codec::read_type(data)?;

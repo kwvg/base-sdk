@@ -6,6 +6,27 @@
 
 //! Hash newtype macros.
 
+/// Generates `Codec` + `Encodable` + `Decodable` for hash newtypes.
+#[macro_export]
+macro_rules! impl_hash {
+  ($base:ty, $($name:ident),* $(,)?) => { $(
+    impl dash_types::codec::Codec for $name {
+      fn decode(
+        data: &mut &[u8],
+      ) -> Result<Self, dash_types::codec::DecodeError> {
+        dash_types::codec::take::<{ <$base>::LEN }>(data)
+          .map(Self::from_bytes)
+      }
+
+      fn encode(&self, buf: &mut ::alloc::vec::Vec<u8>) {
+        buf.extend_from_slice(self.as_bytes());
+      }
+    }
+
+    dash_types::impl_type!($name);
+  )* };
+}
+
 /// Generates a newtype wrapping a hash base type with full trait
 /// implementations and consensus encoding support.
 #[macro_export]
@@ -117,22 +138,7 @@ macro_rules! make_hash {
       fn as_ref(&self) -> &[u8; { <$base>::LEN }] { self.0.as_bytes() }
     }
 
-    impl $crate::__private::bitcoin_consensus_encoding::Encodable for $name {
-      type Encoder<'e> = $crate::__private::bitcoin_consensus_encoding::ArrayRefEncoder<'e, { <$base>::LEN }>;
-
-      fn encoder(&self) -> Self::Encoder<'_> {
-        $crate::__private::bitcoin_consensus_encoding::ArrayRefEncoder::without_length_prefix(
-          self.0.as_bytes(),
-        )
-      }
-    }
-
-    impl $crate::__private::bitcoin_consensus_encoding::Decodable for $name {
-      type Decoder = $crate::HashTypeDecoder<$name, { <$base>::LEN }>;
-      fn decoder() -> Self::Decoder {
-        $crate::HashTypeDecoder::new()
-      }
-    }
+    $crate::impl_hash!($base, $name);
   };
 }
 

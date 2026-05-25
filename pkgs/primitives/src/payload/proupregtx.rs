@@ -16,7 +16,7 @@ use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
 use dash_script::KeyId;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, Codec, DecodeError};
 use dash_types::BlsPublicKeyBytes;
 
 use core::fmt;
@@ -60,12 +60,12 @@ impl ProUpRegTx {
   /// Decodes from the extra_payload byte slice.
   pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
-    let pro_tx_hash = wire::read_hash(data)?.into();
+    let pro_tx_hash = TxHash::decode(data)?;
     let mode = codec::read_u16_le(data)?;
     let pub_key_operator = codec::read_type(data)?;
     let key_id_voting = codec::read_type(data)?;
     let script_payout = wire::read_script(data, 10_000)?;
-    let inputs_hash = wire::read_hash(data)?.into();
+    let inputs_hash = InputsHash::decode(data)?;
     let vch_sig = wire::read_vec(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {

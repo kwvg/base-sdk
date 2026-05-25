@@ -14,11 +14,6 @@ use crate::prelude::*;
 
 use dash_types::codec::{read_bytes, read_compact_size, read_u16_be, take, DecodeError};
 
-/// Reads a `Hash256` (32 bytes, wire order).
-pub fn read_hash(sl: &mut &[u8]) -> Result<dash_num::Hash256, DecodeError> {
-  take::<32>(sl).map(dash_num::Hash256::from_bytes)
-}
-
 /// Reads a CompactSize-prefixed `Script`.
 pub fn read_script(sl: &mut &[u8], limit: usize) -> Result<crate::script::Script, DecodeError> {
   let len = read_compact_size(sl, limit)?;

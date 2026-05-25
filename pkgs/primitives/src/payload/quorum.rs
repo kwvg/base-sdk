@@ -60,7 +60,7 @@ impl Codec for Commitment {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
     let llmq_type = LlmqType::from_base(codec::read_u8(data)?);
-    let quorum_hash = wire::read_hash(data)?.into();
+    let quorum_hash = QuorumHash::decode(data)?;
 
     let quorum_index = if version == 2 || version == 4 {
       Some(codec::read_i16_le(data)?)
@@ -71,7 +71,7 @@ impl Codec for Commitment {
     let signers = wire::read_dynbitset(data, 1024)?;
     let valid_members = wire::read_dynbitset(data, 1024)?;
     let quorum_public_key = codec::read_type(data)?;
-    let quorum_vvec_hash = wire::read_hash(data)?.into();
+    let quorum_vvec_hash = QuorumVvecHash::decode(data)?;
     let quorum_sig = codec::read_type(data)?;
     let members_sig = codec::read_type(data)?;
 

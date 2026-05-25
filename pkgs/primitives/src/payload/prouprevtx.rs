@@ -8,11 +8,10 @@
 
 use crate::support::RevocationReason;
 use crate::validation::{check_protx_version, max_protx_version_no_ext, DeploymentContext, ProTxInvalid};
-use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::{self, DecodeError, NumCodec};
+use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -46,10 +45,10 @@ impl ProUpRevTx {
   /// Decodes from the extra_payload byte slice.
   pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
-    let pro_tx_hash = wire::read_hash(data)?.into();
+    let pro_tx_hash = TxHash::decode(data)?;
     let reason_raw = codec::read_u16_le(data)?;
     let reason = RevocationReason::from_base(reason_raw);
-    let inputs_hash = wire::read_hash(data)?.into();
+    let inputs_hash = InputsHash::decode(data)?;
     let sig = codec::read_type(data)?;
 
     Ok(Self {

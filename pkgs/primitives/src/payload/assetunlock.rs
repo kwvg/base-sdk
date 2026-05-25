@@ -7,11 +7,10 @@
 //! AssetUnlock (type 9): Platform to L1.
 
 use crate::validation::DeploymentContext;
-use crate::wire;
 use crate::QuorumHash;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, Codec, DecodeError};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -47,7 +46,7 @@ impl AssetUnlock {
     let index = codec::read_u64_le(data)?;
     let fee = codec::read_u32_le(data)?;
     let requested_height = codec::read_u32_le(data)?;
-    let quorum_hash = wire::read_hash(data)?.into();
+    let quorum_hash = QuorumHash::decode(data)?;
     let quorum_sig = codec::read_type(data)?;
 
     Ok(Self {

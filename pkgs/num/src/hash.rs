@@ -277,20 +277,17 @@ macro_rules! define_hash {
       }
     }
 
-    impl bitcoin_consensus_encoding::Encodable for $name {
-      type Encoder<'e> = bitcoin_consensus_encoding::ArrayRefEncoder<'e, $n>;
+    impl dash_types::codec::Codec for $name {
+      fn decode(data: &mut &[u8]) -> Result<Self, dash_types::codec::DecodeError> {
+        dash_types::codec::take::<$n>(data).map(Self::from_bytes)
+      }
 
-      fn encoder(&self) -> Self::Encoder<'_> {
-        bitcoin_consensus_encoding::ArrayRefEncoder::without_length_prefix(&self.0)
+      fn encode(&self, buf: &mut ::alloc::vec::Vec<u8>) {
+        buf.extend_from_slice(&self.0);
       }
     }
 
-    impl bitcoin_consensus_encoding::Decodable for $name {
-      type Decoder = $crate::HashTypeDecoder<$name, $n>;
-      fn decoder() -> Self::Decoder {
-        $crate::HashTypeDecoder::new()
-      }
-    }
+    dash_types::impl_type!($name);
   };
 }
 
