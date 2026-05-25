@@ -6,7 +6,6 @@
 
 //! Dash network magic bytes.
 
-use bitcoin_consensus_encoding as encoding;
 use dash_params::types::MessageStart;
 
 use core::fmt;
@@ -18,12 +17,12 @@ pub struct Magic(pub [u8; 4]);
 
 impl Magic {
   /// Returns the inner byte array.
-  pub const fn to_byte_array(self) -> [u8; 4] {
+  pub const fn to_bytes(self) -> [u8; 4] {
     self.0
   }
 
-  /// Returns a reference to the inner byte array.
-  pub const fn as_byte_array(&self) -> &[u8; 4] {
+  /// Borrows the inner byte array.
+  pub const fn as_bytes(&self) -> &[u8; 4] {
     &self.0
   }
 }
@@ -65,66 +64,4 @@ impl fmt::Display for Magic {
   }
 }
 
-encoding::encoder_newtype_exact! {
-  /// Encoder for [`Magic`].
-  pub struct MagicEncoder<'e>(encoding::ArrayEncoder<4>);
-}
-
-impl encoding::Encodable for Magic {
-  type Encoder<'e> = MagicEncoder<'e>;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    MagicEncoder::new(encoding::ArrayEncoder::without_length_prefix(self.0))
-  }
-}
-
-/// Decoder for [`Magic`].
-#[derive(Debug)]
-pub struct MagicDecoder(encoding::ArrayDecoder<4>);
-
-impl MagicDecoder {
-  /// Creates a new decoder.
-  pub const fn new() -> Self {
-    Self(encoding::ArrayDecoder::new())
-  }
-}
-
-impl Default for MagicDecoder {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for [`Magic`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MagicDecoderError(encoding::UnexpectedEofError);
-
-impl fmt::Display for MagicDecoderError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "magic decode: {}", self.0)
-  }
-}
-
-impl encoding::Decoder for MagicDecoder {
-  type Output = Magic;
-  type Error = MagicDecoderError;
-
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(MagicDecoderError)
-  }
-
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    let buf = self.0.end().map_err(MagicDecoderError)?;
-    Ok(Magic(buf))
-  }
-
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
-}
-
-impl encoding::Decodable for Magic {
-  type Decoder = MagicDecoder;
-  fn decoder() -> Self::Decoder {
-    MagicDecoder::new()
-  }
-}
+dash_types::impl_bytes!(4, Magic);

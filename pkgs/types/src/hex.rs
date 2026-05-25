@@ -6,6 +6,27 @@
 
 //! Fixed-size byte newtype macro and decoder.
 
+/// Generates `Codec` + `Encodable` + `Decodable` for a fixed-size
+/// byte newtype that implements `From<[u8; N]>` and `as_bytes()`.
+#[macro_export]
+macro_rules! impl_bytes {
+  ($n:literal, $($name:ident),* $(,)?) => { $(
+    impl $crate::codec::Codec for $name {
+      fn decode(
+        data: &mut &[u8],
+      ) -> Result<Self, $crate::codec::DecodeError> {
+        $crate::codec::take::<$n>(data).map(Self::from)
+      }
+
+      fn encode(&self, buf: &mut ::alloc::vec::Vec<u8>) {
+        buf.extend_from_slice(self.as_bytes());
+      }
+    }
+
+    $crate::impl_type!($name);
+  )* };
+}
+
 /// Generates a fixed-size byte newtype with consensus encoding traits and
 /// standard trait implementations.
 #[macro_export]
@@ -85,22 +106,7 @@ macro_rules! make_bytes {
       }
     }
 
-    impl $crate::__private::bitcoin_consensus_encoding::Encodable for $name {
-      type Encoder<'e> = $crate::__private::bitcoin_consensus_encoding::ArrayRefEncoder<'e, $n>;
-
-      fn encoder(&self) -> Self::Encoder<'_> {
-        $crate::__private::bitcoin_consensus_encoding::ArrayRefEncoder::without_length_prefix(
-          &self.0,
-        )
-      }
-    }
-
-    impl $crate::__private::bitcoin_consensus_encoding::Decodable for $name {
-      type Decoder = $crate::__private::ByteTypeDecoder<$name, $n>;
-      fn decoder() -> Self::Decoder {
-        $crate::__private::ByteTypeDecoder::new()
-      }
-    }
+    $crate::impl_bytes!($n, $name);
   };
 }
 
