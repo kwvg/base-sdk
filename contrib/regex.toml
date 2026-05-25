@@ -1,3 +1,9 @@
+[rules.alloc-only-in-prelude]
+include = ["pkgs/**/*.rs"]
+exclude = ["**/prelude.rs"]
+block = ['alloc::']
+message = "use crate::prelude instead of alloc:: directly"
+
 [rules.disambiguate-serde-derive]
 include = ["pkgs/**/*.rs"]
 block = ['derive\(serde::']
