@@ -128,32 +128,3 @@ impl Block {
     Ok(())
   }
 }
-
-/// Returns `(start, end)` byte offsets for each transaction in a raw serialized
-/// block.
-///
-/// Walks the block without full deserialization; only the transaction
-/// boundaries are tracked. Useful for indexing and selective extraction.
-///
-/// # Errors
-///
-/// Returns an error if the block header, transaction count, or any individual
-/// transaction cannot be decoded.
-pub fn tx_byte_ranges(raw_block: &[u8]) -> Result<Vec<(usize, usize)>, DecodeError> {
-  let data = &mut &raw_block[..];
-
-  // Skip 80-byte header.
-  let _ = codec::read_bytes(data, 80)?;
-
-  let tx_count = codec::read_compact_size(data, MAX_BLOCK_TXS)?;
-  let mut ranges = Vec::with_capacity(tx_count);
-
-  for _ in 0..tx_count {
-    let start = raw_block.len() - data.len();
-    let _tx = Transaction::decode(data)?;
-    let end = raw_block.len() - data.len();
-    ranges.push((start, end));
-  }
-
-  Ok(ranges)
-}
