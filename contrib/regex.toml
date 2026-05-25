@@ -1,6 +1,11 @@
 [rules.alloc-only-in-prelude]
 include = ["pkgs/**/*.rs"]
-exclude = ["**/prelude.rs", "pkgs/types/src/entity.rs", "pkgs/types/src/hex.rs"]
+exclude = [
+  "**/prelude.rs",
+  "pkgs/types/src/entity.rs",
+  "pkgs/types/src/hex.rs",
+  "pkgs/types/src/uint.rs",
+]
 block = ['alloc::']
 message = "use crate::prelude instead of alloc:: directly"
 

@@ -4,23 +4,55 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Fixed-size integer newtype macro and decoder.
+//! Fixed-size integer newtype macros.
 
-/// Generates serde implementations for a type that already implements
-/// `NumCodec<$uint>`.
+/// Generates `Codec` + `Encodable` + `Decodable` + serde for a type
+/// that already implements `NumCodec<$uint>`.
 #[macro_export]
 macro_rules! impl_num {
-  ($name:ty, $uint:ty) => {
+  ($name:tt, u8)  => { $crate::impl_num!(@codec $name, u8, 1); };
+  ($name:tt, u16) => { $crate::impl_num!(@codec $name, u16, 2); };
+  ($name:tt, u32) => { $crate::impl_num!(@codec $name, u32, 4); };
+  ($name:tt, u64) => { $crate::impl_num!(@codec $name, u64, 8); };
+  (@codec $name:ty, $uint:ty, $n:literal) => {
+    impl $crate::codec::Codec for $name {
+      fn decode(
+        data: &mut &[u8],
+      ) -> Result<Self, $crate::codec::DecodeError> {
+        $crate::codec::take::<$n>(data).map(|b| {
+          <Self as $crate::codec::NumCodec<$uint>>::from_base(
+            <$uint>::from_le_bytes(b),
+          )
+        })
+      }
+
+      fn encode(&self, buf: &mut ::alloc::vec::Vec<u8>) {
+        buf.extend_from_slice(
+          &<Self as $crate::codec::NumCodec<$uint>>::to_base(self)
+            .to_le_bytes(),
+        );
+      }
+    }
+
+    $crate::impl_type!($name);
+
     #[cfg(feature = "serde")]
     impl ::serde::Serialize for $name {
-      fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        ::serde::Serialize::serialize(&<Self as $crate::codec::NumCodec<$uint>>::to_base(self), serializer)
+      fn serialize<S: ::serde::Serializer>(
+        &self, serializer: S,
+      ) -> Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(
+          &<Self as $crate::codec::NumCodec<$uint>>::to_base(self),
+          serializer,
+        )
       }
     }
 
     #[cfg(feature = "serde")]
     impl<'de> ::serde::Deserialize<'de> for $name {
-      fn deserialize<D: ::serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+      fn deserialize<D: ::serde::Deserializer<'de>>(
+        deserializer: D,
+      ) -> Result<Self, D::Error> {
         <$uint as ::serde::Deserialize>::deserialize(deserializer)
           .map(<Self as $crate::codec::NumCodec<$uint>>::from_base)
       }
@@ -34,7 +66,7 @@ macro_rules! impl_num {
 macro_rules! make_num {
   (
     $(#[$attr:meta])*
-    $name:ident, $uint:ty, $n:literal
+    $name:ident, $uint:tt, $n:literal
   ) => {
     $(#[$attr])*
     #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -75,23 +107,6 @@ macro_rules! make_num {
     impl core::fmt::Display for $name {
       fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Display::fmt(&self.0, f)
-      }
-    }
-
-    impl $crate::__private::bitcoin_consensus_encoding::Encodable for $name {
-      type Encoder<'e> = $crate::__private::bitcoin_consensus_encoding::ArrayEncoder<$n>;
-
-      fn encoder(&self) -> Self::Encoder<'_> {
-        $crate::__private::bitcoin_consensus_encoding::ArrayEncoder::without_length_prefix(
-          self.0.to_le_bytes(),
-        )
-      }
-    }
-
-    impl $crate::__private::bitcoin_consensus_encoding::Decodable for $name {
-      type Decoder = $crate::__private::ByteTypeDecoder<$name, $n>;
-      fn decoder() -> Self::Decoder {
-        $crate::__private::ByteTypeDecoder::new()
       }
     }
 

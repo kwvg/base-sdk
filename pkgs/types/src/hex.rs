@@ -4,7 +4,7 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Fixed-size byte newtype macro and decoder.
+//! Fixed-size byte newtype macros.
 
 /// Generates `Codec` + `Encodable` + `Decodable` for a fixed-size
 /// byte newtype that implements `From<[u8; N]>` and `as_bytes()`.
@@ -158,60 +158,4 @@ pub mod serde {
   define_fixed!(w48, 48);
   define_fixed!(w64, 64);
   define_fixed!(w96, 96);
-}
-
-/// Generic decoder for fixed-size byte newtypes.
-#[derive(Debug)]
-pub struct ByteTypeDecoder<T, const N: usize>(
-  bitcoin_consensus_encoding::ArrayDecoder<N>,
-  core::marker::PhantomData<T>,
-);
-
-impl<T, const N: usize> ByteTypeDecoder<T, N> {
-  /// Constructs a new decoder.
-  pub const fn new() -> Self {
-    Self(
-      bitcoin_consensus_encoding::ArrayDecoder::new(),
-      core::marker::PhantomData,
-    )
-  }
-}
-
-impl<T, const N: usize> Default for ByteTypeDecoder<T, N> {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for fixed-size byte newtypes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ByteTypeDecoderError(pub bitcoin_consensus_encoding::UnexpectedEofError);
-
-impl core::fmt::Display for ByteTypeDecoderError {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    write!(f, "byte type decode: {}", self.0)
-  }
-}
-
-impl<T, const N: usize> bitcoin_consensus_encoding::Decoder for ByteTypeDecoder<T, N>
-where
-  T: From<[u8; N]>,
-{
-  type Output = T;
-  type Error = ByteTypeDecoderError;
-
-  #[inline]
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(ByteTypeDecoderError)
-  }
-
-  #[inline]
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    self.0.end().map(T::from).map_err(ByteTypeDecoderError)
-  }
-
-  #[inline]
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
 }

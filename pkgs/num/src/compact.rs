@@ -107,45 +107,4 @@ impl Arith256 {
   }
 }
 
-impl bitcoin_consensus_encoding::Encodable for CompactTarget {
-  type Encoder<'e> = bitcoin_consensus_encoding::ArrayEncoder<4>;
-
-  fn encoder(&self) -> Self::Encoder<'_> {
-    bitcoin_consensus_encoding::ArrayEncoder::without_length_prefix(self.0.to_le_bytes())
-  }
-}
-
-impl bitcoin_consensus_encoding::Decodable for CompactTarget {
-  type Decoder = CompactTargetDecoder;
-
-  fn decoder() -> Self::Decoder {
-    CompactTargetDecoder(bitcoin_consensus_encoding::ArrayDecoder::new())
-  }
-}
-
-/// Decoder for [`CompactTarget`].
-#[derive(Debug)]
-pub struct CompactTargetDecoder(bitcoin_consensus_encoding::ArrayDecoder<4>);
-
-impl bitcoin_consensus_encoding::Decoder for CompactTargetDecoder {
-  type Output = CompactTarget;
-  type Error = crate::HashDecoderError;
-
-  #[inline]
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(crate::HashDecoderError)
-  }
-
-  #[inline]
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    let bytes = self.0.end().map_err(crate::HashDecoderError)?;
-    Ok(CompactTarget(u32::from_le_bytes(bytes)))
-  }
-
-  #[inline]
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
-}
-
 dash_types::impl_num!(CompactTarget, u32);

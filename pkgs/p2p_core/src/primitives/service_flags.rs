@@ -6,7 +6,6 @@
 
 //! Dash service flag bitfield.
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::NumCodec;
 
 use core::fmt;
@@ -86,67 +85,3 @@ impl fmt::Display for ServiceFlags {
 }
 
 dash_types::impl_num!(ServiceFlags, u64);
-
-encoding::encoder_newtype_exact! {
-  /// Encoder for [`ServiceFlags`].
-  pub struct ServiceFlagsEncoder<'e>(encoding::ArrayEncoder<8>);
-}
-
-impl encoding::Encodable for ServiceFlags {
-  type Encoder<'e> = ServiceFlagsEncoder<'e>;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    ServiceFlagsEncoder::new(encoding::ArrayEncoder::without_length_prefix(self.0.to_le_bytes()))
-  }
-}
-
-/// Decoder for [`ServiceFlags`].
-#[derive(Debug)]
-pub struct ServiceFlagsDecoder(encoding::ArrayDecoder<8>);
-
-impl ServiceFlagsDecoder {
-  /// Creates a new decoder.
-  pub const fn new() -> Self {
-    Self(encoding::ArrayDecoder::new())
-  }
-}
-
-impl Default for ServiceFlagsDecoder {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for [`ServiceFlags`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServiceFlagsDecoderError(encoding::UnexpectedEofError);
-
-impl fmt::Display for ServiceFlagsDecoderError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "service flags decode: {}", self.0)
-  }
-}
-
-impl encoding::Decoder for ServiceFlagsDecoder {
-  type Output = ServiceFlags;
-  type Error = ServiceFlagsDecoderError;
-
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(ServiceFlagsDecoderError)
-  }
-
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    let buf = self.0.end().map_err(ServiceFlagsDecoderError)?;
-    Ok(ServiceFlags(u64::from_le_bytes(buf)))
-  }
-
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
-}
-
-impl encoding::Decodable for ServiceFlags {
-  type Decoder = ServiceFlagsDecoder;
-  fn decoder() -> Self::Decoder {
-    ServiceFlagsDecoder::new()
-  }
-}
