@@ -10,7 +10,7 @@
 use blst::*;
 use dash_num::Hash256;
 
-use crate::prelude::Vec;
+use crate::prelude::*;
 
 /// Evaluate a polynomial at `x`. Coefficients are in ascending order:
 /// `coeffs[0] + coeffs[1]*x + ...`.

@@ -6,4 +6,6 @@
 
 //! Crate-internal prelude.
 
+pub(crate) use alloc::format;
+pub(crate) use alloc::string::String;
 pub(crate) use alloc::vec::Vec;

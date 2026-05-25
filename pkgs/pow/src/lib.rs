@@ -56,6 +56,7 @@ pub_if_internal! {
   mod skein;
 }
 
+mod prelude;
 mod util;
 
 #[cfg(feature = "std")]

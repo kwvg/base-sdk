@@ -6,7 +6,9 @@
 
 //! Re-exports for no_std compatibility.
 
-pub(crate) use alloc::collections::BTreeSet;
-pub(crate) use alloc::format;
+#[cfg(test)]
+pub(crate) use alloc::borrow::ToOwned;
 pub(crate) use alloc::string::String;
+#[cfg(test)]
+pub(crate) use alloc::string::ToString;
 pub(crate) use alloc::vec::Vec;

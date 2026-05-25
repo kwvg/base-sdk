@@ -339,6 +339,7 @@ impl fmt::Debug for Opcode {
 #[cfg(test)]
 mod tests {
   use super::Opcode;
+  use crate::prelude::*;
 
   #[test]
   fn round_trip_named_opcodes() {
@@ -385,8 +386,6 @@ mod tests {
 
   #[test]
   fn display_formatting() {
-    use alloc::string::ToString as _;
-
     assert_eq!(Opcode::Dup.to_string(), "OP_DUP");
     assert_eq!(Opcode::Return.to_string(), "OP_RETURN");
     assert_eq!(Opcode::CheckLockTimeVerify.to_string(), "OP_CHECKLOCKTIMEVERIFY");

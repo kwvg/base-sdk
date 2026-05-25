@@ -13,6 +13,7 @@ extern crate alloc;
 extern crate std;
 
 mod hex;
+mod prelude;
 mod uint;
 
 #[doc(hidden)]

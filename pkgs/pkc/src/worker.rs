@@ -10,7 +10,8 @@
 //! coupling to any specific scheme. The caller provides the operation; the
 //! worker handles thread pooling and work stealing.
 
-use alloc::vec::Vec;
+use crate::prelude::*;
+
 use rayon::prelude::*;
 
 /// Verify N items in parallel. Returns per-item pass/fail.

@@ -15,9 +15,9 @@ extern crate std;
 
 pub mod key_id;
 pub mod opcode;
+mod prelude;
 
-use alloc::string::String;
-use alloc::vec::Vec;
+use crate::prelude::*;
 
 use bitcoin_hashes::{hash160, sha256};
 
@@ -229,8 +229,6 @@ pub fn legacy_sigop_count(script: &[u8]) -> usize {
 
 #[cfg(test)]
 mod tests {
-  use alloc::borrow::ToOwned as _;
-
   use hex_literal::hex;
 
   use super::*;

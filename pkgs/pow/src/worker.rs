@@ -6,7 +6,8 @@
 
 //! Parallel proof-of-work hashing.
 
-use alloc::vec::Vec;
+use crate::prelude::*;
+
 use dash_num::Hash256;
 use rayon::prelude::*;
 

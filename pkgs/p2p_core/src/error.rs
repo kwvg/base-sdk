@@ -6,13 +6,15 @@
 
 //! P2P-layer decoding errors.
 
+use crate::prelude::*;
+
 use core::fmt;
 
 /// An error encountered during P2P message decoding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum P2pDecodeError {
   /// Underlying consensus decoding error.
-  Consensus(alloc::string::String),
+  Consensus(String),
   /// Unrecognised 12-byte command string.
   UnknownCommand {
     /// The raw command bytes.
@@ -41,7 +43,7 @@ pub enum P2pDecodeError {
 
 impl From<dash_primitives::codec::DecodeError> for P2pDecodeError {
   fn from(e: dash_primitives::codec::DecodeError) -> Self {
-    Self::Consensus(alloc::format!("{e}"))
+    Self::Consensus(format!("{e}"))
   }
 }
 

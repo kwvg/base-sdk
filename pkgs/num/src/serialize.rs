@@ -7,9 +7,8 @@
 //! Reusable serde helpers for `#[serde(with = "...")]`.
 
 use crate::hash::{hex_val, HEX_LOWER};
+use crate::prelude::*;
 use crate::ParseHexError;
-
-use alloc::string::String;
 
 /// Hex-encode bytes in big-endian (display) order.
 fn encode_be(bytes: &[u8]) -> String {

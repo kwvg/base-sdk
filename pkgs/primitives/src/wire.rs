@@ -11,6 +11,7 @@
 //! `bitcoin_consensus_encoding::decode_from_slice_unbounded`.
 
 use crate::error::DecodeError;
+use crate::prelude::*;
 
 fn ensure(sl: &[u8], n: usize) -> Result<(), DecodeError> {
   if sl.len() < n {
@@ -149,7 +150,7 @@ pub fn read_script(sl: &mut &[u8], limit: usize) -> Result<crate::script::Script
 }
 
 /// Reads a CompactSize-prefixed byte vector.
-pub fn read_vec(sl: &mut &[u8], limit: usize) -> Result<crate::prelude::Vec<u8>, DecodeError> {
+pub fn read_vec(sl: &mut &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
   let len = read_compact_size(sl, limit)?;
   Ok(read_bytes(sl, len)?.to_vec())
 }

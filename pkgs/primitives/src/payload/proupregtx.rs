@@ -7,6 +7,7 @@
 //! ProUpRegTx registrar-update payload (type 3).
 
 use crate::error::DecodeError;
+use crate::prelude::*;
 use crate::script::Script;
 use crate::validation::{
   check_operator_key_not_null, check_protx_version, max_protx_version_no_ext, DeploymentContext, ProTxInvalid,
@@ -44,7 +45,7 @@ pub struct ProUpRegTx {
   /// Hash of all inputs.
   pub inputs_hash: InputsHash,
   /// Owner ECDSA signature (variable-length).
-  pub vch_sig: crate::prelude::Vec<u8>,
+  pub vch_sig: Vec<u8>,
 }
 
 impl fmt::Display for ProUpRegTx {

@@ -15,7 +15,6 @@ extern crate std;
 
 pub use dash_num::Hash256;
 
-#[cfg(any(feature = "bls_ietf", feature = "bls_chia"))]
 mod prelude;
 
 #[cfg(any(feature = "bls_ietf", feature = "bls_chia"))]

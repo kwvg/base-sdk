@@ -7,6 +7,7 @@
 //! ProRegTx registration payload (type 1).
 
 use crate::error::DecodeError;
+use crate::prelude::*;
 use crate::script::Script;
 use crate::support::CService;
 use crate::tx_types::MnType;
@@ -73,7 +74,7 @@ pub struct ProRegTx {
   /// Platform HTTP port (Evo + version < 3 only).
   pub platform_http_port: Option<u16>,
   /// Owner ECDSA signature (variable-length).
-  pub vch_sig: crate::prelude::Vec<u8>,
+  pub vch_sig: Vec<u8>,
 }
 
 impl fmt::Display for ProRegTx {

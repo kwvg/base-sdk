@@ -1,0 +1,11 @@
+# CodeQL related
+.codeql
+.cache
+*.testproj/
+*.actual
+
+# Test files / folders
+test.ql
+test-*.ql
+**/testing/**
+**/*.testproj/*
