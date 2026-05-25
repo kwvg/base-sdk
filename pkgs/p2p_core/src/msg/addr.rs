@@ -6,15 +6,12 @@
 
 //! Address messages: addr, addrv2 (getaddr and sendaddrv2 are empty).
 
-use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
 use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
 use crate::primitives::service_flags::ServiceFlags;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_primitives::wire;
 use dash_types::codec::{self, Codec, DecodeError};
-use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum addresses per message.
 const MAX_ADDR: usize = 1_000;
@@ -51,21 +48,7 @@ impl Codec for Addr {
   }
 }
 
-impl encoding::Encodable for Addr {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for Addr {
-  type Decoder = BufferDecoder<Addr, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(Addr);
 
 /// BIP155 v2 address announcement.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,18 +76,4 @@ impl Codec for AddrV2Msg {
   }
 }
 
-impl encoding::Encodable for AddrV2Msg {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for AddrV2Msg {
-  type Decoder = BufferDecoder<AddrV2Msg, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(AddrV2Msg);

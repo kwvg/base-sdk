@@ -6,12 +6,9 @@
 
 //! User agent string exchanged in version messages.
 
-use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::{self, Codec, DecodeError};
-use dash_types::{BufferDecoder, VecEncoder};
 
 use core::fmt;
 
@@ -92,18 +89,4 @@ impl fmt::Display for UserAgent {
   }
 }
 
-impl encoding::Encodable for UserAgent {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for UserAgent {
-  type Decoder = BufferDecoder<UserAgent, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(UserAgent);

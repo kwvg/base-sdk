@@ -6,18 +6,15 @@
 
 //! Version handshake message (Dash-extended).
 
-use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
 use crate::primitives::net_addr::NetAddr;
 use crate::primitives::protocol_version::ProtocolVersion;
 use crate::primitives::service_flags::ServiceFlags;
 use crate::primitives::user_agent::UserAgent;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
 use dash_primitives::wire;
 use dash_types::codec::{self, Codec, DecodeError};
-use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum user agent length in bytes.
 const MAX_USER_AGENT: usize = 256;
@@ -122,18 +119,4 @@ impl Codec for Version {
   }
 }
 
-impl encoding::Encodable for Version {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for Version {
-  type Decoder = BufferDecoder<Version, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(Version);

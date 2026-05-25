@@ -6,16 +6,13 @@
 
 //! Network address types for P2P messages.
 
-use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
 use crate::primitives::service_flags::ServiceFlags;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_primitives::wire;
 use dash_primitives::CService;
 use dash_primitives::NetworkType;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
-use dash_types::{BufferDecoder, VecEncoder};
 
 use core::fmt;
 
@@ -45,21 +42,7 @@ impl Codec for NetAddr {
   }
 }
 
-impl encoding::Encodable for NetAddr {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for NetAddr {
-  type Decoder = BufferDecoder<NetAddr, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(NetAddr);
 
 impl fmt::Display for NetAddr {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -95,21 +78,7 @@ impl Codec for TimestampedAddr {
   }
 }
 
-impl encoding::Encodable for TimestampedAddr {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for TimestampedAddr {
-  type Decoder = BufferDecoder<TimestampedAddr, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(TimestampedAddr);
 
 /// BIP155 v2 network address supporting multiple transport types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -159,21 +128,7 @@ impl Codec for AddrV2 {
   }
 }
 
-impl encoding::Encodable for AddrV2 {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for AddrV2 {
-  type Decoder = BufferDecoder<AddrV2, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(AddrV2);
 
 /// BIP155 timestamped v2 address entry used in `addrv2` messages.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -228,21 +183,7 @@ impl Codec for AddrV2Entry {
   }
 }
 
-impl encoding::Encodable for AddrV2Entry {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for AddrV2Entry {
-  type Decoder = BufferDecoder<AddrV2Entry, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(AddrV2Entry);
 
 impl fmt::Display for AddrV2Entry {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

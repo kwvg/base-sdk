@@ -6,14 +6,11 @@
 
 //! BIP157 compact filter checkpoint messages: getcfcheckpt, cfcheckpt.
 
-use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
 use crate::primitives::filter_type::FilterType;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_primitives::BlockHash;
 use dash_types::codec::{self, Codec, DecodeError};
-use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum checkpoints per message.
 const MAX_CFCHECKPT: usize = 1_000;
@@ -41,21 +38,7 @@ impl Codec for GetCFCheckpt {
   }
 }
 
-impl encoding::Encodable for GetCFCheckpt {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for GetCFCheckpt {
-  type Decoder = BufferDecoder<GetCFCheckpt, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(GetCFCheckpt);
 
 /// Response carrying filter header checkpoints at 1000-block intervals.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,18 +78,4 @@ impl Codec for CFCheckpt {
   }
 }
 
-impl encoding::Encodable for CFCheckpt {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(self, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for CFCheckpt {
-  type Decoder = BufferDecoder<CFCheckpt, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as Codec>::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(CFCheckpt);
