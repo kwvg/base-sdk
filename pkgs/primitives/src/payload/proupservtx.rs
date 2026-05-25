@@ -73,7 +73,7 @@ impl ProUpServTx {
     let pro_tx_hash = TxHash::decode(data)?;
 
     let net_info = if version >= 3 {
-      let raw = codec::read_vec(data, 1024)?;
+      let raw = codec::read_blob(data, 1024)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
       NetInfo::Legacy(CService::decode(data)?)

@@ -69,14 +69,12 @@ impl UserAgent {
 
 impl Codec for UserAgent {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let len = codec::read_compact_size(data, MAX_USER_AGENT)?;
-    let bytes = codec::read_bytes(data, len)?;
-    Ok(Self(bytes.to_vec()))
+    let bytes = codec::read_blob(data, MAX_USER_AGENT)?;
+    Ok(Self(bytes))
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_compact_size(self.0.len(), buf);
-    buf.extend_from_slice(&self.0);
+    codec::write_blob(&self.0, buf);
   }
 }
 

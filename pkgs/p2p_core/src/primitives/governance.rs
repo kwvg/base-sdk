@@ -156,8 +156,7 @@ impl Codec for GovernanceObject {
       hash: outpoint_hash,
       index: outpoint_n,
     };
-    let data_len = codec::read_compact_size(data, MAX_P2P_PAYLOAD)?;
-    let obj_data = codec::read_bytes(data, data_len)?.to_vec();
+    let obj_data = codec::read_blob(data, MAX_P2P_PAYLOAD)?;
     let sig = BlsSignatureBytes(codec::take(data)?);
     Ok(Self {
       parent_hash,
@@ -177,8 +176,7 @@ impl Codec for GovernanceObject {
     buf.extend_from_slice(&self.collateral_hash.to_bytes());
     buf.extend_from_slice(&self.mn_outpoint.hash.to_bytes());
     buf.extend_from_slice(&self.mn_outpoint.index.to_le_bytes());
-    codec::write_compact_size(self.data.len(), buf);
-    buf.extend_from_slice(&self.data);
+    codec::write_blob(&self.data, buf);
     buf.extend_from_slice(&self.sig.0);
   }
 }

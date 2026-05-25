@@ -64,12 +64,11 @@ impl fmt::Display for Script {
 
 impl Codec for Script {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    codec::read_vec(data, MAX_SIZE).map(Self)
+    codec::read_blob(data, MAX_SIZE).map(Self)
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_compact_size(self.0.len(), buf);
-    buf.extend_from_slice(&self.0);
+    codec::write_blob(&self.0, buf);
   }
 }
 

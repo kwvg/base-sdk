@@ -6,41 +6,13 @@
 
 //! Inventory messages: inv, getdata, notfound.
 
-use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
-use crate::primitives::inventory::{InvType, Inventory};
+use crate::primitives::inventory::Inventory;
 
-use bitcoin_consensus_encoding as encoding;
-use dash_num::Hash256;
-use dash_types::codec::{self, Codec, DecodeError, NumCodec};
-use dash_types::{BufferDecoder, VecEncoder};
+use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum inventory items per message.
 const MAX_INV_ITEMS: usize = 50_000;
-
-/// Helper: decode a CompactSize-prefixed vector of inventory items.
-fn decode_inv_list(data: &mut &[u8]) -> Result<Vec<Inventory>, DecodeError> {
-  let count = codec::read_compact_size(data, MAX_INV_ITEMS)?;
-  let mut items = Vec::with_capacity(count);
-  for _ in 0..count {
-    let raw_type = codec::read_u32_le(data)?;
-    let hash = Hash256::decode(data)?;
-    items.push(Inventory {
-      inv_type: InvType::from_base(raw_type),
-      hash,
-    });
-  }
-  Ok(items)
-}
-
-/// Helper: encode a CompactSize-prefixed vector of inventory items.
-fn encode_inv_list(items: &[Inventory], buf: &mut Vec<u8>) {
-  codec::write_compact_size(items.len(), buf);
-  for item in items {
-    buf.extend_from_slice(&item.inv_type.to_base().to_le_bytes());
-    buf.extend_from_slice(&item.hash.to_bytes());
-  }
-}
 
 /// Announces available inventory to a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,27 +22,18 @@ pub struct Inv {
   pub inventory: Vec<Inventory>,
 }
 
-impl Inv {
+impl Codec for Inv {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    decode_inv_list(data).map(|inventory| Self { inventory })
+    let inventory = codec::read_vec(data, MAX_INV_ITEMS)?;
+    Ok(Self { inventory })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_vec(&self.inventory, buf);
   }
 }
 
-impl encoding::Encodable for Inv {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    encode_inv_list(&self.inventory, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for Inv {
-  type Decoder = BufferDecoder<Inv, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(Inv::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(Inv);
 
 /// Requests specific inventory items from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,27 +43,18 @@ pub struct GetData {
   pub inventory: Vec<Inventory>,
 }
 
-impl GetData {
+impl Codec for GetData {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    decode_inv_list(data).map(|inventory| Self { inventory })
+    let inventory = codec::read_vec(data, MAX_INV_ITEMS)?;
+    Ok(Self { inventory })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_vec(&self.inventory, buf);
   }
 }
 
-impl encoding::Encodable for GetData {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    encode_inv_list(&self.inventory, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for GetData {
-  type Decoder = BufferDecoder<GetData, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(GetData::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(GetData);
 
 /// Indicates requested inventory items were not found.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,24 +64,15 @@ pub struct NotFound {
   pub inventory: Vec<Inventory>,
 }
 
-impl NotFound {
+impl Codec for NotFound {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    decode_inv_list(data).map(|inventory| Self { inventory })
+    let inventory = codec::read_vec(data, MAX_INV_ITEMS)?;
+    Ok(Self { inventory })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_vec(&self.inventory, buf);
   }
 }
 
-impl encoding::Encodable for NotFound {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    encode_inv_list(&self.inventory, &mut buf);
-    VecEncoder::new(buf)
-  }
-}
-
-impl encoding::Decodable for NotFound {
-  type Decoder = BufferDecoder<NotFound, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(NotFound::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(NotFound);

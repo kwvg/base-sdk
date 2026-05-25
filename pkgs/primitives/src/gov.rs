@@ -165,7 +165,7 @@ impl GovObject {
     let revision = codec::read_i32_le(data)?;
     let time = codec::read_i64_le(data)?;
     let collateral_hash = TxHash::decode(data)?;
-    let obj_data = codec::read_vec(data, 16_384)?;
+    let obj_data = codec::read_blob(data, 16_384)?;
     let object_type = GovObjectType::from_i32(codec::read_i32_le(data)?);
     let mn_hash = TxHash::decode(data)?;
     let mn_index = codec::read_u32_le(data)?;
@@ -173,7 +173,7 @@ impl GovObject {
       hash: mn_hash,
       index: mn_index,
     };
-    let sig = codec::read_vec(data, 1024)?;
+    let sig = codec::read_blob(data, 1024)?;
 
     Ok(Self {
       hash_parent,
@@ -200,16 +200,13 @@ impl GovObject {
     buf.extend_from_slice(&self.revision.to_le_bytes());
     buf.extend_from_slice(&self.time.to_le_bytes());
     // data hex is serialized as a string (CompactSize + bytes)
-    codec::write_compact_size(data_hex.len(), &mut buf);
-    buf.extend_from_slice(data_hex.as_bytes());
+    codec::write_blob(data_hex.as_bytes(), &mut buf);
     // outpoint + dummy padding for legacy hash compat
     buf.extend_from_slice(self.masternode_outpoint.hash.as_bytes());
     buf.extend_from_slice(&self.masternode_outpoint.index.to_le_bytes());
     buf.push(0x00);
     buf.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
-    // sig with CompactSize prefix
-    codec::write_compact_size(self.sig.len(), &mut buf);
-    buf.extend_from_slice(&self.sig);
+    codec::write_blob(&self.sig, &mut buf);
 
     TxHash::from_bytes(sha256d::Hash::hash(&buf).to_byte_array())
   }
@@ -266,7 +263,7 @@ impl GovVote {
     let outcome = codec::read_i32_le(data)?;
     let signal = codec::read_i32_le(data)?;
     let time = codec::read_i64_le(data)?;
-    let sig = codec::read_vec(data, 1024)?;
+    let sig = codec::read_blob(data, 1024)?;
 
     Ok(Self {
       masternode_outpoint,

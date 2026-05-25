@@ -8,9 +8,7 @@
 
 use crate::prelude::*;
 use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
-use crate::primitives::service_flags::ServiceFlags;
 
-use dash_primitives::CService;
 use dash_types::codec::{self, Codec, DecodeError};
 
 /// Maximum addresses per message.
@@ -26,25 +24,12 @@ pub struct Addr {
 
 impl Codec for Addr {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let count = codec::read_compact_size(data, MAX_ADDR)?;
-    let mut addrs = Vec::with_capacity(count);
-    for _ in 0..count {
-      let time = codec::read_u32_le(data)?;
-      let services = ServiceFlags(codec::read_u64_le(data)?);
-      let addr = CService::decode(data)?;
-      addrs.push(TimestampedAddr { time, services, addr });
-    }
+    let addrs = codec::read_vec(data, MAX_ADDR)?;
     Ok(Self { addrs })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_compact_size(self.addrs.len(), buf);
-    for a in &self.addrs {
-      buf.extend_from_slice(&a.time.to_le_bytes());
-      buf.extend_from_slice(&a.services.0.to_le_bytes());
-      buf.extend_from_slice(&a.addr.addr);
-      buf.extend_from_slice(&a.addr.port.to_be_bytes());
-    }
+    codec::write_vec(&self.addrs, buf);
   }
 }
 
@@ -60,19 +45,12 @@ pub struct AddrV2Msg {
 
 impl Codec for AddrV2Msg {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let count = codec::read_compact_size(data, MAX_ADDR)?;
-    let mut addrs = Vec::with_capacity(count);
-    for _ in 0..count {
-      addrs.push(<AddrV2Entry as Codec>::decode(data)?);
-    }
+    let addrs = codec::read_vec(data, MAX_ADDR)?;
     Ok(Self { addrs })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_compact_size(self.addrs.len(), buf);
-    for a in &self.addrs {
-      Codec::encode(a, buf);
-    }
+    codec::write_vec(&self.addrs, buf);
   }
 }
 

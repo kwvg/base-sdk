@@ -68,11 +68,7 @@ impl Codec for CFHeaders {
     let filter_type = FilterType(codec::read_u8(data)?);
     let stop_hash = BlockHash::from_bytes(codec::take(data)?);
     let previous_filter_header = BlockHash::from_bytes(codec::take(data)?);
-    let count = codec::read_compact_size(data, MAX_CFHEADERS)?;
-    let mut filter_hashes = Vec::with_capacity(count);
-    for _ in 0..count {
-      filter_hashes.push(BlockHash::from_bytes(codec::take(data)?));
-    }
+    let filter_hashes = codec::read_vec(data, MAX_CFHEADERS)?;
     Ok(Self {
       filter_type,
       stop_hash,
@@ -85,10 +81,7 @@ impl Codec for CFHeaders {
     buf.push(self.filter_type.0);
     buf.extend_from_slice(&self.stop_hash.to_bytes());
     buf.extend_from_slice(&self.previous_filter_header.to_bytes());
-    codec::write_compact_size(self.filter_hashes.len(), buf);
-    for h in &self.filter_hashes {
-      buf.extend_from_slice(&h.to_bytes());
-    }
+    codec::write_vec(&self.filter_hashes, buf);
   }
 }
 

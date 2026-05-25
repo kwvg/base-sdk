@@ -65,7 +65,7 @@ impl ProUpRegTx {
     let key_id_voting = codec::read_type(data)?;
     let script_payout = Script::decode(data)?;
     let inputs_hash = InputsHash::decode(data)?;
-    let vch_sig = codec::read_vec(data, MAX_VCH_SIG_SIZE)?;
+    let vch_sig = codec::read_blob(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {
       version,

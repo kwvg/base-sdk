@@ -143,6 +143,23 @@ where
   take::<N>(data).map(T::from)
 }
 
+/// Reads a CompactSize-prefixed byte blob.
+///
+/// # Errors
+///
+/// Returns `DecodeError` when the prefix or payload is
+/// malformed or exceeds `limit`.
+pub fn read_blob(data: &mut &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
+  let len = read_compact_size(data, limit)?;
+  Ok(read_bytes(data, len)?.to_vec())
+}
+
+/// Writes a CompactSize-prefixed byte blob.
+pub fn write_blob(bytes: &[u8], buf: &mut Vec<u8>) {
+  write_compact_size(bytes.len(), buf);
+  buf.extend_from_slice(bytes);
+}
+
 /// Reads a CompactSize-encoded `u64` with minimal encoding check.
 pub fn read_compact_u64(data: &mut &[u8]) -> Result<u64, DecodeError> {
   let first = read_u8(data)?;
@@ -201,15 +218,27 @@ pub fn write_compact_size(value: usize, buf: &mut Vec<u8>) {
   }
 }
 
-/// Reads a CompactSize-prefixed byte vector.
+/// Reads a CompactSize-prefixed vector of `Codec` elements.
 ///
 /// # Errors
 ///
-/// Returns `DecodeError` when the prefix or payload is
-/// malformed or exceeds `limit`.
-pub fn read_vec(data: &mut &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
-  let len = read_compact_size(data, limit)?;
-  Ok(read_bytes(data, len)?.to_vec())
+/// Returns `DecodeError` when the prefix, element count,
+/// or any element is malformed.
+pub fn read_vec<T: Codec>(data: &mut &[u8], limit: usize) -> Result<Vec<T>, DecodeError> {
+  let count = read_compact_size(data, limit)?;
+  let mut items = Vec::with_capacity(count);
+  for _ in 0..count {
+    items.push(T::decode(data)?);
+  }
+  Ok(items)
+}
+
+/// Writes a CompactSize-prefixed vector of `Codec` elements.
+pub fn write_vec<T: Codec>(items: &[T], buf: &mut Vec<u8>) {
+  write_compact_size(items.len(), buf);
+  for item in items {
+    item.encode(buf);
+  }
 }
 
 /// Links a type to its underlying base integer type.

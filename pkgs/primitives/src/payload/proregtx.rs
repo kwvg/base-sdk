@@ -96,7 +96,7 @@ impl ProRegTx {
     let collateral_index = codec::read_u32_le(data)?;
 
     let net_info = if version >= 3 {
-      let raw = codec::read_vec(data, 1024)?;
+      let raw = codec::read_blob(data, 1024)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
       NetInfo::Legacy(CService::decode(data)?)
@@ -122,7 +122,7 @@ impl ProRegTx {
       (None, None, None)
     };
 
-    let vch_sig = codec::read_vec(data, MAX_VCH_SIG_SIZE)?;
+    let vch_sig = codec::read_blob(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {
       version,

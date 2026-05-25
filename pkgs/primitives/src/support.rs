@@ -463,8 +463,7 @@ impl ExtendedNetInfo {
             port: codec::read_u16_be(data)?,
           }),
           0x02 => {
-            let name_len = codec::read_compact_size(data, MAX_DOMAIN)?;
-            let name = codec::read_bytes(data, name_len)?.to_vec();
+            let name = codec::read_blob(data, MAX_DOMAIN)?;
             let port = codec::read_u16_be(data)?;
             NetInfoEntry::Domain { name, port }
           }

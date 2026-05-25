@@ -31,15 +31,13 @@ pub struct GovSync {
 impl Codec for GovSync {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let hash = Hash256::decode(data)?;
-    let len = codec::read_compact_size(data, MAX_BLOOM_FILTER)?;
-    let bloom_filter = codec::read_bytes(data, len)?.to_vec();
+    let bloom_filter = codec::read_blob(data, MAX_BLOOM_FILTER)?;
     Ok(Self { hash, bloom_filter })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&self.hash.to_bytes());
-    codec::write_compact_size(self.bloom_filter.len(), buf);
-    buf.extend_from_slice(&self.bloom_filter);
+    codec::write_blob(&self.bloom_filter, buf);
   }
 }
 

@@ -65,8 +65,7 @@ impl Codec for CFilter {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let filter_type = FilterType(codec::read_u8(data)?);
     let block_hash = BlockHash::from_bytes(codec::take(data)?);
-    let len = codec::read_compact_size(data, MAX_FILTER_DATA)?;
-    let filter_data = codec::read_bytes(data, len)?.to_vec();
+    let filter_data = codec::read_blob(data, MAX_FILTER_DATA)?;
     Ok(Self {
       filter_type,
       block_hash,
@@ -77,8 +76,7 @@ impl Codec for CFilter {
   fn encode(&self, buf: &mut Vec<u8>) {
     buf.push(self.filter_type.0);
     buf.extend_from_slice(&self.block_hash.to_bytes());
-    codec::write_compact_size(self.filter_data.len(), buf);
-    buf.extend_from_slice(&self.filter_data);
+    codec::write_blob(&self.filter_data, buf);
   }
 }
 

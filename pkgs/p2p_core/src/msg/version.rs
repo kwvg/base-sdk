@@ -110,8 +110,7 @@ impl Codec for Version {
     buf.extend_from_slice(&self.addr_send.addr.port.to_be_bytes());
     buf.extend_from_slice(&self.nonce.to_le_bytes());
     // user agent
-    codec::write_compact_size(self.user_agent.len(), buf);
-    buf.extend_from_slice(self.user_agent.as_bytes());
+    codec::write_blob(self.user_agent.as_bytes(), buf);
     buf.extend_from_slice(&self.start_height.to_le_bytes());
     buf.push(u8::from(self.relay));
     buf.extend_from_slice(&self.mnauth_challenge.to_bytes());

@@ -107,8 +107,7 @@ impl Codec for AddrV2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let net_byte = codec::read_u8(data)?;
     let network = NetworkType::from_base(net_byte);
-    let len = codec::read_compact_size(data, 512)?;
-    let addr = codec::read_bytes(data, len)?.to_vec();
+    let addr = codec::read_blob(data, 512)?;
     if let Some(expected) = Self::expected_len(network) {
       if addr.len() != expected {
         return Err(DecodeError::Eof {
@@ -122,8 +121,7 @@ impl Codec for AddrV2 {
 
   fn encode(&self, buf: &mut Vec<u8>) {
     buf.push(self.network.to_base());
-    codec::write_compact_size(self.addr.len(), buf);
-    buf.extend_from_slice(&self.addr);
+    codec::write_blob(&self.addr, buf);
   }
 }
 
@@ -149,8 +147,7 @@ impl Codec for AddrV2Entry {
     let services = ServiceFlags(codec::read_compact_u64(data)?);
     let net_byte = codec::read_u8(data)?;
     let network = NetworkType::from_base(net_byte);
-    let len = codec::read_compact_size(data, 512)?;
-    let addr_bytes = codec::read_bytes(data, len)?.to_vec();
+    let addr_bytes = codec::read_blob(data, 512)?;
     if let Some(expected) = AddrV2::expected_len(network) {
       if addr_bytes.len() != expected {
         return Err(DecodeError::Eof {
@@ -176,8 +173,7 @@ impl Codec for AddrV2Entry {
     buf.extend_from_slice(&self.time.to_le_bytes());
     codec::write_compact_size(self.services.0 as usize, buf);
     buf.push(self.addr.network.to_base());
-    codec::write_compact_size(self.addr.addr.len(), buf);
-    buf.extend_from_slice(&self.addr.addr);
+    codec::write_blob(&self.addr.addr, buf);
     buf.extend_from_slice(&self.port.to_be_bytes());
   }
 }

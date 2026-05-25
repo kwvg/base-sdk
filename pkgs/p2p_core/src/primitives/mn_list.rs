@@ -131,6 +131,19 @@ pub struct DeletedQuorum {
   pub hash: BlockHash,
 }
 
+impl Codec for DeletedQuorum {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let llmq_type = LlmqType::from_base(codec::read_u8(data)?);
+    let hash = BlockHash::from_bytes(codec::take(data)?);
+    Ok(Self { llmq_type, hash })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.push(self.llmq_type.to_base());
+    buf.extend_from_slice(&self.hash.to_bytes());
+  }
+}
+
 /// Chainlock signature entry in the MN list diff.
 ///
 /// Each entry maps a BLS signature to the indices (within
@@ -142,6 +155,19 @@ pub struct QuorumClSig {
   pub sig: BlsSignatureBytes,
   /// Indices into the `new_quorums` vector.
   pub index_set: Vec<u16>,
+}
+
+impl Codec for QuorumClSig {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let sig = BlsSignatureBytes(codec::take(data)?);
+    let index_set = codec::read_vec(data, MAX_QUORUMS)?;
+    Ok(Self { sig, index_set })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.sig.0);
+    codec::write_vec(&self.index_set, buf);
+  }
 }
 
 /// Full masternode list diff payload.
@@ -182,14 +208,9 @@ impl Codec for MnListDiffPayload {
     let block_hash = BlockHash::from_bytes(codec::take(data)?);
     let total_transactions = codec::read_u32_le(data)?;
 
-    let mh_count = codec::read_compact_size(data, MAX_MERKLE)?;
-    let mut merkle_hashes = Vec::with_capacity(mh_count);
-    for _ in 0..mh_count {
-      merkle_hashes.push(TxHash::from_bytes(codec::take(data)?));
-    }
+    let merkle_hashes = codec::read_vec(data, MAX_MERKLE)?;
 
-    let mf_count = codec::read_compact_size(data, MAX_MERKLE_FLAGS)?;
-    let merkle_flags = codec::read_bytes(data, mf_count)?.to_vec();
+    let merkle_flags = codec::read_blob(data, MAX_MERKLE_FLAGS)?;
 
     // Transaction uses encoding::Decodable. Decode from remaining bytes.
     let cb_tx = encoding::decode_from_slice_unbounded::<Transaction>(data).map_err(|_| DecodeError::Eof {
@@ -197,48 +218,14 @@ impl Codec for MnListDiffPayload {
       remaining: 0,
     })?;
 
-    let del_count = codec::read_compact_size(data, MAX_DELETED_MNS)?;
-    let mut deleted_mns = Vec::with_capacity(del_count);
-    for _ in 0..del_count {
-      deleted_mns.push(TxHash::from_bytes(codec::take(data)?));
-    }
+    let deleted_mns = codec::read_vec(data, MAX_DELETED_MNS)?;
 
-    let mn_count = codec::read_compact_size(data, MAX_MN_LIST)?;
-    let mut mn_list = Vec::with_capacity(mn_count);
-    for _ in 0..mn_count {
-      mn_list.push(Codec::decode(data)?);
-    }
+    let mn_list = codec::read_vec(data, MAX_MN_LIST)?;
 
-    let dq_count = codec::read_compact_size(data, MAX_QUORUMS)?;
-    let mut deleted_quorums = Vec::with_capacity(dq_count);
-    for _ in 0..dq_count {
-      let llmq_type = LlmqType::from_base(codec::read_u8(data)?);
-      let hash = BlockHash::from_bytes(codec::take(data)?);
-      deleted_quorums.push(DeletedQuorum { llmq_type, hash });
-    }
-
-    let nq_count = codec::read_compact_size(data, MAX_QUORUMS)?;
-    let mut new_quorums = Vec::with_capacity(nq_count);
-    for _ in 0..nq_count {
-      let commitment: Commitment = Codec::decode(data).map_err(|_| DecodeError::Eof {
-        needed: 1,
-        remaining: 0,
-      })?;
-      new_quorums.push(commitment);
-    }
-
+    let deleted_quorums = codec::read_vec(data, MAX_QUORUMS)?;
+    let new_quorums = codec::read_vec(data, MAX_QUORUMS)?;
     // Chainlock signatures (protocol >= 70230).
-    let cl_count = codec::read_compact_size(data, MAX_QUORUMS)?;
-    let mut quorum_cl_sigs = Vec::with_capacity(cl_count);
-    for _ in 0..cl_count {
-      let sig = BlsSignatureBytes(codec::take(data)?);
-      let idx_count = codec::read_compact_size(data, MAX_QUORUMS)?;
-      let mut index_set = Vec::with_capacity(idx_count);
-      for _ in 0..idx_count {
-        index_set.push(codec::read_u16_le(data)?);
-      }
-      quorum_cl_sigs.push(QuorumClSig { sig, index_set });
-    }
+    let quorum_cl_sigs = codec::read_vec(data, MAX_QUORUMS)?;
 
     Ok(Self {
       version,
@@ -262,46 +249,20 @@ impl Codec for MnListDiffPayload {
     buf.extend_from_slice(&self.block_hash.to_bytes());
     buf.extend_from_slice(&self.total_transactions.to_le_bytes());
 
-    codec::write_compact_size(self.merkle_hashes.len(), buf);
-    for h in &self.merkle_hashes {
-      buf.extend_from_slice(&h.to_bytes());
-    }
+    codec::write_vec(&self.merkle_hashes, buf);
 
-    codec::write_compact_size(self.merkle_flags.len(), buf);
-    buf.extend_from_slice(&self.merkle_flags);
+    codec::write_blob(&self.merkle_flags, buf);
 
     let tx_bytes = encoding::encode_to_vec(&self.cb_tx);
     buf.extend_from_slice(&tx_bytes);
 
-    codec::write_compact_size(self.deleted_mns.len(), buf);
-    for h in &self.deleted_mns {
-      buf.extend_from_slice(&h.to_bytes());
-    }
+    codec::write_vec(&self.deleted_mns, buf);
 
-    codec::write_compact_size(self.mn_list.len(), buf);
-    for entry in &self.mn_list {
-      Codec::encode(entry, buf);
-    }
+    codec::write_vec(&self.mn_list, buf);
 
-    codec::write_compact_size(self.deleted_quorums.len(), buf);
-    for dq in &self.deleted_quorums {
-      buf.push(dq.llmq_type.to_base());
-      buf.extend_from_slice(&dq.hash.to_bytes());
-    }
-
-    codec::write_compact_size(self.new_quorums.len(), buf);
-    for q in &self.new_quorums {
-      Codec::encode(q, buf);
-    }
-
-    codec::write_compact_size(self.quorum_cl_sigs.len(), buf);
-    for cl in &self.quorum_cl_sigs {
-      buf.extend_from_slice(&cl.sig.0);
-      codec::write_compact_size(cl.index_set.len(), buf);
-      for &idx in &cl.index_set {
-        buf.extend_from_slice(&idx.to_le_bytes());
-      }
-    }
+    codec::write_vec(&self.deleted_quorums, buf);
+    codec::write_vec(&self.new_quorums, buf);
+    codec::write_vec(&self.quorum_cl_sigs, buf);
   }
 }
 

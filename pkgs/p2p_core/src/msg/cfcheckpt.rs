@@ -56,11 +56,7 @@ impl Codec for CFCheckpt {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let filter_type = FilterType(codec::read_u8(data)?);
     let stop_hash = BlockHash::from_bytes(codec::take(data)?);
-    let count = codec::read_compact_size(data, MAX_CFCHECKPT)?;
-    let mut filter_headers = Vec::with_capacity(count);
-    for _ in 0..count {
-      filter_headers.push(BlockHash::from_bytes(codec::take(data)?));
-    }
+    let filter_headers = codec::read_vec(data, MAX_CFCHECKPT)?;
     Ok(Self {
       filter_type,
       stop_hash,
@@ -71,10 +67,7 @@ impl Codec for CFCheckpt {
   fn encode(&self, buf: &mut Vec<u8>) {
     buf.push(self.filter_type.0);
     buf.extend_from_slice(&self.stop_hash.to_bytes());
-    codec::write_compact_size(self.filter_headers.len(), buf);
-    for h in &self.filter_headers {
-      buf.extend_from_slice(&h.to_bytes());
-    }
+    codec::write_vec(&self.filter_headers, buf);
   }
 }
 

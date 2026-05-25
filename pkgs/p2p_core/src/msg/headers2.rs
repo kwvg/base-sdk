@@ -33,12 +33,8 @@ pub struct GetHeaders2 {
 impl Codec for GetHeaders2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = ProtocolVersion(codec::read_u32_le(data)?);
-    let count = codec::read_compact_size(data, MAX_LOCATOR)?;
-    let mut locator_hashes = Vec::with_capacity(count);
-    for _ in 0..count {
-      locator_hashes.push(BlockHash::from_bytes(codec::take(data)?));
-    }
-    let hash_stop = BlockHash::from_bytes(codec::take(data)?);
+    let locator_hashes = codec::read_vec(data, MAX_LOCATOR)?;
+    let hash_stop = BlockHash::decode(data)?;
     Ok(Self {
       version,
       locator_hashes,
@@ -48,10 +44,7 @@ impl Codec for GetHeaders2 {
 
   fn encode(&self, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&self.version.0.to_le_bytes());
-    codec::write_compact_size(self.locator_hashes.len(), buf);
-    for h in &self.locator_hashes {
-      buf.extend_from_slice(&h.to_bytes());
-    }
+    codec::write_vec(&self.locator_hashes, buf);
     buf.extend_from_slice(&self.hash_stop.to_bytes());
   }
 }
