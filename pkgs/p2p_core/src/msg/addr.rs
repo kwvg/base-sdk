@@ -12,9 +12,9 @@ use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
 use crate::primitives::service_flags::ServiceFlags;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum addresses per message.
 const MAX_ADDR: usize = 1_000;

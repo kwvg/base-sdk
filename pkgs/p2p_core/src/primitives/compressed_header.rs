@@ -8,8 +8,8 @@
 
 use crate::prelude::*;
 
-use dash_types::codec::{self, DecodeError};
 use dash_primitives::{BlockHash, BlockHeader, MerkleRoot};
+use dash_types::codec::{self, DecodeError};
 
 // Bitfield layout (1 byte):
 //   bits 0-2: version offset (0 = full version present, 1-7 = MRU cache index)

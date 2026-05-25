@@ -11,9 +11,9 @@ use crate::prelude::*;
 use crate::primitives::protocol_version::ProtocolVersion;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::{BlockHash, BlockHeader, MerkleRoot};
 use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum block locator hashes.
 const MAX_LOCATOR: usize = 101;

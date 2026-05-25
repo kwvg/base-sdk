@@ -62,9 +62,9 @@ impl AssetUnlock {
 }
 
 impl encoding::Decodable for AssetUnlock {
-  type Decoder = crate::codec::BufferDecoder<Self, DecodeError>;
+  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
   fn decoder() -> Self::Decoder {
-    crate::codec::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }
 

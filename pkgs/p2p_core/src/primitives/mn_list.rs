@@ -11,12 +11,12 @@ use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_primitives::payload::Commitment;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_primitives::{BlockHash, CService, LlmqType, MnType, Transaction, TxHash};
 use dash_script::KeyId;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes, PlatformNodeId};
+use dash_types::{BufferDecoder, VecEncoder};
 
 use core::fmt;
 

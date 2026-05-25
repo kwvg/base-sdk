@@ -106,13 +106,15 @@ impl SpecialPayload {
       TxType::ProviderUpdateService => ProUpServTx::decode(data).map(Self::ProviderUpdateService).map_err(err),
       TxType::ProviderUpdateRegistrar => ProUpRegTx::decode(data).map(Self::ProviderUpdateRegistrar).map_err(err),
       TxType::ProviderUpdateRevoke => ProUpRevTx::decode(data).map(Self::ProviderUpdateRevoke).map_err(err),
-      TxType::CoinbaseCommitment => {
-        cbtx::CoinbaseCommitment::decode(data).map(Self::CoinbaseCommitment).map_err(err)
-      }
+      TxType::CoinbaseCommitment => cbtx::CoinbaseCommitment::decode(data)
+        .map(Self::CoinbaseCommitment)
+        .map_err(err),
       TxType::QuorumCommitment => FinalCommitment::decode(data).map(Self::QuorumCommitment).map_err(err),
       TxType::MnhfSignal => MnHardFork::decode(data).map(Self::MnhfSignal).map_err(err),
       TxType::AssetLock => assetlock::AssetLock::decode(data).map(Self::AssetLock).map_err(err),
-      TxType::AssetUnlock => assetunlock::AssetUnlock::decode(data).map(Self::AssetUnlock).map_err(err),
+      TxType::AssetUnlock => assetunlock::AssetUnlock::decode(data)
+        .map(Self::AssetUnlock)
+        .map_err(err),
       unknown => Ok(Self::Unknown {
         tx_type: unknown,
         data: data.to_vec(),

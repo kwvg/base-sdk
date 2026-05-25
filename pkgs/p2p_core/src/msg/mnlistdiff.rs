@@ -10,9 +10,9 @@ use crate::encode::MAX_P2P_PAYLOAD;
 use crate::primitives::mn_list::MnListDiffPayload;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::BlockHash;
 use dash_types::codec::{Codec, DecodeError};
+use dash_types::{BufferDecoder, VecEncoder};
 
 use core::fmt;
 

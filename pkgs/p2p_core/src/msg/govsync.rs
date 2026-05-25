@@ -11,8 +11,8 @@ use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum bloom filter size in bytes.
 const MAX_BLOOM_FILTER: usize = 36_000;

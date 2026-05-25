@@ -15,9 +15,9 @@ use crate::primitives::user_agent::UserAgent;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum user agent length in bytes.
 const MAX_USER_AGENT: usize = 256;

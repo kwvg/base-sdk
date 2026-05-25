@@ -147,24 +147,24 @@ impl FinalCommitment {
 }
 
 impl encoding::Decodable for Commitment {
-  type Decoder = crate::codec::BufferDecoder<Self, DecodeError>;
+  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
   fn decoder() -> Self::Decoder {
-    crate::codec::BufferDecoder::new(<Self as Codec>::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+    dash_types::BufferDecoder::new(<Self as Codec>::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }
 
 impl encoding::Encodable for Commitment {
-  type Encoder<'e> = crate::codec::VecEncoder;
+  type Encoder<'e> = dash_types::VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
     let mut buf = Vec::new();
     Codec::encode(self, &mut buf);
-    crate::codec::VecEncoder::new(buf)
+    dash_types::VecEncoder::new(buf)
   }
 }
 
 impl encoding::Decodable for FinalCommitment {
-  type Decoder = crate::codec::BufferDecoder<Self, DecodeError>;
+  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
   fn decoder() -> Self::Decoder {
-    crate::codec::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }

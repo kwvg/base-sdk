@@ -13,6 +13,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod codec;
+mod entity;
 mod hex;
 mod prelude;
 mod uint;
@@ -27,6 +28,8 @@ pub mod __private {
 
   pub use bitcoin_consensus_encoding;
 }
+
+pub use entity::{BufferDecoder, VecEncoder, MAX_SER_SIZE};
 
 make_bytes! {
   /// Platform node identifier for Evo masternodes.

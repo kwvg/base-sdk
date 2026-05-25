@@ -226,7 +226,6 @@ impl Block {
 /// Returns an error if the block header, transaction count, or any individual
 /// transaction cannot be decoded.
 pub fn tx_byte_ranges(raw_block: &[u8]) -> Result<Vec<(usize, usize)>, DecodeError> {
-
   let data = &mut &raw_block[..];
 
   // Skip 80-byte header.

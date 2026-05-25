@@ -12,9 +12,9 @@ use crate::primitives::filter_type::FilterType;
 
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::BlockHeight;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::BlockHash;
 use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::{BufferDecoder, VecEncoder};
 
 /// Maximum filter hashes per message.
 const MAX_CFHEADERS: usize = 2_000;

@@ -11,8 +11,8 @@ use crate::prelude::*;
 use crate::primitives::governance::GovernanceVote;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_types::codec::{Codec, DecodeError};
+use dash_types::{BufferDecoder, VecEncoder};
 
 /// A masternode vote on a governance object.
 #[derive(Debug, Clone, PartialEq, Eq)]

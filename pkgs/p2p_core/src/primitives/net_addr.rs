@@ -11,11 +11,11 @@ use crate::prelude::*;
 use crate::primitives::service_flags::ServiceFlags;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_primitives::CService;
 use dash_primitives::NetworkType;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
+use dash_types::{BufferDecoder, VecEncoder};
 
 use core::fmt;
 
