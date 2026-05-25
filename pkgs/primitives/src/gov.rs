@@ -154,13 +154,8 @@ pub struct GovObject {
   pub sig: Vec<u8>,
 }
 
-impl GovObject {
-  /// Decodes from the wire format.
-  ///
-  /// # Errors
-  ///
-  /// Returns `DecodeError` on malformed input.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for GovObject {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let hash_parent = TxHash::decode(data)?;
     let revision = codec::read_i32_le(data)?;
     let time = codec::read_i64_le(data)?;
@@ -187,6 +182,22 @@ impl GovObject {
     })
   }
 
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(self.hash_parent.as_bytes());
+    buf.extend_from_slice(&self.revision.to_le_bytes());
+    buf.extend_from_slice(&self.time.to_le_bytes());
+    buf.extend_from_slice(self.collateral_hash.as_bytes());
+    codec::write_blob(&self.data, buf);
+    buf.extend_from_slice(&self.object_type.to_i32().to_le_bytes());
+    buf.extend_from_slice(self.masternode_outpoint.hash.as_bytes());
+    buf.extend_from_slice(&self.masternode_outpoint.index.to_le_bytes());
+    codec::write_blob(&self.sig, buf);
+  }
+}
+
+dash_types::impl_type!(GovObject);
+
+impl GovObject {
   /// Computes the canonical governance object hash.
   ///
   /// The hash input differs from the wire format: `collateral_hash` and
@@ -246,13 +257,8 @@ pub struct GovVote {
   pub sig: Vec<u8>,
 }
 
-impl GovVote {
-  /// Decodes from the wire format.
-  ///
-  /// # Errors
-  ///
-  /// Returns `DecodeError` on malformed input.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for GovVote {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let mn_hash = TxHash::decode(data)?;
     let mn_index = codec::read_u32_le(data)?;
     let masternode_outpoint = OutPoint {
@@ -275,6 +281,20 @@ impl GovVote {
     })
   }
 
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(self.masternode_outpoint.hash.as_bytes());
+    buf.extend_from_slice(&self.masternode_outpoint.index.to_le_bytes());
+    buf.extend_from_slice(self.parent_hash.as_bytes());
+    buf.extend_from_slice(&self.outcome.to_le_bytes());
+    buf.extend_from_slice(&self.signal.to_le_bytes());
+    buf.extend_from_slice(&self.time.to_le_bytes());
+    codec::write_blob(&self.sig, buf);
+  }
+}
+
+dash_types::impl_type!(GovVote);
+
+impl GovVote {
   /// Computes the canonical vote hash, including dummy padding after the
   /// outpoint for legacy compatibility.
   pub fn hash(&self) -> TxHash {

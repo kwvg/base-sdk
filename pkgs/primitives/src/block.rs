@@ -6,15 +6,17 @@
 
 //! Dash block (header + transactions).
 
-use crate::block_header::{BlockHeader, BlockHeaderDecoder, BlockHeaderDecoderError, BlockHeaderEncoder};
+use crate::block_header::BlockHeader;
 use crate::prelude::*;
-use crate::transaction::{Transaction, TransactionDecoderError, TxInvalid};
+use crate::transaction::{Transaction, TxInvalid};
 use crate::validation::{DeploymentContext, MAX_DIP0001_BLOCK_SIZE, MAX_LEGACY_BLOCK_SIZE};
 
-use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{self, Codec, DecodeError};
 
 use core::fmt;
+
+/// Maximum number of transactions in a block.
+const MAX_BLOCK_TXS: usize = 100_000;
 
 /// A Dash block: header followed by a vector of transactions.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,110 +28,24 @@ pub struct Block {
   pub transactions: Vec<Transaction>,
 }
 
+impl Codec for Block {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let header = BlockHeader::decode(data)?;
+    let transactions = codec::read_vec(data, MAX_BLOCK_TXS)?;
+    Ok(Self { header, transactions })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    self.header.encode(buf);
+    codec::write_vec(&self.transactions, buf);
+  }
+}
+
+dash_types::impl_type!(Block);
+
 impl fmt::Display for Block {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "Block {{ txs: {} }}", self.transactions.len())
-  }
-}
-
-// Ecosystem encoding traits.
-
-encoding::encoder_newtype! {
-  /// Encoder for [`Block`].
-  pub struct BlockEncoder<'e>(
-    encoding::Encoder2<
-      BlockHeaderEncoder<'e>,
-      encoding::Encoder2<
-        encoding::CompactSizeEncoder,
-        encoding::SliceEncoder<'e, Transaction>,
-      >,
-    >
-  );
-}
-
-impl encoding::Encodable for Block {
-  type Encoder<'e> = BlockEncoder<'e>;
-
-  fn encoder(&self) -> Self::Encoder<'_> {
-    BlockEncoder::new(encoding::Encoder2::new(
-      self.header.encoder(),
-      encoding::Encoder2::new(
-        encoding::CompactSizeEncoder::new(self.transactions.len()),
-        encoding::SliceEncoder::without_length_prefix(&self.transactions),
-      ),
-    ))
-  }
-}
-
-/// Decoder for [`Block`].
-#[derive(Debug)]
-pub struct BlockDecoder(encoding::Decoder2<BlockHeaderDecoder, encoding::VecDecoder<Transaction>>);
-
-impl BlockDecoder {
-  /// Constructs a new decoder.
-  pub const fn new() -> Self {
-    Self(encoding::Decoder2::new(
-      BlockHeaderDecoder::new(),
-      encoding::VecDecoder::new(),
-    ))
-  }
-}
-
-impl Default for BlockDecoder {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for [`Block`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BlockDecoderError {
-  /// Failed to decode the header.
-  Header(BlockHeaderDecoderError),
-  /// Failed to decode a transaction.
-  Transaction(encoding::VecDecoderError<TransactionDecoderError>),
-}
-
-impl fmt::Display for BlockDecoderError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Header(e) => write!(f, "block header: {e}"),
-      Self::Transaction(e) => write!(f, "block tx: {e}"),
-    }
-  }
-}
-
-impl encoding::Decoder for BlockDecoder {
-  type Output = Block;
-  type Error = BlockDecoderError;
-
-  #[inline]
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(|e| match e {
-      encoding::Decoder2Error::First(e) => BlockDecoderError::Header(e),
-      encoding::Decoder2Error::Second(e) => BlockDecoderError::Transaction(e),
-    })
-  }
-
-  #[inline]
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    let (header, transactions) = self.0.end().map_err(|e| match e {
-      encoding::Decoder2Error::First(e) => BlockDecoderError::Header(e),
-      encoding::Decoder2Error::Second(e) => BlockDecoderError::Transaction(e),
-    })?;
-    Ok(Block { header, transactions })
-  }
-
-  #[inline]
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
-}
-
-impl encoding::Decodable for Block {
-  type Decoder = BlockDecoder;
-  fn decoder() -> Self::Decoder {
-    BlockDecoder::new()
   }
 }
 
@@ -231,15 +147,12 @@ pub fn tx_byte_ranges(raw_block: &[u8]) -> Result<Vec<(usize, usize)>, DecodeErr
   // Skip 80-byte header.
   let _ = codec::read_bytes(data, 80)?;
 
-  let tx_count = codec::read_compact_size(data, 100_000)?;
+  let tx_count = codec::read_compact_size(data, MAX_BLOCK_TXS)?;
   let mut ranges = Vec::with_capacity(tx_count);
 
   for _ in 0..tx_count {
     let start = raw_block.len() - data.len();
-    let _tx = encoding::decode_from_slice_unbounded::<Transaction>(data).map_err(|_| DecodeError::Eof {
-      needed: 1,
-      remaining: 0,
-    })?;
+    let _tx = Transaction::decode(data)?;
     let end = raw_block.len() - data.len();
     ranges.push((start, end));
   }

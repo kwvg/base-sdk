@@ -11,6 +11,7 @@
 mod util;
 
 use dash_primitives::payload::AssetLock;
+use dash_types::codec::Codec;
 use hex_conservative::FromHex;
 use rstest::rstest;
 

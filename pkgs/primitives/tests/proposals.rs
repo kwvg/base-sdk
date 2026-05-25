@@ -12,6 +12,7 @@ mod util;
 
 use dash_primitives::gov::{GovObject, GovObjectType, Proposal};
 use dash_primitives::TxHash;
+use dash_types::codec::Codec;
 use hex_conservative::FromHex;
 use rstest::rstest;
 

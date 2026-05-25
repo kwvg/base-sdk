@@ -43,6 +43,18 @@ impl Script {
   }
 }
 
+impl Codec for Script {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    codec::read_blob(data, MAX_SIZE).map(Self)
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_blob(&self.0, buf);
+  }
+}
+
+dash_types::impl_type!(Script);
+
 impl fmt::Debug for Script {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "Script(")?;
@@ -61,15 +73,3 @@ impl fmt::Display for Script {
     Ok(())
   }
 }
-
-impl Codec for Script {
-  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    codec::read_blob(data, MAX_SIZE).map(Self)
-  }
-
-  fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_blob(&self.0, buf);
-  }
-}
-
-dash_types::impl_type!(Script);

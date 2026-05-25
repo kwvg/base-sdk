@@ -13,6 +13,7 @@ mod util;
 use dash_primitives::payload::ProRegTx;
 use dash_primitives::{InputsHash, TxHash};
 use dash_script::KeyId;
+use dash_types::codec::Codec;
 use dash_types::{BlsPublicKeyBytes, PlatformNodeId};
 use hex_conservative::FromHex;
 use rstest::rstest;

@@ -287,6 +287,25 @@ impl DynBitset {
   }
 }
 
+impl Codec for DynBitset {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let num_bits = codec::read_compact_u64(data)?;
+    let byte_len = num_bits.div_ceil(8) as usize;
+    let raw = codec::read_bytes(data, byte_len)?;
+    Ok(Self {
+      num_bits,
+      data: raw.to_vec(),
+    })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    codec::write_compact_size(self.num_bits as usize, buf);
+    buf.extend_from_slice(&self.data);
+  }
+}
+
+dash_types::impl_type!(DynBitset);
+
 /// Iterator over set bit indices in a [`DynBitset`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -309,25 +328,6 @@ impl Iterator for DynBitsetIterator {
     None
   }
 }
-
-impl Codec for DynBitset {
-  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let num_bits = codec::read_compact_u64(data)?;
-    let byte_len = num_bits.div_ceil(8) as usize;
-    let raw = codec::read_bytes(data, byte_len)?;
-    Ok(Self {
-      num_bits,
-      data: raw.to_vec(),
-    })
-  }
-
-  fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_compact_size(self.num_bits as usize, buf);
-    buf.extend_from_slice(&self.data);
-  }
-}
-
-dash_types::impl_type!(DynBitset);
 
 /// Legacy CService network address (ADDRv1 format, 18 bytes).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -355,6 +355,13 @@ impl Codec for CService {
 }
 
 dash_types::impl_type!(CService);
+
+/// Maximum number of purpose groups.
+const MAX_PURPOSES: usize = 8;
+/// Maximum entries per purpose.
+const MAX_ENTRIES: usize = 8;
+/// Maximum domain name length.
+const MAX_DOMAIN: usize = 256;
 
 /// Purpose tag for an extended network info entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -432,20 +439,8 @@ pub struct ExtendedNetInfo {
   pub entries: Vec<(NetInfoPurpose, Vec<NetInfoEntry>)>,
 }
 
-/// Maximum number of purpose groups.
-const MAX_PURPOSES: usize = 8;
-/// Maximum entries per purpose.
-const MAX_ENTRIES: usize = 8;
-/// Maximum domain name length.
-const MAX_DOMAIN: usize = 256;
-
-impl ExtendedNetInfo {
-  /// Decodes from a raw byte slice.
-  ///
-  /// # Errors
-  ///
-  /// Returns `DecodeError` if the data is malformed.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for ExtendedNetInfo {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u8(data)?;
     let purpose_count = codec::read_compact_size(data, MAX_PURPOSES)?;
 
@@ -477,4 +472,30 @@ impl ExtendedNetInfo {
 
     Ok(Self { version, entries })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.push(self.version);
+    codec::write_compact_size(self.entries.len(), buf);
+    for (purpose, group) in &self.entries {
+      buf.push(purpose.to_base());
+      codec::write_compact_size(group.len(), buf);
+      for entry in group {
+        match entry {
+          NetInfoEntry::Service(svc) => {
+            buf.push(0x01);
+            buf.extend_from_slice(&svc.addr);
+            buf.extend_from_slice(&svc.port.to_be_bytes());
+          }
+          NetInfoEntry::Domain { name, port } => {
+            buf.push(0x02);
+            codec::write_blob(name, buf);
+            buf.extend_from_slice(&port.to_be_bytes());
+          }
+          NetInfoEntry::Invalid => {}
+        }
+      }
+    }
+  }
 }
+
+dash_types::impl_type!(ExtendedNetInfo);

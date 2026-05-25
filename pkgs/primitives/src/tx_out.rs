@@ -6,10 +6,11 @@
 
 //! Transaction output.
 
+use crate::prelude::*;
 use crate::script::Script;
 
-use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::Amount;
+use dash_types::codec::{self, Codec, DecodeError};
 
 use core::fmt;
 
@@ -24,106 +25,26 @@ pub struct TxOut {
   pub script_pubkey: Script,
 }
 
+impl Codec for TxOut {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let raw = codec::read_u64_le(data)?;
+    let value = Amount::from_sat(raw).map_err(|_| DecodeError::Custom {
+      msg: "txout value exceeds MAX_MONEY",
+    })?;
+    let script_pubkey = Script::decode(data)?;
+    Ok(Self { value, script_pubkey })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.value.to_sat().to_le_bytes());
+    self.script_pubkey.encode(buf);
+  }
+}
+
+dash_types::impl_type!(TxOut);
+
 impl fmt::Display for TxOut {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "TxOut {{ value: {} }}", self.value.to_sat())
-  }
-}
-
-encoding::encoder_newtype! {
-  /// Encoder for [`TxOut`].
-  pub struct TxOutEncoder<'e>(
-    encoding::Encoder2<encoding::ArrayEncoder<8>, dash_types::VecEncoder>
-  );
-}
-
-impl encoding::Encodable for TxOut {
-  type Encoder<'e> = TxOutEncoder<'e>;
-
-  fn encoder(&self) -> Self::Encoder<'_> {
-    TxOutEncoder::new(encoding::Encoder2::new(
-      encoding::ArrayEncoder::without_length_prefix(self.value.to_sat().to_le_bytes()),
-      self.script_pubkey.encoder(),
-    ))
-  }
-}
-
-/// Decoder for [`TxOut`].
-#[derive(Debug)]
-pub struct TxOutDecoder(encoding::Decoder2<encoding::ArrayDecoder<8>, encoding::ByteVecDecoder>);
-
-impl TxOutDecoder {
-  /// Constructs a new decoder.
-  pub const fn new() -> Self {
-    Self(encoding::Decoder2::new(
-      encoding::ArrayDecoder::new(),
-      encoding::ByteVecDecoder::new_with_limit(dash_types::MAX_SER_SIZE),
-    ))
-  }
-}
-
-impl Default for TxOutDecoder {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for [`TxOut`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TxOutDecoderError {
-  /// Failed to decode the value field.
-  Value(encoding::UnexpectedEofError),
-  /// Failed to decode the script field.
-  Script(encoding::ByteVecDecoderError),
-  /// Value exceeds MAX_MONEY.
-  OutOfRange(u64),
-}
-
-impl fmt::Display for TxOutDecoderError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Value(e) => write!(f, "txout value: {e}"),
-      Self::Script(e) => write!(f, "txout script: {e}"),
-      Self::OutOfRange(v) => write!(f, "txout value {v} exceeds MAX_MONEY"),
-    }
-  }
-}
-
-impl encoding::Decoder for TxOutDecoder {
-  type Output = TxOut;
-  type Error = TxOutDecoderError;
-
-  #[inline]
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(|e| match e {
-      encoding::Decoder2Error::First(e) => TxOutDecoderError::Value(e),
-      encoding::Decoder2Error::Second(e) => TxOutDecoderError::Script(e),
-    })
-  }
-
-  #[inline]
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    let (value_bytes, script_bytes) = self.0.end().map_err(|e| match e {
-      encoding::Decoder2Error::First(e) => TxOutDecoderError::Value(e),
-      encoding::Decoder2Error::Second(e) => TxOutDecoderError::Script(e),
-    })?;
-    let raw = u64::from_le_bytes(value_bytes);
-    let value = Amount::from_sat(raw).map_err(|_| TxOutDecoderError::OutOfRange(raw))?;
-    Ok(TxOut {
-      value,
-      script_pubkey: Script::new(script_bytes),
-    })
-  }
-
-  #[inline]
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
-}
-
-impl encoding::Decodable for TxOut {
-  type Decoder = TxOutDecoder;
-  fn decoder() -> Self::Decoder {
-    TxOutDecoder::new()
   }
 }

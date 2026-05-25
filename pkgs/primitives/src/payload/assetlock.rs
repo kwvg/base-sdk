@@ -7,11 +7,9 @@
 //! AssetLock (type 8): L1 to Platform.
 
 use crate::prelude::*;
-use crate::script::Script;
 use crate::tx_out::TxOut;
 use crate::validation::DeploymentContext;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::{self, Codec, DecodeError};
 
 use core::fmt;
@@ -26,6 +24,24 @@ pub struct AssetLock {
   pub credit_outputs: Vec<TxOut>,
 }
 
+impl Codec for AssetLock {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = codec::read_u8(data)?;
+    let credit_outputs: Vec<TxOut> = codec::read_vec(data, 100)?;
+    Ok(Self {
+      version,
+      credit_outputs,
+    })
+  }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.push(self.version);
+    codec::write_vec(&self.credit_outputs, buf);
+  }
+}
+
+crate::codec::impl_payload!(AssetLock);
+
 impl fmt::Display for AssetLock {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
@@ -34,36 +50,6 @@ impl fmt::Display for AssetLock {
       self.version,
       self.credit_outputs.len(),
     )
-  }
-}
-
-impl AssetLock {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u8(data)?;
-
-    let count = codec::read_compact_size(data, 100)?;
-
-    let mut credit_outputs = Vec::with_capacity(count);
-    for _ in 0..count {
-      let raw = codec::read_u64_le(data)?;
-      let value = bitcoin_units::Amount::from_sat(raw)
-        .map_err(|_| DecodeError::CompactSizeExceedsLimit { limit: 0, value: raw })?;
-      let script_pubkey = Script::decode(data)?;
-      credit_outputs.push(TxOut { value, script_pubkey });
-    }
-
-    Ok(Self {
-      version,
-      credit_outputs,
-    })
-  }
-}
-
-impl encoding::Decodable for AssetLock {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
   }
 }
 

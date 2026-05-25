@@ -16,7 +16,6 @@ use crate::validation::{
 };
 use crate::{InputsHash, TxHash};
 
-use bitcoin_consensus_encoding as encoding;
 use dash_script::KeyId;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, PlatformNodeId};
@@ -79,18 +78,10 @@ pub struct ProRegTx {
   pub vch_sig: Vec<u8>,
 }
 
-impl fmt::Display for ProRegTx {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "ProRegTx {{ v{}, mn_type: {} }}", self.version, self.mn_type)
-  }
-}
-
-impl ProRegTx {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for ProRegTx {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
-    let mn_type_raw = codec::read_u16_le(data)?;
-    let mn_type = MnType::from_base(mn_type_raw);
+    let mn_type = MnType::from_base(codec::read_u16_le(data)?);
     let mode = codec::read_u16_le(data)?;
     let collateral_hash = TxHash::decode(data)?;
     let collateral_index = codec::read_u32_le(data)?;
@@ -143,12 +134,45 @@ impl ProRegTx {
       vch_sig,
     })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.version.to_le_bytes());
+    buf.extend_from_slice(&self.mn_type.to_base().to_le_bytes());
+    buf.extend_from_slice(&self.mode.to_le_bytes());
+    buf.extend_from_slice(self.collateral_hash.as_bytes());
+    buf.extend_from_slice(&self.collateral_index.to_le_bytes());
+    match &self.net_info {
+      NetInfo::Extended(ext) => {
+        let mut inner = Vec::new();
+        ext.encode(&mut inner);
+        codec::write_blob(&inner, buf);
+      }
+      NetInfo::Legacy(svc) => svc.encode(buf),
+    }
+    buf.extend_from_slice(&self.key_id_owner.0);
+    buf.extend_from_slice(&self.pub_key_operator.0);
+    buf.extend_from_slice(&self.key_id_voting.0);
+    buf.extend_from_slice(&self.operator_reward.to_le_bytes());
+    self.script_payout.encode(buf);
+    buf.extend_from_slice(self.inputs_hash.as_bytes());
+    if self.mn_type == MnType::Evo {
+      if let Some(ref node_id) = self.platform_node_id {
+        buf.extend_from_slice(&node_id.0);
+      }
+      if self.version < 3 {
+        buf.extend_from_slice(&self.platform_p2p_port.unwrap_or(0).to_le_bytes());
+        buf.extend_from_slice(&self.platform_http_port.unwrap_or(0).to_le_bytes());
+      }
+    }
+    codec::write_blob(&self.vch_sig, buf);
+  }
 }
 
-impl encoding::Decodable for ProRegTx {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+crate::codec::impl_payload!(ProRegTx);
+
+impl fmt::Display for ProRegTx {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "ProRegTx {{ v{}, mn_type: {} }}", self.version, self.mn_type)
   }
 }
 

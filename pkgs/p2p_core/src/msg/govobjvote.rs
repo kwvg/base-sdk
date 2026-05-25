@@ -6,13 +6,10 @@
 
 //! Governance vote message.
 
-use crate::encode::MAX_P2P_PAYLOAD;
 use crate::prelude::*;
 use crate::primitives::governance::GovernanceVote;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::{Codec, DecodeError};
-use dash_types::{BufferDecoder, VecEncoder};
 
 /// A masternode vote on a governance object.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,25 +19,15 @@ pub struct GovObjVote {
   pub vote: GovernanceVote,
 }
 
-impl GovObjVote {
+impl Codec for GovObjVote {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let vote = <GovernanceVote as Codec>::decode(data)?;
+    let vote = GovernanceVote::decode(data)?;
     Ok(Self { vote })
   }
-}
 
-impl encoding::Encodable for GovObjVote {
-  type Encoder<'e> = VecEncoder;
-  fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = Vec::new();
-    Codec::encode(&self.vote, &mut buf);
-    VecEncoder::new(buf)
+  fn encode(&self, buf: &mut Vec<u8>) {
+    self.vote.encode(buf);
   }
 }
 
-impl encoding::Decodable for GovObjVote {
-  type Decoder = BufferDecoder<GovObjVote, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    BufferDecoder::new(GovObjVote::decode, MAX_P2P_PAYLOAD)
-  }
-}
+crate::codec::impl_p2p!(GovObjVote);

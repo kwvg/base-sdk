@@ -13,7 +13,6 @@ use crate::validation::{
 };
 use crate::{InputsHash, TxHash};
 
-use bitcoin_consensus_encoding as encoding;
 use dash_script::KeyId;
 use dash_types::codec::{self, Codec, DecodeError};
 use dash_types::BlsPublicKeyBytes;
@@ -49,15 +48,8 @@ pub struct ProUpRegTx {
   pub vch_sig: Vec<u8>,
 }
 
-impl fmt::Display for ProUpRegTx {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "ProUpRegTx {{ v{} }}", self.version)
-  }
-}
-
-impl ProUpRegTx {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for ProUpRegTx {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
     let pro_tx_hash = TxHash::decode(data)?;
     let mode = codec::read_u16_le(data)?;
@@ -78,12 +70,24 @@ impl ProUpRegTx {
       vch_sig,
     })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.version.to_le_bytes());
+    buf.extend_from_slice(self.pro_tx_hash.as_bytes());
+    buf.extend_from_slice(&self.mode.to_le_bytes());
+    buf.extend_from_slice(&self.pub_key_operator.0);
+    buf.extend_from_slice(&self.key_id_voting.0);
+    self.script_payout.encode(buf);
+    buf.extend_from_slice(self.inputs_hash.as_bytes());
+    codec::write_blob(&self.vch_sig, buf);
+  }
 }
 
-impl encoding::Decodable for ProUpRegTx {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+crate::codec::impl_payload!(ProUpRegTx);
+
+impl fmt::Display for ProUpRegTx {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "ProUpRegTx {{ v{} }}", self.version)
   }
 }
 

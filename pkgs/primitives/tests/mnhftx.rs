@@ -12,6 +12,7 @@ mod util;
 
 use dash_primitives::payload::MnHardFork;
 use dash_primitives::QuorumHash;
+use dash_types::codec::Codec;
 use dash_types::BlsSignatureBytes;
 use hex_conservative::FromHex;
 use rstest::rstest;

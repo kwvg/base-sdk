@@ -6,10 +6,10 @@
 
 //! CoinbaseCommitment coinbase commitment payload (type 5).
 
+use crate::prelude::*;
 use crate::validation::DeploymentContext;
 use crate::MerkleRoot;
 
-use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::BlockHeight;
 use dash_types::codec::{self, Codec, DecodeError};
 use dash_types::BlsSignatureBytes;
@@ -40,15 +40,8 @@ pub struct CoinbaseCommitment {
   pub credit_pool_balance: Option<i64>,
 }
 
-impl fmt::Display for CoinbaseCommitment {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "CoinbaseCommitment {{ v{}, height: {} }}", self.version, self.height)
-  }
-}
-
-impl CoinbaseCommitment {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for CoinbaseCommitment {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
     let height = BlockHeight::from_u32(codec::read_u32_le(data)?);
     let merkle_root_mn_list = MerkleRoot::decode(data)?;
@@ -78,12 +71,31 @@ impl CoinbaseCommitment {
       credit_pool_balance,
     })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.version.to_le_bytes());
+    buf.extend_from_slice(&self.height.to_u32().to_le_bytes());
+    buf.extend_from_slice(self.merkle_root_mn_list.as_bytes());
+    if let Some(ref root) = self.merkle_root_quorums {
+      buf.extend_from_slice(root.as_bytes());
+    }
+    if let Some(diff) = self.best_cl_height_diff {
+      codec::write_compact_u64(diff, buf);
+      if let Some(ref sig) = self.best_cl_signature {
+        buf.extend_from_slice(&sig.0);
+      }
+      if let Some(balance) = self.credit_pool_balance {
+        buf.extend_from_slice(&balance.to_le_bytes());
+      }
+    }
+  }
 }
 
-impl encoding::Decodable for CoinbaseCommitment {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+crate::codec::impl_payload!(CoinbaseCommitment);
+
+impl fmt::Display for CoinbaseCommitment {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "CoinbaseCommitment {{ v{}, height: {} }}", self.version, self.height)
   }
 }
 

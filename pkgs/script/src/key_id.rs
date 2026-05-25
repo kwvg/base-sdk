@@ -6,7 +6,7 @@
 
 //! Public key hash identifier (HASH160).
 
-use bitcoin_consensus_encoding as encoding;
+use crate::prelude::*;
 
 use core::fmt;
 
@@ -78,64 +78,14 @@ impl fmt::Display for KeyId {
 
 // Consensus encoding.
 
-impl encoding::Encodable for KeyId {
-  type Encoder<'e> = encoding::ArrayRefEncoder<'e, 20>;
+impl dash_types::codec::Codec for KeyId {
+  fn decode(data: &mut &[u8]) -> Result<Self, dash_types::codec::DecodeError> {
+    dash_types::codec::take::<20>(data).map(Self)
+  }
 
-  fn encoder(&self) -> Self::Encoder<'_> {
-    encoding::ArrayRefEncoder::without_length_prefix(&self.0)
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.0);
   }
 }
 
-/// Decoder for [`KeyId`].
-#[derive(Debug)]
-pub struct KeyIdDecoder(encoding::ArrayDecoder<20>);
-
-impl KeyIdDecoder {
-  /// Constructs a new decoder.
-  pub const fn new() -> Self {
-    Self(encoding::ArrayDecoder::new())
-  }
-}
-
-impl Default for KeyIdDecoder {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-/// Decode error for [`KeyId`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct KeyIdDecoderError(encoding::UnexpectedEofError);
-
-impl fmt::Display for KeyIdDecoderError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "key id decode: {}", self.0)
-  }
-}
-
-impl encoding::Decoder for KeyIdDecoder {
-  type Output = KeyId;
-  type Error = KeyIdDecoderError;
-
-  #[inline]
-  fn push_bytes(&mut self, bytes: &mut &[u8]) -> Result<bool, Self::Error> {
-    self.0.push_bytes(bytes).map_err(KeyIdDecoderError)
-  }
-
-  #[inline]
-  fn end(self) -> Result<Self::Output, Self::Error> {
-    self.0.end().map(KeyId).map_err(KeyIdDecoderError)
-  }
-
-  #[inline]
-  fn read_limit(&self) -> usize {
-    self.0.read_limit()
-  }
-}
-
-impl encoding::Decodable for KeyId {
-  type Decoder = KeyIdDecoder;
-  fn decoder() -> Self::Decoder {
-    KeyIdDecoder::new()
-  }
-}
+dash_types::impl_type!(KeyId);

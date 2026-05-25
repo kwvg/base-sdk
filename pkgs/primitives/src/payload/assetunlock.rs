@@ -6,10 +6,10 @@
 
 //! AssetUnlock (type 9): Platform to L1.
 
+use crate::prelude::*;
 use crate::validation::DeploymentContext;
 use crate::QuorumHash;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::{self, Codec, DecodeError};
 use dash_types::BlsSignatureBytes;
 
@@ -33,15 +33,8 @@ pub struct AssetUnlock {
   pub quorum_sig: BlsSignatureBytes,
 }
 
-impl fmt::Display for AssetUnlock {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "AssetUnlock {{ v{}, index: {} }}", self.version, self.index,)
-  }
-}
-
-impl AssetUnlock {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for AssetUnlock {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u8(data)?;
     let index = codec::read_u64_le(data)?;
     let fee = codec::read_u32_le(data)?;
@@ -58,12 +51,22 @@ impl AssetUnlock {
       quorum_sig,
     })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.push(self.version);
+    buf.extend_from_slice(&self.index.to_le_bytes());
+    buf.extend_from_slice(&self.fee.to_le_bytes());
+    buf.extend_from_slice(&self.requested_height.to_le_bytes());
+    buf.extend_from_slice(self.quorum_hash.as_bytes());
+    buf.extend_from_slice(&self.quorum_sig.0);
+  }
 }
 
-impl encoding::Decodable for AssetUnlock {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+crate::codec::impl_payload!(AssetUnlock);
+
+impl fmt::Display for AssetUnlock {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "AssetUnlock {{ v{}, index: {} }}", self.version, self.index,)
   }
 }
 

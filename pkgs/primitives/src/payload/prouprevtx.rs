@@ -6,11 +6,11 @@
 
 //! ProUpRevTx revocation payload (type 4).
 
+use crate::prelude::*;
 use crate::support::RevocationReason;
 use crate::validation::{check_protx_version, max_protx_version_no_ext, DeploymentContext, ProTxInvalid};
 use crate::{InputsHash, TxHash};
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::BlsSignatureBytes;
 
@@ -35,19 +35,11 @@ pub struct ProUpRevTx {
   pub sig: BlsSignatureBytes,
 }
 
-impl fmt::Display for ProUpRevTx {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "ProUpRevTx {{ v{} }}", self.version)
-  }
-}
-
-impl ProUpRevTx {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for ProUpRevTx {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
     let pro_tx_hash = TxHash::decode(data)?;
-    let reason_raw = codec::read_u16_le(data)?;
-    let reason = RevocationReason::from_base(reason_raw);
+    let reason = RevocationReason::from_base(codec::read_u16_le(data)?);
     let inputs_hash = InputsHash::decode(data)?;
     let sig = codec::read_type(data)?;
 
@@ -59,12 +51,21 @@ impl ProUpRevTx {
       sig,
     })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.version.to_le_bytes());
+    buf.extend_from_slice(self.pro_tx_hash.as_bytes());
+    buf.extend_from_slice(&self.reason.to_base().to_le_bytes());
+    buf.extend_from_slice(self.inputs_hash.as_bytes());
+    buf.extend_from_slice(&self.sig.0);
+  }
 }
 
-impl encoding::Decodable for ProUpRevTx {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+crate::codec::impl_payload!(ProUpRevTx);
+
+impl fmt::Display for ProUpRevTx {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "ProUpRevTx {{ v{} }}", self.version)
   }
 }
 

@@ -32,6 +32,11 @@ pub enum DecodeError {
     /// The decoded value.
     value: u64,
   },
+  /// Domain-specific decode failure.
+  Custom {
+    /// Human-readable description.
+    msg: &'static str,
+  },
 }
 
 impl fmt::Display for DecodeError {
@@ -46,6 +51,7 @@ impl fmt::Display for DecodeError {
       Self::CompactSizeExceedsLimit { limit, value } => {
         write!(f, "compact size value {value} exceeds limit {limit}",)
       }
+      Self::Custom { msg } => f.write_str(msg),
     }
   }
 }
@@ -214,6 +220,25 @@ pub fn write_compact_size(value: usize, buf: &mut Vec<u8>) {
     _ => {
       buf.push(0xFF);
       buf.extend_from_slice(&(value as u64).to_le_bytes());
+    }
+  }
+}
+
+/// Encodes a `u64` as a CompactSize integer.
+pub fn write_compact_u64(value: u64, buf: &mut Vec<u8>) {
+  match value {
+    0..=0xFC => buf.push(value as u8),
+    0xFD..=0xFFFF => {
+      buf.push(0xFD);
+      buf.extend_from_slice(&(value as u16).to_le_bytes());
+    }
+    0x1_0000..=0xFFFF_FFFF => {
+      buf.push(0xFE);
+      buf.extend_from_slice(&(value as u32).to_le_bytes());
+    }
+    _ => {
+      buf.push(0xFF);
+      buf.extend_from_slice(&value.to_le_bytes());
     }
   }
 }

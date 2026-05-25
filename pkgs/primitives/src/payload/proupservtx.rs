@@ -7,6 +7,7 @@
 //! ProUpServTx service-update payload (type 2).
 
 use super::proregtx::NetInfo;
+use crate::prelude::*;
 use crate::script::Script;
 use crate::support::CService;
 use crate::tx_types::MnType;
@@ -16,7 +17,6 @@ use crate::validation::{
 };
 use crate::{InputsHash, TxHash};
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::{BlsSignatureBytes, PlatformNodeId};
 
@@ -52,20 +52,12 @@ pub struct ProUpServTx {
   pub sig: BlsSignatureBytes,
 }
 
-impl fmt::Display for ProUpServTx {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "ProUpServTx {{ v{}, mn_type: {} }}", self.version, self.mn_type,)
-  }
-}
-
-impl ProUpServTx {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for ProUpServTx {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
 
     let mn_type = if version >= 2 {
-      let raw = codec::read_u16_le(data)?;
-      MnType::from_base(raw)
+      MnType::from_base(codec::read_u16_le(data)?)
     } else {
       MnType::Regular
     };
@@ -110,12 +102,41 @@ impl ProUpServTx {
       sig,
     })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.version.to_le_bytes());
+    if self.version >= 2 {
+      buf.extend_from_slice(&self.mn_type.to_base().to_le_bytes());
+    }
+    buf.extend_from_slice(self.pro_tx_hash.as_bytes());
+    match &self.net_info {
+      NetInfo::Extended(ext) => {
+        let mut inner = Vec::new();
+        ext.encode(&mut inner);
+        codec::write_blob(&inner, buf);
+      }
+      NetInfo::Legacy(svc) => svc.encode(buf),
+    }
+    self.script_operator_payout.encode(buf);
+    buf.extend_from_slice(self.inputs_hash.as_bytes());
+    if self.mn_type == MnType::Evo {
+      if let Some(ref node_id) = self.platform_node_id {
+        buf.extend_from_slice(&node_id.0);
+      }
+      if self.version < 3 {
+        buf.extend_from_slice(&self.platform_p2p_port.unwrap_or(0).to_le_bytes());
+        buf.extend_from_slice(&self.platform_http_port.unwrap_or(0).to_le_bytes());
+      }
+    }
+    buf.extend_from_slice(&self.sig.0);
+  }
 }
 
-impl encoding::Decodable for ProUpServTx {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+crate::codec::impl_payload!(ProUpServTx);
+
+impl fmt::Display for ProUpServTx {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "ProUpServTx {{ v{}, mn_type: {} }}", self.version, self.mn_type,)
   }
 }
 

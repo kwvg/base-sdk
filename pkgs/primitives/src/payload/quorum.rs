@@ -10,7 +10,6 @@ use crate::prelude::*;
 use crate::support::{DynBitset, LlmqType};
 use crate::{QuorumHash, QuorumVvecHash};
 
-use bitcoin_consensus_encoding as encoding;
 use dash_types::codec::{self, Codec, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes};
 
@@ -104,6 +103,8 @@ impl Codec for Commitment {
   }
 }
 
+crate::codec::impl_payload!(Commitment);
+
 impl fmt::Display for Commitment {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "Commitment {{ v{}, llmq: {} }}", self.version, self.llmq_type,)
@@ -122,32 +123,29 @@ pub struct FinalCommitment {
   pub commitment: Commitment,
 }
 
-impl fmt::Display for FinalCommitment {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "FinalCommitment {{ v{}, height: {} }}", self.version, self.height,)
-  }
-}
-
-impl FinalCommitment {
-  /// Decodes from the extra_payload byte slice.
-  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+impl Codec for FinalCommitment {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = codec::read_u16_le(data)?;
     let height = bitcoin_units::BlockHeight::from_u32(codec::read_u32_le(data)?);
-    let commitment = Codec::decode(data)?;
-
+    let commitment = Commitment::decode(data)?;
     Ok(Self {
       version,
       height,
       commitment,
     })
   }
+
+  fn encode(&self, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(&self.version.to_le_bytes());
+    buf.extend_from_slice(&self.height.to_u32().to_le_bytes());
+    self.commitment.encode(buf);
+  }
 }
 
-crate::codec::impl_payload!(Commitment);
+crate::codec::impl_payload!(FinalCommitment);
 
-impl encoding::Decodable for FinalCommitment {
-  type Decoder = dash_types::BufferDecoder<Self, DecodeError>;
-  fn decoder() -> Self::Decoder {
-    dash_types::BufferDecoder::new(Self::decode, crate::MAX_EXTRA_PAYLOAD_SIZE)
+impl fmt::Display for FinalCommitment {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "FinalCommitment {{ v{}, height: {} }}", self.version, self.height,)
   }
 }
