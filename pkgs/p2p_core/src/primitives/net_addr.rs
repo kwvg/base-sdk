@@ -107,7 +107,7 @@ impl Codec for AddrV2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let net_byte = u8::decode(data)?;
     let network = NetworkType::from_base(net_byte);
-    let addr = codec::read_blob(data, 512)?;
+    let addr = Vec::decode(data)?;
     if let Some(expected) = Self::expected_len(network) {
       if addr.len() != expected {
         return Err(DecodeError::Eof {
@@ -121,7 +121,7 @@ impl Codec for AddrV2 {
 
   fn encode(&self, buf: &mut Vec<u8>) {
     self.network.to_base().encode(buf);
-    codec::write_blob(&self.addr, buf);
+    self.addr.encode(buf);
   }
 }
 
@@ -147,7 +147,7 @@ impl Codec for AddrV2Entry {
     let services = ServiceFlags(codec::read_compact_u64(data)?);
     let net_byte = u8::decode(data)?;
     let network = NetworkType::from_base(net_byte);
-    let addr_bytes = codec::read_blob(data, 512)?;
+    let addr_bytes = Vec::decode(data)?;
     if let Some(expected) = AddrV2::expected_len(network) {
       if addr_bytes.len() != expected {
         return Err(DecodeError::Eof {
@@ -173,7 +173,7 @@ impl Codec for AddrV2Entry {
     self.time.encode(buf);
     codec::write_compact_size(self.services.0 as usize, buf);
     self.addr.network.to_base().encode(buf);
-    codec::write_blob(&self.addr.addr, buf);
+    self.addr.addr.encode(buf);
     buf.extend_from_slice(&self.port.to_be_bytes());
   }
 }

@@ -14,15 +14,12 @@ use crate::tx_out::TxOut;
 use crate::tx_types::TxType;
 use crate::validation::{DeploymentContext, MAX_COINBASE_SCRIPT_SIZE, MAX_TX_EXTRA_PAYLOAD};
 
-use dash_types::codec::{self, Codec, DecodeError, NumCodec};
+use dash_types::codec::{Codec, DecodeError, NumCodec};
 
 use core::fmt;
 
 /// Maximum extra payload size over the wire (100 KB).
 pub const MAX_EXTRA_PAYLOAD_SIZE: usize = 100_000;
-
-/// Maximum number of inputs/outputs.
-const MAX_TX_IO: usize = 100_000;
 
 /// A Dash transaction.
 ///
@@ -88,33 +85,27 @@ impl Codec for Transaction {
     let version = raw as i16;
     let tx_type = TxType::from_base(((raw >> 16) & 0xffff) as u16);
 
-    let inputs: Vec<TxIn> = codec::read_vec(data, MAX_TX_IO)?;
-    let outputs: Vec<TxOut> = codec::read_vec(data, MAX_TX_IO)?;
-    let lock_time = u32::decode(data)?;
-
-    let extra_payload = if version >= 3 && tx_type != TxType::Spend {
-      codec::read_blob(data, MAX_EXTRA_PAYLOAD_SIZE)?
-    } else {
-      Vec::new()
-    };
-
     Ok(Self {
       version,
       tx_type,
-      inputs,
-      outputs,
-      lock_time,
-      extra_payload,
+      inputs: Vec::decode(data)?,
+      outputs: Vec::decode(data)?,
+      lock_time: u32::decode(data)?,
+      extra_payload: if version >= 3 && tx_type != TxType::Spend {
+        Vec::decode(data)?
+      } else {
+        Vec::new()
+      },
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
     self.raw_version().encode(buf);
-    codec::write_vec(&self.inputs, buf);
-    codec::write_vec(&self.outputs, buf);
+    self.inputs.encode(buf);
+    self.outputs.encode(buf);
     self.lock_time.encode(buf);
     if self.has_extra_payload() {
-      codec::write_blob(&self.extra_payload, buf);
+      self.extra_payload.encode(buf);
     }
   }
 }

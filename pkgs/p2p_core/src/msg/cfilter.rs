@@ -11,10 +11,7 @@ use crate::primitives::filter_type::FilterType;
 
 use bitcoin_units::BlockHeight;
 use dash_primitives::BlockHash;
-use dash_types::codec::{self, Codec, DecodeError};
-
-/// Maximum filter data bytes.
-const MAX_FILTER_DATA: usize = 256 * 1024;
+use dash_types::codec::{Codec, DecodeError};
 
 /// Requests compact filters for a range of blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,14 +60,14 @@ impl Codec for CFilter {
     Ok(Self {
       filter_type: FilterType(u8::decode(data)?),
       block_hash: BlockHash::decode(data)?,
-      filter_data: codec::read_blob(data, MAX_FILTER_DATA)?,
+      filter_data: Vec::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
     self.filter_type.0.encode(buf);
     self.block_hash.encode(buf);
-    codec::write_blob(&self.filter_data, buf);
+    self.filter_data.encode(buf);
   }
 }
 

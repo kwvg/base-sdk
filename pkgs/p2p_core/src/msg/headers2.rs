@@ -13,8 +13,6 @@ use crate::primitives::protocol_version::ProtocolVersion;
 use dash_primitives::BlockHash;
 use dash_types::codec::{self, Codec, DecodeError};
 
-/// Maximum block locator hashes.
-const MAX_LOCATOR: usize = 101;
 /// Maximum headers per message.
 const MAX_HEADERS: usize = 2_000;
 
@@ -34,14 +32,14 @@ impl Codec for GetHeaders2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     Ok(Self {
       version: ProtocolVersion(u32::decode(data)?),
-      locator_hashes: codec::read_vec(data, MAX_LOCATOR)?,
+      locator_hashes: Vec::decode(data)?,
       hash_stop: BlockHash::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
     self.version.0.encode(buf);
-    codec::write_vec(&self.locator_hashes, buf);
+    self.locator_hashes.encode(buf);
     self.hash_stop.encode(buf);
   }
 }

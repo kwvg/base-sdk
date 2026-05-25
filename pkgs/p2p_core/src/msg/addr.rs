@@ -9,10 +9,7 @@
 use crate::prelude::*;
 use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
 
-use dash_types::codec::{self, Codec, DecodeError};
-
-/// Maximum addresses per message.
-const MAX_ADDR: usize = 1_000;
+use dash_types::codec::{Codec, DecodeError};
 
 /// V1 address announcement carrying timestamped addresses.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,11 +21,11 @@ pub struct Addr {
 
 impl Codec for Addr {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Ok(Self { addrs: codec::read_vec(data, MAX_ADDR)? })
+    Ok(Self { addrs: Vec::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_vec(&self.addrs, buf);
+    self.addrs.encode(buf);
   }
 }
 
@@ -44,11 +41,11 @@ pub struct AddrV2Msg {
 
 impl Codec for AddrV2Msg {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Ok(Self { addrs: codec::read_vec(data, MAX_ADDR)? })
+    Ok(Self { addrs: Vec::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_vec(&self.addrs, buf);
+    self.addrs.encode(buf);
   }
 }
 

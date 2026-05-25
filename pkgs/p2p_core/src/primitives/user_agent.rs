@@ -8,7 +8,7 @@
 
 use crate::prelude::*;
 
-use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::codec::{Codec, DecodeError};
 
 use core::fmt;
 
@@ -69,12 +69,11 @@ impl UserAgent {
 
 impl Codec for UserAgent {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let bytes = codec::read_blob(data, MAX_USER_AGENT)?;
-    Ok(Self(bytes))
+    Vec::decode(data).map(Self)
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_blob(&self.0, buf);
+    self.0.encode(buf);
   }
 }
 

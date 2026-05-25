@@ -11,10 +11,7 @@ use crate::primitives::filter_type::FilterType;
 
 use bitcoin_units::BlockHeight;
 use dash_primitives::BlockHash;
-use dash_types::codec::{self, Codec, DecodeError};
-
-/// Maximum filter hashes per message.
-const MAX_CFHEADERS: usize = 2_000;
+use dash_types::codec::{Codec, DecodeError};
 
 /// Requests compact filter headers for a range of blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +63,7 @@ impl Codec for CFHeaders {
       filter_type: FilterType(u8::decode(data)?),
       stop_hash: BlockHash::decode(data)?,
       previous_filter_header: BlockHash::decode(data)?,
-      filter_hashes: codec::read_vec(data, MAX_CFHEADERS)?,
+      filter_hashes: Vec::decode(data)?,
     })
   }
 
@@ -74,7 +71,7 @@ impl Codec for CFHeaders {
     self.filter_type.0.encode(buf);
     self.stop_hash.encode(buf);
     self.previous_filter_header.encode(buf);
-    codec::write_vec(&self.filter_hashes, buf);
+    self.filter_hashes.encode(buf);
   }
 }
 

@@ -17,7 +17,7 @@ use crate::validation::{
 };
 use crate::{InputsHash, TxHash};
 
-use dash_types::codec::{self, Codec, DecodeError, NumCodec};
+use dash_types::codec::{Codec, DecodeError, NumCodec};
 use dash_types::{BlsSignatureBytes, PlatformNodeId};
 
 use core::fmt;
@@ -64,7 +64,7 @@ impl Codec for ProUpServTx {
 
     let pro_tx_hash = TxHash::decode(data)?;
     let net_info = if version >= 3 {
-      let raw = codec::read_blob(data, 1024)?;
+      let raw: Vec<u8> = Vec::decode(data)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
       NetInfo::Legacy(CService::decode(data)?)
@@ -106,7 +106,7 @@ impl Codec for ProUpServTx {
       NetInfo::Extended(ext) => {
         let mut inner = Vec::new();
         ext.encode(&mut inner);
-        codec::write_blob(&inner, buf);
+        inner.encode(buf);
       }
       NetInfo::Legacy(svc) => svc.encode(buf),
     }

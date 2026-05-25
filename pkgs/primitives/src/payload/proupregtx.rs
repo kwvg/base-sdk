@@ -14,13 +14,10 @@ use crate::validation::{
 use crate::{InputsHash, TxHash};
 
 use dash_script::KeyId;
-use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::codec::{Codec, DecodeError};
 use dash_types::BlsPublicKeyBytes;
 
 use core::fmt;
-
-/// Maximum owner ECDSA signature size.
-const MAX_VCH_SIG_SIZE: usize = 256;
 
 /// ProUpRegTx -- update MN keys/payout (type 3).
 ///
@@ -58,7 +55,7 @@ impl Codec for ProUpRegTx {
       key_id_voting: KeyId::decode(data)?,
       script_payout: Script::decode(data)?,
       inputs_hash: InputsHash::decode(data)?,
-      vch_sig: codec::read_blob(data, MAX_VCH_SIG_SIZE)?,
+      vch_sig: Vec::decode(data)?,
     })
   }
 
@@ -70,7 +67,7 @@ impl Codec for ProUpRegTx {
     self.key_id_voting.encode(buf);
     self.script_payout.encode(buf);
     self.inputs_hash.encode(buf);
-    codec::write_blob(&self.vch_sig, buf);
+    self.vch_sig.encode(buf);
   }
 }
 

@@ -11,21 +11,10 @@ use crate::prelude::*;
 use dash_primitives::payload::Commitment;
 use dash_primitives::{BlockHash, CService, LlmqType, MnType, Transaction, TxHash};
 use dash_script::KeyId;
-use dash_types::codec::{self, Codec, DecodeError, NumCodec};
+use dash_types::codec::{Codec, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes, PlatformNodeId};
 
 use core::fmt;
-
-/// Maximum number of entries in a single MN list diff.
-const MAX_MN_LIST: usize = 10_000;
-/// Maximum number of deleted MN hashes.
-const MAX_DELETED_MNS: usize = 10_000;
-/// Maximum number of quorum entries.
-const MAX_QUORUMS: usize = 1_000;
-/// Maximum number of merkle hashes.
-const MAX_MERKLE: usize = 100_000;
-/// Maximum merkle flag bytes.
-const MAX_MERKLE_FLAGS: usize = 100_000;
 
 /// A single entry in the simplified masternode list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,13 +149,13 @@ impl Codec for QuorumClSig {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     Ok(Self {
       sig: BlsSignatureBytes::decode(data)?,
-      index_set: codec::read_vec(data, MAX_QUORUMS)?,
+      index_set: Vec::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
     self.sig.encode(buf);
-    codec::write_vec(&self.index_set, buf);
+    self.index_set.encode(buf);
   }
 }
 
@@ -210,15 +199,15 @@ impl Codec for MnListDiffPayload {
       base_block_hash: BlockHash::decode(data)?,
       block_hash: BlockHash::decode(data)?,
       total_transactions: u32::decode(data)?,
-      merkle_hashes: codec::read_vec(data, MAX_MERKLE)?,
-      merkle_flags: codec::read_blob(data, MAX_MERKLE_FLAGS)?,
+      merkle_hashes: Vec::decode(data)?,
+      merkle_flags: Vec::decode(data)?,
       cb_tx: Transaction::decode(data)?,
-      deleted_mns: codec::read_vec(data, MAX_DELETED_MNS)?,
-      mn_list: codec::read_vec(data, MAX_MN_LIST)?,
-      deleted_quorums: codec::read_vec(data, MAX_QUORUMS)?,
-      new_quorums: codec::read_vec(data, MAX_QUORUMS)?,
+      deleted_mns: Vec::decode(data)?,
+      mn_list: Vec::decode(data)?,
+      deleted_quorums: Vec::decode(data)?,
+      new_quorums: Vec::decode(data)?,
       // Chainlock signatures (protocol >= 70230).
-      quorum_cl_sigs: codec::read_vec(data, MAX_QUORUMS)?,
+      quorum_cl_sigs: Vec::decode(data)?,
     })
   }
 
@@ -227,14 +216,14 @@ impl Codec for MnListDiffPayload {
     self.base_block_hash.encode(buf);
     self.block_hash.encode(buf);
     self.total_transactions.encode(buf);
-    codec::write_vec(&self.merkle_hashes, buf);
-    codec::write_blob(&self.merkle_flags, buf);
+    self.merkle_hashes.encode(buf);
+    self.merkle_flags.encode(buf);
     self.cb_tx.encode(buf);
-    codec::write_vec(&self.deleted_mns, buf);
-    codec::write_vec(&self.mn_list, buf);
-    codec::write_vec(&self.deleted_quorums, buf);
-    codec::write_vec(&self.new_quorums, buf);
-    codec::write_vec(&self.quorum_cl_sigs, buf);
+    self.deleted_mns.encode(buf);
+    self.mn_list.encode(buf);
+    self.deleted_quorums.encode(buf);
+    self.new_quorums.encode(buf);
+    self.quorum_cl_sigs.encode(buf);
   }
 }
 

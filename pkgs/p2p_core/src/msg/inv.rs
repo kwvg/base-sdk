@@ -9,10 +9,7 @@
 use crate::prelude::*;
 use crate::primitives::inventory::Inventory;
 
-use dash_types::codec::{self, Codec, DecodeError};
-
-/// Maximum inventory items per message.
-const MAX_INV_ITEMS: usize = 50_000;
+use dash_types::codec::{Codec, DecodeError};
 
 /// Announces available inventory to a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,11 +21,11 @@ pub struct Inv {
 
 impl Codec for Inv {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Ok(Self { inventory: codec::read_vec(data, MAX_INV_ITEMS)? })
+    Ok(Self { inventory: Vec::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_vec(&self.inventory, buf);
+    self.inventory.encode(buf);
   }
 }
 
@@ -44,11 +41,11 @@ pub struct GetData {
 
 impl Codec for GetData {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Ok(Self { inventory: codec::read_vec(data, MAX_INV_ITEMS)? })
+    Ok(Self { inventory: Vec::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_vec(&self.inventory, buf);
+    self.inventory.encode(buf);
   }
 }
 
@@ -64,11 +61,11 @@ pub struct NotFound {
 
 impl Codec for NotFound {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Ok(Self { inventory: codec::read_vec(data, MAX_INV_ITEMS)? })
+    Ok(Self { inventory: Vec::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    codec::write_vec(&self.inventory, buf);
+    self.inventory.encode(buf);
   }
 }
 

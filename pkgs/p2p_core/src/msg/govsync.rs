@@ -9,10 +9,7 @@
 use crate::prelude::*;
 
 use dash_num::Hash256;
-use dash_types::codec::{self, Codec, DecodeError};
-
-/// Maximum bloom filter size in bytes.
-const MAX_BLOOM_FILTER: usize = 36_000;
+use dash_types::codec::{Codec, DecodeError};
 
 /// Requests governance objects and votes from a peer.
 ///
@@ -32,13 +29,13 @@ impl Codec for GovSync {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     Ok(Self {
       hash: Hash256::decode(data)?,
-      bloom_filter: codec::read_blob(data, MAX_BLOOM_FILTER)?,
+      bloom_filter: Vec::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
     self.hash.encode(buf);
-    codec::write_blob(&self.bloom_filter, buf);
+    self.bloom_filter.encode(buf);
   }
 }
 

@@ -17,13 +17,10 @@ use crate::validation::{
 use crate::{InputsHash, TxHash};
 
 use dash_script::KeyId;
-use dash_types::codec::{self, Codec, DecodeError, NumCodec};
+use dash_types::codec::{Codec, DecodeError, NumCodec};
 use dash_types::{BlsPublicKeyBytes, PlatformNodeId};
 
 use core::fmt;
-
-/// Maximum owner ECDSA signature size.
-const MAX_VCH_SIG_SIZE: usize = 256;
 
 /// Masternode network info: legacy CService or structured extended format.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -86,7 +83,7 @@ impl Codec for ProRegTx {
     let collateral_hash = TxHash::decode(data)?;
     let collateral_index = u32::decode(data)?;
     let net_info = if version >= 3 {
-      let raw = codec::read_blob(data, 1024)?;
+      let raw: Vec<u8> = Vec::decode(data)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
       NetInfo::Legacy(CService::decode(data)?)
@@ -124,7 +121,7 @@ impl Codec for ProRegTx {
       platform_node_id,
       platform_p2p_port,
       platform_http_port,
-      vch_sig: codec::read_blob(data, MAX_VCH_SIG_SIZE)?,
+      vch_sig: Vec::decode(data)?,
     })
   }
 
@@ -138,7 +135,7 @@ impl Codec for ProRegTx {
       NetInfo::Extended(ext) => {
         let mut inner = Vec::new();
         ext.encode(&mut inner);
-        codec::write_blob(&inner, buf);
+        inner.encode(buf);
       }
       NetInfo::Legacy(svc) => svc.encode(buf),
     }
@@ -157,7 +154,7 @@ impl Codec for ProRegTx {
         self.platform_http_port.unwrap_or(0).encode(buf);
       }
     }
-    codec::write_blob(&self.vch_sig, buf);
+    self.vch_sig.encode(buf);
   }
 }
 
