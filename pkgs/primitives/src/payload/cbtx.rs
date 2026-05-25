@@ -42,21 +42,20 @@ pub struct CoinbaseCommitment {
 
 impl Codec for CoinbaseCommitment {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u16_le(data)?;
-    let height = BlockHeight::from_u32(codec::read_u32_le(data)?);
+    let version = u16::decode(data)?;
+    let height = BlockHeight::from_u32(u32::decode(data)?);
     let merkle_root_mn_list = MerkleRoot::decode(data)?;
-
     let merkle_root_quorums = if version >= 2 {
       Some(MerkleRoot::decode(data)?)
     } else {
       None
     };
-
     let (best_cl_height_diff, best_cl_signature, credit_pool_balance) = if version >= 3 {
-      let diff = codec::read_compact_u64(data)?;
-      let sig = codec::read_type(data)?;
-      let balance = codec::read_i64_le(data)?;
-      (Some(diff), Some(sig), Some(balance))
+      (
+        Some(codec::read_compact_u64(data)?),
+        Some(BlsSignatureBytes::decode(data)?),
+        Some(i64::decode(data)?),
+      )
     } else {
       (None, None, None)
     };
@@ -73,19 +72,19 @@ impl Codec for CoinbaseCommitment {
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.extend_from_slice(&self.height.to_u32().to_le_bytes());
-    buf.extend_from_slice(self.merkle_root_mn_list.as_bytes());
+    self.version.encode(buf);
+    self.height.to_u32().encode(buf);
+    self.merkle_root_mn_list.encode(buf);
     if let Some(ref root) = self.merkle_root_quorums {
-      buf.extend_from_slice(root.as_bytes());
+      root.encode(buf);
     }
     if let Some(diff) = self.best_cl_height_diff {
       codec::write_compact_u64(diff, buf);
       if let Some(ref sig) = self.best_cl_signature {
-        buf.extend_from_slice(&sig.0);
+        sig.encode(buf);
       }
       if let Some(balance) = self.credit_pool_balance {
-        buf.extend_from_slice(&balance.to_le_bytes());
+        balance.encode(buf);
       }
     }
   }

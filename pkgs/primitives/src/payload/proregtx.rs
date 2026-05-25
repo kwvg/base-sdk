@@ -80,40 +80,33 @@ pub struct ProRegTx {
 
 impl Codec for ProRegTx {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u16_le(data)?;
-    let mn_type = MnType::from_base(codec::read_u16_le(data)?);
-    let mode = codec::read_u16_le(data)?;
+    let version = u16::decode(data)?;
+    let mn_type = MnType::from_base(u16::decode(data)?);
+    let mode = u16::decode(data)?;
     let collateral_hash = TxHash::decode(data)?;
-    let collateral_index = codec::read_u32_le(data)?;
-
+    let collateral_index = u32::decode(data)?;
     let net_info = if version >= 3 {
       let raw = codec::read_blob(data, 1024)?;
       NetInfo::Extended(crate::support::ExtendedNetInfo::decode(&mut &raw[..])?)
     } else {
       NetInfo::Legacy(CService::decode(data)?)
     };
-
-    let key_id_owner = codec::read_type(data)?;
-    let pub_key_operator = codec::read_type(data)?;
-    let key_id_voting = codec::read_type(data)?;
-    let operator_reward = codec::read_u16_le(data)?;
+    let key_id_owner = KeyId::decode(data)?;
+    let pub_key_operator = BlsPublicKeyBytes::decode(data)?;
+    let key_id_voting = KeyId::decode(data)?;
+    let operator_reward = u16::decode(data)?;
     let script_payout = Script::decode(data)?;
     let inputs_hash = InputsHash::decode(data)?;
-
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
-      let node_id = codec::read_type(data)?;
+      let node_id = PlatformNodeId::decode(data)?;
       if version < 3 {
-        let p2p = codec::read_u16_le(data)?;
-        let http = codec::read_u16_le(data)?;
-        (Some(node_id), Some(p2p), Some(http))
+        (Some(node_id), Some(u16::decode(data)?), Some(u16::decode(data)?))
       } else {
         (Some(node_id), None, None)
       }
     } else {
       (None, None, None)
     };
-
-    let vch_sig = codec::read_blob(data, MAX_VCH_SIG_SIZE)?;
 
     Ok(Self {
       version,
@@ -131,16 +124,16 @@ impl Codec for ProRegTx {
       platform_node_id,
       platform_p2p_port,
       platform_http_port,
-      vch_sig,
+      vch_sig: codec::read_blob(data, MAX_VCH_SIG_SIZE)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.extend_from_slice(&self.mn_type.to_base().to_le_bytes());
-    buf.extend_from_slice(&self.mode.to_le_bytes());
-    buf.extend_from_slice(self.collateral_hash.as_bytes());
-    buf.extend_from_slice(&self.collateral_index.to_le_bytes());
+    self.version.encode(buf);
+    self.mn_type.to_base().encode(buf);
+    self.mode.encode(buf);
+    self.collateral_hash.encode(buf);
+    self.collateral_index.encode(buf);
     match &self.net_info {
       NetInfo::Extended(ext) => {
         let mut inner = Vec::new();
@@ -149,19 +142,19 @@ impl Codec for ProRegTx {
       }
       NetInfo::Legacy(svc) => svc.encode(buf),
     }
-    buf.extend_from_slice(&self.key_id_owner.0);
-    buf.extend_from_slice(&self.pub_key_operator.0);
-    buf.extend_from_slice(&self.key_id_voting.0);
-    buf.extend_from_slice(&self.operator_reward.to_le_bytes());
+    self.key_id_owner.encode(buf);
+    self.pub_key_operator.encode(buf);
+    self.key_id_voting.encode(buf);
+    self.operator_reward.encode(buf);
     self.script_payout.encode(buf);
-    buf.extend_from_slice(self.inputs_hash.as_bytes());
+    self.inputs_hash.encode(buf);
     if self.mn_type == MnType::Evo {
       if let Some(ref node_id) = self.platform_node_id {
-        buf.extend_from_slice(&node_id.0);
+        node_id.encode(buf);
       }
       if self.version < 3 {
-        buf.extend_from_slice(&self.platform_p2p_port.unwrap_or(0).to_le_bytes());
-        buf.extend_from_slice(&self.platform_http_port.unwrap_or(0).to_le_bytes());
+        self.platform_p2p_port.unwrap_or(0).encode(buf);
+        self.platform_http_port.unwrap_or(0).encode(buf);
       }
     }
     codec::write_blob(&self.vch_sig, buf);

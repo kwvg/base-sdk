@@ -84,13 +84,13 @@ impl Transaction {
 
 impl Codec for Transaction {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let raw = codec::read_i32_le(data)?;
+    let raw = i32::decode(data)?;
     let version = raw as i16;
     let tx_type = TxType::from_base(((raw >> 16) & 0xffff) as u16);
 
     let inputs: Vec<TxIn> = codec::read_vec(data, MAX_TX_IO)?;
     let outputs: Vec<TxOut> = codec::read_vec(data, MAX_TX_IO)?;
-    let lock_time = codec::read_u32_le(data)?;
+    let lock_time = u32::decode(data)?;
 
     let extra_payload = if version >= 3 && tx_type != TxType::Spend {
       codec::read_blob(data, MAX_EXTRA_PAYLOAD_SIZE)?
@@ -109,10 +109,10 @@ impl Codec for Transaction {
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.raw_version().to_le_bytes());
+    self.raw_version().encode(buf);
     codec::write_vec(&self.inputs, buf);
     codec::write_vec(&self.outputs, buf);
-    buf.extend_from_slice(&self.lock_time.to_le_bytes());
+    self.lock_time.encode(buf);
     if self.has_extra_payload() {
       codec::write_blob(&self.extra_payload, buf);
     }

@@ -50,35 +50,26 @@ pub struct ProUpRegTx {
 
 impl Codec for ProUpRegTx {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u16_le(data)?;
-    let pro_tx_hash = TxHash::decode(data)?;
-    let mode = codec::read_u16_le(data)?;
-    let pub_key_operator = codec::read_type(data)?;
-    let key_id_voting = codec::read_type(data)?;
-    let script_payout = Script::decode(data)?;
-    let inputs_hash = InputsHash::decode(data)?;
-    let vch_sig = codec::read_blob(data, MAX_VCH_SIG_SIZE)?;
-
     Ok(Self {
-      version,
-      pro_tx_hash,
-      mode,
-      pub_key_operator,
-      key_id_voting,
-      script_payout,
-      inputs_hash,
-      vch_sig,
+      version: u16::decode(data)?,
+      pro_tx_hash: TxHash::decode(data)?,
+      mode: u16::decode(data)?,
+      pub_key_operator: BlsPublicKeyBytes::decode(data)?,
+      key_id_voting: KeyId::decode(data)?,
+      script_payout: Script::decode(data)?,
+      inputs_hash: InputsHash::decode(data)?,
+      vch_sig: codec::read_blob(data, MAX_VCH_SIG_SIZE)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.extend_from_slice(self.pro_tx_hash.as_bytes());
-    buf.extend_from_slice(&self.mode.to_le_bytes());
-    buf.extend_from_slice(&self.pub_key_operator.0);
-    buf.extend_from_slice(&self.key_id_voting.0);
+    self.version.encode(buf);
+    self.pro_tx_hash.encode(buf);
+    self.mode.encode(buf);
+    self.pub_key_operator.encode(buf);
+    self.key_id_voting.encode(buf);
     self.script_payout.encode(buf);
-    buf.extend_from_slice(self.inputs_hash.as_bytes());
+    self.inputs_hash.encode(buf);
     codec::write_blob(&self.vch_sig, buf);
   }
 }

@@ -9,7 +9,7 @@
 use crate::prelude::*;
 use crate::TxHash;
 
-use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::codec::{Codec, DecodeError};
 
 use core::fmt;
 
@@ -25,14 +25,15 @@ pub struct OutPoint {
 
 impl Codec for OutPoint {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let hash = TxHash::decode(data)?;
-    let index = codec::read_u32_le(data)?;
-    Ok(Self { hash, index })
+    Ok(Self {
+      hash: TxHash::decode(data)?,
+      index: u32::decode(data)?,
+    })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(self.hash.as_bytes());
-    buf.extend_from_slice(&self.index.to_le_bytes());
+    self.hash.encode(buf);
+    self.index.encode(buf);
   }
 }
 

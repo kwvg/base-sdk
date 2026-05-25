@@ -441,17 +441,17 @@ pub struct ExtendedNetInfo {
 
 impl Codec for ExtendedNetInfo {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u8(data)?;
+    let version = u8::decode(data)?;
     let purpose_count = codec::read_compact_size(data, MAX_PURPOSES)?;
 
     let mut entries = Vec::with_capacity(purpose_count);
     for _ in 0..purpose_count {
-      let purpose = NetInfoPurpose::from_base(codec::read_u8(data)?);
+      let purpose = NetInfoPurpose::from_base(u8::decode(data)?);
       let entry_count = codec::read_compact_size(data, MAX_ENTRIES)?;
       let mut group = Vec::with_capacity(entry_count);
 
       for _ in 0..entry_count {
-        let entry_type = codec::read_u8(data)?;
+        let entry_type = u8::decode(data)?;
         let entry = match entry_type {
           0x01 => NetInfoEntry::Service(CService {
             addr: codec::take(data)?,
@@ -474,20 +474,20 @@ impl Codec for ExtendedNetInfo {
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.version);
+    self.version.encode(buf);
     codec::write_compact_size(self.entries.len(), buf);
     for (purpose, group) in &self.entries {
-      buf.push(purpose.to_base());
+      purpose.to_base().encode(buf);
       codec::write_compact_size(group.len(), buf);
       for entry in group {
         match entry {
           NetInfoEntry::Service(svc) => {
-            buf.push(0x01);
+            0x01u8.encode(buf);
             buf.extend_from_slice(&svc.addr);
             buf.extend_from_slice(&svc.port.to_be_bytes());
           }
           NetInfoEntry::Domain { name, port } => {
-            buf.push(0x02);
+            0x02u8.encode(buf);
             codec::write_blob(name, buf);
             buf.extend_from_slice(&port.to_be_bytes());
           }

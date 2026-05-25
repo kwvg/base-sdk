@@ -31,20 +31,17 @@ pub struct GetHeaders {
 
 impl Codec for GetHeaders {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = ProtocolVersion(codec::read_u32_le(data)?);
-    let locator_hashes = codec::read_vec(data, MAX_LOCATOR)?;
-    let hash_stop = BlockHash::decode(data)?;
     Ok(Self {
-      version,
-      locator_hashes,
-      hash_stop,
+      version: ProtocolVersion(u32::decode(data)?),
+      locator_hashes: codec::read_vec(data, MAX_LOCATOR)?,
+      hash_stop: BlockHash::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.0.to_le_bytes());
+    self.version.0.encode(buf);
     codec::write_vec(&self.locator_hashes, buf);
-    buf.extend_from_slice(&self.hash_stop.to_bytes());
+    self.hash_stop.encode(buf);
   }
 }
 
@@ -66,22 +63,16 @@ impl Codec for Headers {
     let count = codec::read_compact_size(data, MAX_HEADERS)?;
     let mut headers = Vec::with_capacity(count);
     for _ in 0..count {
-      let version = codec::read_i32_le(data)?;
-      let prev_hash = BlockHash::from_bytes(codec::take(data)?);
-      let merkle_root = MerkleRoot::from_bytes(codec::take(data)?);
-      let time = codec::read_u32_le(data)?;
-      let bits = codec::read_u32_le(data)?;
-      let nonce = codec::read_u32_le(data)?;
-      // Consume the trailing tx_count (always 0).
-      let _tx_count = codec::read_compact_size(data, 0)?;
       headers.push(BlockHeader {
-        version,
-        prev_hash,
-        merkle_root,
-        time,
-        bits,
-        nonce,
+        version: i32::decode(data)?,
+        prev_hash: BlockHash::decode(data)?,
+        merkle_root: MerkleRoot::decode(data)?,
+        time: u32::decode(data)?,
+        bits: u32::decode(data)?,
+        nonce: u32::decode(data)?,
       });
+      // Consume the trailing tx_count (always 0).
+      codec::read_compact_size(data, 0)?;
     }
     Ok(Self { headers })
   }
@@ -89,13 +80,13 @@ impl Codec for Headers {
   fn encode(&self, buf: &mut Vec<u8>) {
     codec::write_compact_size(self.headers.len(), buf);
     for h in &self.headers {
-      buf.extend_from_slice(&h.version.to_le_bytes());
-      buf.extend_from_slice(&h.prev_hash.to_bytes());
-      buf.extend_from_slice(&h.merkle_root.to_bytes());
-      buf.extend_from_slice(&h.time.to_le_bytes());
-      buf.extend_from_slice(&h.bits.to_le_bytes());
-      buf.extend_from_slice(&h.nonce.to_le_bytes());
-      buf.push(0); // tx_count = 0
+      h.version.encode(buf);
+      h.prev_hash.encode(buf);
+      h.merkle_root.encode(buf);
+      h.time.encode(buf);
+      h.bits.encode(buf);
+      h.nonce.encode(buf);
+      0u8.encode(buf); // tx_count = 0
     }
   }
 }

@@ -146,38 +146,25 @@ pub struct GovernanceObject {
 
 impl Codec for GovernanceObject {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let parent_hash = Hash256::decode(data)?;
-    let revision = codec::read_u32_le(data)?;
-    let time = codec::read_i64_le(data)?;
-    let collateral_hash = Hash256::decode(data)?;
-    let outpoint_hash = dash_primitives::TxHash::decode(data)?;
-    let outpoint_n = codec::read_u32_le(data)?;
-    let mn_outpoint = OutPoint {
-      hash: outpoint_hash,
-      index: outpoint_n,
-    };
-    let obj_data = codec::read_blob(data, MAX_P2P_PAYLOAD)?;
-    let sig = BlsSignatureBytes(codec::take(data)?);
     Ok(Self {
-      parent_hash,
-      revision,
-      time,
-      collateral_hash,
-      mn_outpoint,
-      data: obj_data,
-      sig,
+      parent_hash: Hash256::decode(data)?,
+      revision: u32::decode(data)?,
+      time: i64::decode(data)?,
+      collateral_hash: Hash256::decode(data)?,
+      mn_outpoint: OutPoint::decode(data)?,
+      data: codec::read_blob(data, MAX_P2P_PAYLOAD)?,
+      sig: BlsSignatureBytes::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.parent_hash.to_bytes());
-    buf.extend_from_slice(&self.revision.to_le_bytes());
-    buf.extend_from_slice(&self.time.to_le_bytes());
-    buf.extend_from_slice(&self.collateral_hash.to_bytes());
-    buf.extend_from_slice(&self.mn_outpoint.hash.to_bytes());
-    buf.extend_from_slice(&self.mn_outpoint.index.to_le_bytes());
+    self.parent_hash.encode(buf);
+    self.revision.encode(buf);
+    self.time.encode(buf);
+    self.collateral_hash.encode(buf);
+    self.mn_outpoint.encode(buf);
     codec::write_blob(&self.data, buf);
-    buf.extend_from_slice(&self.sig.0);
+    self.sig.encode(buf);
   }
 }
 
@@ -203,35 +190,23 @@ pub struct GovernanceVote {
 
 impl Codec for GovernanceVote {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let outpoint_hash = dash_primitives::TxHash::decode(data)?;
-    let outpoint_n = codec::read_u32_le(data)?;
-    let mn_outpoint = OutPoint {
-      hash: outpoint_hash,
-      index: outpoint_n,
-    };
-    let parent_hash = Hash256::decode(data)?;
-    let outcome = VoteOutcome::from_base(codec::read_u32_le(data)?);
-    let signal = VoteSignal::from_base(codec::read_u32_le(data)?);
-    let time = codec::read_i64_le(data)?;
-    let sig = BlsSignatureBytes(codec::take(data)?);
     Ok(Self {
-      mn_outpoint,
-      parent_hash,
-      outcome,
-      signal,
-      time,
-      sig,
+      mn_outpoint: OutPoint::decode(data)?,
+      parent_hash: Hash256::decode(data)?,
+      outcome: VoteOutcome::from_base(u32::decode(data)?),
+      signal: VoteSignal::from_base(u32::decode(data)?),
+      time: i64::decode(data)?,
+      sig: BlsSignatureBytes::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.mn_outpoint.hash.to_bytes());
-    buf.extend_from_slice(&self.mn_outpoint.index.to_le_bytes());
-    buf.extend_from_slice(&self.parent_hash.to_bytes());
-    buf.extend_from_slice(&self.outcome.to_base().to_le_bytes());
-    buf.extend_from_slice(&self.signal.to_base().to_le_bytes());
-    buf.extend_from_slice(&self.time.to_le_bytes());
-    buf.extend_from_slice(&self.sig.0);
+    self.mn_outpoint.encode(buf);
+    self.parent_hash.encode(buf);
+    self.outcome.to_base().encode(buf);
+    self.signal.to_base().encode(buf);
+    self.time.encode(buf);
+    self.sig.encode(buf);
   }
 }
 

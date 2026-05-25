@@ -30,20 +30,17 @@ pub struct GetCFHeaders {
 
 impl Codec for GetCFHeaders {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let filter_type = FilterType(codec::read_u8(data)?);
-    let start_height = BlockHeight::from_u32(codec::read_u32_le(data)?);
-    let stop_hash = BlockHash::from_bytes(codec::take(data)?);
     Ok(Self {
-      filter_type,
-      start_height,
-      stop_hash,
+      filter_type: FilterType(u8::decode(data)?),
+      start_height: BlockHeight::from_u32(u32::decode(data)?),
+      stop_hash: BlockHash::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.filter_type.0);
-    buf.extend_from_slice(&self.start_height.to_u32().to_le_bytes());
-    buf.extend_from_slice(&self.stop_hash.to_bytes());
+    self.filter_type.0.encode(buf);
+    self.start_height.to_u32().encode(buf);
+    self.stop_hash.encode(buf);
   }
 }
 
@@ -65,22 +62,18 @@ pub struct CFHeaders {
 
 impl Codec for CFHeaders {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let filter_type = FilterType(codec::read_u8(data)?);
-    let stop_hash = BlockHash::from_bytes(codec::take(data)?);
-    let previous_filter_header = BlockHash::from_bytes(codec::take(data)?);
-    let filter_hashes = codec::read_vec(data, MAX_CFHEADERS)?;
     Ok(Self {
-      filter_type,
-      stop_hash,
-      previous_filter_header,
-      filter_hashes,
+      filter_type: FilterType(u8::decode(data)?),
+      stop_hash: BlockHash::decode(data)?,
+      previous_filter_header: BlockHash::decode(data)?,
+      filter_hashes: codec::read_vec(data, MAX_CFHEADERS)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.filter_type.0);
-    buf.extend_from_slice(&self.stop_hash.to_bytes());
-    buf.extend_from_slice(&self.previous_filter_header.to_bytes());
+    self.filter_type.0.encode(buf);
+    self.stop_hash.encode(buf);
+    self.previous_filter_header.encode(buf);
     codec::write_vec(&self.filter_hashes, buf);
   }
 }

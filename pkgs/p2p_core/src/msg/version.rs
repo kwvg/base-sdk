@@ -13,11 +13,7 @@ use crate::primitives::service_flags::ServiceFlags;
 use crate::primitives::user_agent::UserAgent;
 
 use dash_num::Hash256;
-use dash_primitives::CService;
-use dash_types::codec::{self, Codec, DecodeError};
-
-/// Maximum user agent length in bytes.
-const MAX_USER_AGENT: usize = 256;
+use dash_types::codec::{Codec, DecodeError};
 
 /// The `version` message initiates the P2P handshake.
 ///
@@ -52,69 +48,33 @@ pub struct Version {
 
 impl Codec for Version {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let protocol_version = ProtocolVersion(codec::read_u32_le(data)?);
-    let services = ServiceFlags(codec::read_u64_le(data)?);
-    let timestamp = codec::read_i64_le(data)?;
-    // addr_recv: services(8) + addr(16) + port(2)
-    let recv_services = ServiceFlags(codec::read_u64_le(data)?);
-    let recv_addr = CService::decode(data)?;
-    let addr_recv = NetAddr {
-      services: recv_services,
-      addr: recv_addr,
-    };
-    // addr_send
-    let send_services = ServiceFlags(codec::read_u64_le(data)?);
-    let send_addr = CService::decode(data)?;
-    let addr_send = NetAddr {
-      services: send_services,
-      addr: send_addr,
-    };
-    let nonce = codec::read_u64_le(data)?;
-    // user agent
-    let ua_len = codec::read_compact_size(data, MAX_USER_AGENT)?;
-    let ua_bytes = codec::read_bytes(data, ua_len)?.to_vec();
-    let user_agent = UserAgent::new(ua_bytes).map_err(|_| DecodeError::CompactSizeExceedsLimit {
-      limit: 256,
-      value: ua_len as u64,
-    })?;
-    let start_height = codec::read_i32_le(data)?;
-    let relay = codec::read_bool(data)?;
-    let mnauth_challenge = Hash256::decode(data)?;
-    let mn_connection = codec::read_bool(data)?;
     Ok(Self {
-      protocol_version,
-      services,
-      timestamp,
-      addr_recv,
-      addr_send,
-      nonce,
-      user_agent,
-      start_height,
-      relay,
-      mnauth_challenge,
-      mn_connection,
+      protocol_version: ProtocolVersion(u32::decode(data)?),
+      services: ServiceFlags(u64::decode(data)?),
+      timestamp: i64::decode(data)?,
+      addr_recv: NetAddr::decode(data)?,
+      addr_send: NetAddr::decode(data)?,
+      nonce: u64::decode(data)?,
+      user_agent: UserAgent::decode(data)?,
+      start_height: i32::decode(data)?,
+      relay: bool::decode(data)?,
+      mnauth_challenge: Hash256::decode(data)?,
+      mn_connection: bool::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.protocol_version.0.to_le_bytes());
-    buf.extend_from_slice(&self.services.0.to_le_bytes());
-    buf.extend_from_slice(&self.timestamp.to_le_bytes());
-    // addr_recv
-    buf.extend_from_slice(&self.addr_recv.services.0.to_le_bytes());
-    buf.extend_from_slice(&self.addr_recv.addr.addr);
-    buf.extend_from_slice(&self.addr_recv.addr.port.to_be_bytes());
-    // addr_send
-    buf.extend_from_slice(&self.addr_send.services.0.to_le_bytes());
-    buf.extend_from_slice(&self.addr_send.addr.addr);
-    buf.extend_from_slice(&self.addr_send.addr.port.to_be_bytes());
-    buf.extend_from_slice(&self.nonce.to_le_bytes());
-    // user agent
-    codec::write_blob(self.user_agent.as_bytes(), buf);
-    buf.extend_from_slice(&self.start_height.to_le_bytes());
-    buf.push(u8::from(self.relay));
-    buf.extend_from_slice(&self.mnauth_challenge.to_bytes());
-    buf.push(u8::from(self.mn_connection));
+    self.protocol_version.0.encode(buf);
+    self.services.0.encode(buf);
+    self.timestamp.encode(buf);
+    self.addr_recv.encode(buf);
+    self.addr_send.encode(buf);
+    self.nonce.encode(buf);
+    self.user_agent.encode(buf);
+    self.start_height.encode(buf);
+    self.relay.encode(buf);
+    self.mnauth_challenge.encode(buf);
+    self.mn_connection.encode(buf);
   }
 }
 

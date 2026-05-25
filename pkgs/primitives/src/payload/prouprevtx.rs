@@ -11,7 +11,7 @@ use crate::support::RevocationReason;
 use crate::validation::{check_protx_version, max_protx_version_no_ext, DeploymentContext, ProTxInvalid};
 use crate::{InputsHash, TxHash};
 
-use dash_types::codec::{self, Codec, DecodeError, NumCodec};
+use dash_types::codec::{Codec, DecodeError, NumCodec};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -37,27 +37,21 @@ pub struct ProUpRevTx {
 
 impl Codec for ProUpRevTx {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u16_le(data)?;
-    let pro_tx_hash = TxHash::decode(data)?;
-    let reason = RevocationReason::from_base(codec::read_u16_le(data)?);
-    let inputs_hash = InputsHash::decode(data)?;
-    let sig = codec::read_type(data)?;
-
     Ok(Self {
-      version,
-      pro_tx_hash,
-      reason,
-      inputs_hash,
-      sig,
+      version: u16::decode(data)?,
+      pro_tx_hash: TxHash::decode(data)?,
+      reason: RevocationReason::from_base(u16::decode(data)?),
+      inputs_hash: InputsHash::decode(data)?,
+      sig: BlsSignatureBytes::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.extend_from_slice(self.pro_tx_hash.as_bytes());
-    buf.extend_from_slice(&self.reason.to_base().to_le_bytes());
-    buf.extend_from_slice(self.inputs_hash.as_bytes());
-    buf.extend_from_slice(&self.sig.0);
+    self.version.encode(buf);
+    self.pro_tx_hash.encode(buf);
+    self.reason.to_base().encode(buf);
+    self.inputs_hash.encode(buf);
+    self.sig.encode(buf);
   }
 }
 

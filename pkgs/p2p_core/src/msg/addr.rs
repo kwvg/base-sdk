@@ -24,8 +24,7 @@ pub struct Addr {
 
 impl Codec for Addr {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let addrs = codec::read_vec(data, MAX_ADDR)?;
-    Ok(Self { addrs })
+    Ok(Self { addrs: codec::read_vec(data, MAX_ADDR)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
@@ -45,8 +44,7 @@ pub struct AddrV2Msg {
 
 impl Codec for AddrV2Msg {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let addrs = codec::read_vec(data, MAX_ADDR)?;
-    Ok(Self { addrs })
+    Ok(Self { addrs: codec::read_vec(data, MAX_ADDR)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {

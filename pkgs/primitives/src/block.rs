@@ -30,9 +30,10 @@ pub struct Block {
 
 impl Codec for Block {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let header = BlockHeader::decode(data)?;
-    let transactions = codec::read_vec(data, MAX_BLOCK_TXS)?;
-    Ok(Self { header, transactions })
+    Ok(Self {
+      header: BlockHeader::decode(data)?,
+      transactions: codec::read_vec(data, MAX_BLOCK_TXS)?,
+    })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {

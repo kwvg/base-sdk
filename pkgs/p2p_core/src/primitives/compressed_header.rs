@@ -9,7 +9,7 @@
 use crate::prelude::*;
 
 use dash_primitives::{BlockHash, BlockHeader, MerkleRoot};
-use dash_types::codec::{self, DecodeError};
+use dash_types::codec::{Codec, DecodeError};
 
 // Bitfield layout (1 byte):
 //   bits 0-2: version offset (0 = full version present, 1-7 = MRU cache index)
@@ -75,11 +75,11 @@ impl CompressionState {
 
   /// Decodes one compressed header, advancing the slice and state.
   pub(crate) fn decode_header(&mut self, sl: &mut &[u8]) -> Result<BlockHeader, DecodeError> {
-    let flags = codec::read_u8(sl)?;
+    let flags = u8::decode(sl)?;
     let version_offset = flags & VERSION_OFFSET_MASK;
 
     let version = if version_offset == 0 {
-      let v = codec::read_i32_le(sl)?;
+      let v = i32::decode(sl)?;
       self.save_version_mru(v);
       v
     } else {
@@ -96,7 +96,7 @@ impl CompressionState {
     };
 
     let prev_hash = if flags & FLAG_PREV_HASH != 0 {
-      BlockHash::from_bytes(codec::take(sl)?)
+      BlockHash::decode(sl)?
     } else {
       match &self.prev_header {
         Some(prev) => prev.prev_hash,
@@ -104,12 +104,12 @@ impl CompressionState {
       }
     };
 
-    let merkle_root = MerkleRoot::from_bytes(codec::take(sl)?);
+    let merkle_root = MerkleRoot::decode(sl)?;
 
     let time = if flags & FLAG_TIMESTAMP_FULL != 0 {
-      codec::read_u32_le(sl)?
+      u32::decode(sl)?
     } else {
-      let delta = codec::read_i16_le(sl)?;
+      let delta = i16::decode(sl)?;
       match &self.prev_header {
         Some(prev) => (prev.time as i64 + delta as i64) as u32,
         None => delta as u32,
@@ -117,7 +117,7 @@ impl CompressionState {
     };
 
     let bits = if flags & FLAG_NBITS != 0 {
-      codec::read_u32_le(sl)?
+      u32::decode(sl)?
     } else {
       match &self.prev_header {
         Some(prev) => prev.bits,
@@ -125,7 +125,7 @@ impl CompressionState {
       }
     };
 
-    let nonce = codec::read_u32_le(sl)?;
+    let nonce = u32::decode(sl)?;
 
     let header = BlockHeader {
       version,

@@ -55,25 +55,23 @@ pub struct SimplifiedMnListEntry {
 
 impl Codec for SimplifiedMnListEntry {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u16_le(data)?;
-    let pro_reg_tx_hash = TxHash::from_bytes(codec::take(data)?);
-    let confirmed_hash = BlockHash::from_bytes(codec::take(data)?);
+    let version = u16::decode(data)?;
+    let pro_reg_tx_hash = TxHash::decode(data)?;
+    let confirmed_hash = BlockHash::decode(data)?;
     let service = CService::decode(data)?;
-    let operator_key = BlsPublicKeyBytes(codec::take(data)?);
-    let voting_key_id = KeyId(codec::take(data)?);
-    let is_valid = codec::read_bool(data)?;
+    let operator_key = BlsPublicKeyBytes::decode(data)?;
+    let voting_key_id = KeyId::decode(data)?;
+    let is_valid = bool::decode(data)?;
 
     // nType is gated by the entry's version
     let mn_type = if version >= 2 {
-      MnType::from_base(codec::read_u16_le(data)?)
+      MnType::from_base(u16::decode(data)?)
     } else {
       MnType::Regular
     };
 
     let (platform_http_port, platform_node_id) = if mn_type == MnType::Evo {
-      let port = codec::read_u16_le(data)?;
-      let node_id = PlatformNodeId(codec::take(data)?);
-      (Some(port), Some(node_id))
+      (Some(u16::decode(data)?), Some(PlatformNodeId::decode(data)?))
     } else {
       (None, None)
     };
@@ -93,20 +91,19 @@ impl Codec for SimplifiedMnListEntry {
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.extend_from_slice(&self.pro_reg_tx_hash.to_bytes());
-    buf.extend_from_slice(&self.confirmed_hash.to_bytes());
-    buf.extend_from_slice(&self.service.addr);
-    buf.extend_from_slice(&self.service.port.to_be_bytes());
-    buf.extend_from_slice(&self.operator_key.0);
-    buf.extend_from_slice(&self.voting_key_id.0);
-    buf.push(u8::from(self.is_valid));
+    self.version.encode(buf);
+    self.pro_reg_tx_hash.encode(buf);
+    self.confirmed_hash.encode(buf);
+    self.service.encode(buf);
+    self.operator_key.encode(buf);
+    self.voting_key_id.encode(buf);
+    self.is_valid.encode(buf);
     // nType and platform fields are gated by the entry's version
     if self.version >= 2 {
-      buf.extend_from_slice(&self.mn_type.to_base().to_le_bytes());
+      self.mn_type.to_base().encode(buf);
       if self.mn_type == MnType::Evo {
-        buf.extend_from_slice(&self.platform_http_port.unwrap_or(0).to_le_bytes());
-        buf.extend_from_slice(self.platform_node_id.as_ref().map_or(&[0u8; 20], |n| &n.0));
+        self.platform_http_port.unwrap_or(0).encode(buf);
+        self.platform_node_id.unwrap_or_default().encode(buf);
       }
     }
   }
@@ -132,14 +129,15 @@ pub struct DeletedQuorum {
 
 impl Codec for DeletedQuorum {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let llmq_type = LlmqType::from_base(codec::read_u8(data)?);
-    let hash = BlockHash::from_bytes(codec::take(data)?);
-    Ok(Self { llmq_type, hash })
+    Ok(Self {
+      llmq_type: LlmqType::from_base(u8::decode(data)?),
+      hash: BlockHash::decode(data)?,
+    })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.llmq_type.to_base());
-    buf.extend_from_slice(&self.hash.to_bytes());
+    self.llmq_type.to_base().encode(buf);
+    self.hash.encode(buf);
   }
 }
 
@@ -160,13 +158,14 @@ pub struct QuorumClSig {
 
 impl Codec for QuorumClSig {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let sig = BlsSignatureBytes(codec::take(data)?);
-    let index_set = codec::read_vec(data, MAX_QUORUMS)?;
-    Ok(Self { sig, index_set })
+    Ok(Self {
+      sig: BlsSignatureBytes::decode(data)?,
+      index_set: codec::read_vec(data, MAX_QUORUMS)?,
+    })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.sig.0);
+    self.sig.encode(buf);
     codec::write_vec(&self.index_set, buf);
   }
 }
@@ -206,58 +205,33 @@ pub struct MnListDiffPayload {
 
 impl Codec for MnListDiffPayload {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u16_le(data)?;
-    let base_block_hash = BlockHash::from_bytes(codec::take(data)?);
-    let block_hash = BlockHash::from_bytes(codec::take(data)?);
-    let total_transactions = codec::read_u32_le(data)?;
-
-    let merkle_hashes = codec::read_vec(data, MAX_MERKLE)?;
-
-    let merkle_flags = codec::read_blob(data, MAX_MERKLE_FLAGS)?;
-
-    let cb_tx = Transaction::decode(data)?;
-
-    let deleted_mns = codec::read_vec(data, MAX_DELETED_MNS)?;
-
-    let mn_list = codec::read_vec(data, MAX_MN_LIST)?;
-
-    let deleted_quorums = codec::read_vec(data, MAX_QUORUMS)?;
-    let new_quorums = codec::read_vec(data, MAX_QUORUMS)?;
-    // Chainlock signatures (protocol >= 70230).
-    let quorum_cl_sigs = codec::read_vec(data, MAX_QUORUMS)?;
-
     Ok(Self {
-      version,
-      base_block_hash,
-      block_hash,
-      total_transactions,
-      merkle_hashes,
-      merkle_flags,
-      cb_tx,
-      deleted_mns,
-      mn_list,
-      deleted_quorums,
-      new_quorums,
-      quorum_cl_sigs,
+      version: u16::decode(data)?,
+      base_block_hash: BlockHash::decode(data)?,
+      block_hash: BlockHash::decode(data)?,
+      total_transactions: u32::decode(data)?,
+      merkle_hashes: codec::read_vec(data, MAX_MERKLE)?,
+      merkle_flags: codec::read_blob(data, MAX_MERKLE_FLAGS)?,
+      cb_tx: Transaction::decode(data)?,
+      deleted_mns: codec::read_vec(data, MAX_DELETED_MNS)?,
+      mn_list: codec::read_vec(data, MAX_MN_LIST)?,
+      deleted_quorums: codec::read_vec(data, MAX_QUORUMS)?,
+      new_quorums: codec::read_vec(data, MAX_QUORUMS)?,
+      // Chainlock signatures (protocol >= 70230).
+      quorum_cl_sigs: codec::read_vec(data, MAX_QUORUMS)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.extend_from_slice(&self.base_block_hash.to_bytes());
-    buf.extend_from_slice(&self.block_hash.to_bytes());
-    buf.extend_from_slice(&self.total_transactions.to_le_bytes());
-
+    self.version.encode(buf);
+    self.base_block_hash.encode(buf);
+    self.block_hash.encode(buf);
+    self.total_transactions.encode(buf);
     codec::write_vec(&self.merkle_hashes, buf);
-
     codec::write_blob(&self.merkle_flags, buf);
-
     self.cb_tx.encode(buf);
-
     codec::write_vec(&self.deleted_mns, buf);
-
     codec::write_vec(&self.mn_list, buf);
-
     codec::write_vec(&self.deleted_quorums, buf);
     codec::write_vec(&self.new_quorums, buf);
     codec::write_vec(&self.quorum_cl_sigs, buf);

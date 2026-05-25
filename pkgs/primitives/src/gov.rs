@@ -156,41 +156,26 @@ pub struct GovObject {
 
 impl Codec for GovObject {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let hash_parent = TxHash::decode(data)?;
-    let revision = codec::read_i32_le(data)?;
-    let time = codec::read_i64_le(data)?;
-    let collateral_hash = TxHash::decode(data)?;
-    let obj_data = codec::read_blob(data, 16_384)?;
-    let object_type = GovObjectType::from_i32(codec::read_i32_le(data)?);
-    let mn_hash = TxHash::decode(data)?;
-    let mn_index = codec::read_u32_le(data)?;
-    let masternode_outpoint = OutPoint {
-      hash: mn_hash,
-      index: mn_index,
-    };
-    let sig = codec::read_blob(data, 1024)?;
-
     Ok(Self {
-      hash_parent,
-      revision,
-      time,
-      collateral_hash,
-      data: obj_data,
-      object_type,
-      masternode_outpoint,
-      sig,
+      hash_parent: TxHash::decode(data)?,
+      revision: i32::decode(data)?,
+      time: i64::decode(data)?,
+      collateral_hash: TxHash::decode(data)?,
+      data: codec::read_blob(data, 16_384)?,
+      object_type: GovObjectType::from_i32(i32::decode(data)?),
+      masternode_outpoint: OutPoint::decode(data)?,
+      sig: codec::read_blob(data, 1024)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(self.hash_parent.as_bytes());
-    buf.extend_from_slice(&self.revision.to_le_bytes());
-    buf.extend_from_slice(&self.time.to_le_bytes());
-    buf.extend_from_slice(self.collateral_hash.as_bytes());
+    self.hash_parent.encode(buf);
+    self.revision.encode(buf);
+    self.time.encode(buf);
+    self.collateral_hash.encode(buf);
     codec::write_blob(&self.data, buf);
-    buf.extend_from_slice(&self.object_type.to_i32().to_le_bytes());
-    buf.extend_from_slice(self.masternode_outpoint.hash.as_bytes());
-    buf.extend_from_slice(&self.masternode_outpoint.index.to_le_bytes());
+    self.object_type.to_i32().encode(buf);
+    self.masternode_outpoint.encode(buf);
     codec::write_blob(&self.sig, buf);
   }
 }
@@ -259,35 +244,22 @@ pub struct GovVote {
 
 impl Codec for GovVote {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let mn_hash = TxHash::decode(data)?;
-    let mn_index = codec::read_u32_le(data)?;
-    let masternode_outpoint = OutPoint {
-      hash: mn_hash,
-      index: mn_index,
-    };
-    let parent_hash = TxHash::decode(data)?;
-    let outcome = codec::read_i32_le(data)?;
-    let signal = codec::read_i32_le(data)?;
-    let time = codec::read_i64_le(data)?;
-    let sig = codec::read_blob(data, 1024)?;
-
     Ok(Self {
-      masternode_outpoint,
-      parent_hash,
-      outcome,
-      signal,
-      time,
-      sig,
+      masternode_outpoint: OutPoint::decode(data)?,
+      parent_hash: TxHash::decode(data)?,
+      outcome: i32::decode(data)?,
+      signal: i32::decode(data)?,
+      time: i64::decode(data)?,
+      sig: codec::read_blob(data, 1024)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(self.masternode_outpoint.hash.as_bytes());
-    buf.extend_from_slice(&self.masternode_outpoint.index.to_le_bytes());
-    buf.extend_from_slice(self.parent_hash.as_bytes());
-    buf.extend_from_slice(&self.outcome.to_le_bytes());
-    buf.extend_from_slice(&self.signal.to_le_bytes());
-    buf.extend_from_slice(&self.time.to_le_bytes());
+    self.masternode_outpoint.encode(buf);
+    self.parent_hash.encode(buf);
+    self.outcome.encode(buf);
+    self.signal.encode(buf);
+    self.time.encode(buf);
     codec::write_blob(&self.sig, buf);
   }
 }

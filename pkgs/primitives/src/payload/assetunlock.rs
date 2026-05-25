@@ -10,7 +10,7 @@ use crate::prelude::*;
 use crate::validation::DeploymentContext;
 use crate::QuorumHash;
 
-use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::codec::{Codec, DecodeError};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -35,30 +35,23 @@ pub struct AssetUnlock {
 
 impl Codec for AssetUnlock {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u8(data)?;
-    let index = codec::read_u64_le(data)?;
-    let fee = codec::read_u32_le(data)?;
-    let requested_height = codec::read_u32_le(data)?;
-    let quorum_hash = QuorumHash::decode(data)?;
-    let quorum_sig = codec::read_type(data)?;
-
     Ok(Self {
-      version,
-      index,
-      fee,
-      requested_height,
-      quorum_hash,
-      quorum_sig,
+      version: u8::decode(data)?,
+      index: u64::decode(data)?,
+      fee: u32::decode(data)?,
+      requested_height: u32::decode(data)?,
+      quorum_hash: QuorumHash::decode(data)?,
+      quorum_sig: BlsSignatureBytes::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.version);
-    buf.extend_from_slice(&self.index.to_le_bytes());
-    buf.extend_from_slice(&self.fee.to_le_bytes());
-    buf.extend_from_slice(&self.requested_height.to_le_bytes());
-    buf.extend_from_slice(self.quorum_hash.as_bytes());
-    buf.extend_from_slice(&self.quorum_sig.0);
+    self.version.encode(buf);
+    self.index.encode(buf);
+    self.fee.encode(buf);
+    self.requested_height.encode(buf);
+    self.quorum_hash.encode(buf);
+    self.quorum_sig.encode(buf);
   }
 }
 

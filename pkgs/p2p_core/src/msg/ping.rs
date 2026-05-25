@@ -8,7 +8,7 @@
 
 use crate::prelude::*;
 
-use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::codec::{Codec, DecodeError};
 
 /// Keepalive request carrying a random nonce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -20,13 +20,11 @@ pub struct Ping {
 
 impl Codec for Ping {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Ok(Self {
-      nonce: codec::read_u64_le(data)?,
-    })
+    Ok(Self { nonce: u64::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.nonce.to_le_bytes());
+    self.nonce.encode(buf);
   }
 }
 
@@ -42,13 +40,11 @@ pub struct Pong {
 
 impl Codec for Pong {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Ok(Self {
-      nonce: codec::read_u64_le(data)?,
-    })
+    Ok(Self { nonce: u64::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.nonce.to_le_bytes());
+    self.nonce.encode(buf);
   }
 }
 

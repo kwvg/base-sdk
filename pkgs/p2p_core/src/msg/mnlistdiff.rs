@@ -24,17 +24,15 @@ pub struct GetMnListDiff {
 
 impl Codec for GetMnListDiff {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let base_block_hash = BlockHash::decode(data)?;
-    let block_hash = BlockHash::decode(data)?;
     Ok(Self {
-      base_block_hash,
-      block_hash,
+      base_block_hash: BlockHash::decode(data)?,
+      block_hash: BlockHash::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(self.base_block_hash.as_bytes());
-    buf.extend_from_slice(self.block_hash.as_bytes());
+    self.base_block_hash.encode(buf);
+    self.block_hash.encode(buf);
   }
 }
 

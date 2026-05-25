@@ -26,16 +26,14 @@ pub struct AssetLock {
 
 impl Codec for AssetLock {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_u8(data)?;
-    let credit_outputs: Vec<TxOut> = codec::read_vec(data, 100)?;
     Ok(Self {
-      version,
-      credit_outputs,
+      version: u8::decode(data)?,
+      credit_outputs: codec::read_vec(data, 100)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.version);
+    self.version.encode(buf);
     codec::write_vec(&self.credit_outputs, buf);
   }
 }

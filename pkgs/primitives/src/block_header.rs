@@ -9,7 +9,7 @@
 use crate::prelude::*;
 use crate::{BlockHash, MerkleRoot};
 
-use dash_types::codec::{self, Codec, DecodeError};
+use dash_types::codec::{Codec, DecodeError};
 
 use core::fmt;
 
@@ -33,29 +33,23 @@ pub struct BlockHeader {
 
 impl Codec for BlockHeader {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = codec::read_i32_le(data)?;
-    let prev_hash = BlockHash::decode(data)?;
-    let merkle_root = MerkleRoot::decode(data)?;
-    let time = codec::read_u32_le(data)?;
-    let bits = codec::read_u32_le(data)?;
-    let nonce = codec::read_u32_le(data)?;
     Ok(Self {
-      version,
-      prev_hash,
-      merkle_root,
-      time,
-      bits,
-      nonce,
+      version: i32::decode(data)?,
+      prev_hash: BlockHash::decode(data)?,
+      merkle_root: MerkleRoot::decode(data)?,
+      time: u32::decode(data)?,
+      bits: u32::decode(data)?,
+      nonce: u32::decode(data)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.extend_from_slice(&self.version.to_le_bytes());
-    buf.extend_from_slice(self.prev_hash.as_bytes());
-    buf.extend_from_slice(self.merkle_root.as_bytes());
-    buf.extend_from_slice(&self.time.to_le_bytes());
-    buf.extend_from_slice(&self.bits.to_le_bytes());
-    buf.extend_from_slice(&self.nonce.to_le_bytes());
+    self.version.encode(buf);
+    self.prev_hash.encode(buf);
+    self.merkle_root.encode(buf);
+    self.time.encode(buf);
+    self.bits.encode(buf);
+    self.nonce.encode(buf);
   }
 }
 

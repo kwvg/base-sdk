@@ -27,14 +27,15 @@ pub struct GetCFCheckpt {
 
 impl Codec for GetCFCheckpt {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let filter_type = FilterType(codec::read_u8(data)?);
-    let stop_hash = BlockHash::from_bytes(codec::take(data)?);
-    Ok(Self { filter_type, stop_hash })
+    Ok(Self {
+      filter_type: FilterType(u8::decode(data)?),
+      stop_hash: BlockHash::decode(data)?,
+    })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.filter_type.0);
-    buf.extend_from_slice(&self.stop_hash.to_bytes());
+    self.filter_type.0.encode(buf);
+    self.stop_hash.encode(buf);
   }
 }
 
@@ -54,19 +55,16 @@ pub struct CFCheckpt {
 
 impl Codec for CFCheckpt {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let filter_type = FilterType(codec::read_u8(data)?);
-    let stop_hash = BlockHash::from_bytes(codec::take(data)?);
-    let filter_headers = codec::read_vec(data, MAX_CFCHECKPT)?;
     Ok(Self {
-      filter_type,
-      stop_hash,
-      filter_headers,
+      filter_type: FilterType(u8::decode(data)?),
+      stop_hash: BlockHash::decode(data)?,
+      filter_headers: codec::read_vec(data, MAX_CFCHECKPT)?,
     })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
-    buf.push(self.filter_type.0);
-    buf.extend_from_slice(&self.stop_hash.to_bytes());
+    self.filter_type.0.encode(buf);
+    self.stop_hash.encode(buf);
     codec::write_vec(&self.filter_headers, buf);
   }
 }

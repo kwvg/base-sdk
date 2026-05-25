@@ -21,8 +21,7 @@ pub struct GovObj {
 
 impl Codec for GovObj {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let object = GovernanceObject::decode(data)?;
-    Ok(Self { object })
+    Ok(Self { object: GovernanceObject::decode(data)? })
   }
 
   fn encode(&self, buf: &mut Vec<u8>) {
