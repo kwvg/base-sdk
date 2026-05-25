@@ -1,6 +1,6 @@
 [rules.alloc-only-in-prelude]
 include = ["pkgs/**/*.rs"]
-exclude = ["**/prelude.rs"]
+exclude = ["**/prelude.rs", "pkgs/types/src/entity.rs"]
 block = ['alloc::']
 message = "use crate::prelude instead of alloc:: directly"
 

@@ -4,14 +4,16 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Bridge utilities for wrapping cursor-based decode/encode logic behind the
-//! `bitcoin_consensus_encoding` ecosystem traits.
+//! Bridge utilities for `Codec` types to `bitcoin_consensus_encoding` traits.
 
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 
 use core::fmt;
+
+/// Maximum serialized object size (32 MiB).
+pub const MAX_SER_SIZE: usize = 0x0200_0000;
 
 /// A decoder that buffers all input and decodes in `end()`.
 ///
@@ -99,3 +101,27 @@ impl encoding::Encoder for VecEncoder {
   }
 }
 
+/// Generates `Encodable` + `Decodable` for a `Codec` implementor.
+#[macro_export]
+macro_rules! impl_type {
+  ($ty:ty) => {
+    $crate::impl_type!($ty, $crate::MAX_SER_SIZE);
+  };
+  ($ty:ty, $max:expr) => {
+    impl ::bitcoin_consensus_encoding::Encodable for $ty {
+      type Encoder<'e> = $crate::VecEncoder;
+      fn encoder(&self) -> Self::Encoder<'_> {
+        let mut buf = ::alloc::vec::Vec::new();
+        $crate::codec::Codec::encode(self, &mut buf);
+        $crate::VecEncoder::new(buf)
+      }
+    }
+
+    impl ::bitcoin_consensus_encoding::Decodable for $ty {
+      type Decoder = $crate::BufferDecoder<$ty, $crate::codec::DecodeError>;
+      fn decoder() -> Self::Decoder {
+        $crate::BufferDecoder::new(<$ty as $crate::codec::Codec>::decode, $max)
+      }
+    }
+  };
+}
