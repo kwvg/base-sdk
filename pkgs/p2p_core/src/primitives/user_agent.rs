@@ -6,12 +6,13 @@
 
 //! User agent string exchanged in version messages.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::wire;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
+use dash_types::codec;
 
 use core::fmt;
 
@@ -71,14 +72,14 @@ impl UserAgent {
 
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let len = wire::read_compact_size(sl, MAX_USER_AGENT)?;
-    let bytes = wire::read_bytes(sl, len)?;
+    let len = codec::read_compact_size(sl, MAX_USER_AGENT)?;
+    let bytes = codec::read_bytes(sl, len)?;
     Ok(Self(bytes.to_vec()))
   }
 
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
-    encode_compact_size(self.0.len(), &mut buf);
+    codec::write_compact_size(self.0.len(), &mut buf);
     buf.extend_from_slice(&self.0);
     buf
   }

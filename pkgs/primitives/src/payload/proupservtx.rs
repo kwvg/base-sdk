@@ -17,7 +17,7 @@ use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use dash_types::{BlsSignatureBytes, PlatformNodeId};
 
 use core::fmt;
@@ -63,10 +63,10 @@ impl ProUpServTx {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u16_le(sl)?;
+    let version = codec::read_u16_le(sl)?;
 
     let mn_type = if version >= 2 {
-      let raw = wire::read_u16_le(sl)?;
+      let raw = codec::read_u16_le(sl)?;
       MnType::from_u16(raw)
     } else {
       MnType::Regular
@@ -85,10 +85,10 @@ impl ProUpServTx {
     let inputs_hash = wire::read_hash(sl)?.into();
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
-      let node_id = wire::read_type(sl)?;
+      let node_id = codec::read_type(sl)?;
       if version < 3 {
-        let p2p = wire::read_u16_le(sl)?;
-        let http = wire::read_u16_le(sl)?;
+        let p2p = codec::read_u16_le(sl)?;
+        let http = codec::read_u16_le(sl)?;
         (Some(node_id), Some(p2p), Some(http))
       } else {
         (Some(node_id), None, None)
@@ -97,7 +97,7 @@ impl ProUpServTx {
       (None, None, None)
     };
 
-    let sig = wire::read_type(sl)?;
+    let sig = codec::read_type(sl)?;
 
     Ok(Self {
       version,

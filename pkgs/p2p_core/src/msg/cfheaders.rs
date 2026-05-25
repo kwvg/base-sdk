@@ -6,15 +6,16 @@
 
 //! BIP157 compact filter header messages: getcfheaders, cfheaders.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::filter_type::FilterType;
 
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::BlockHeight;
-use dash_primitives::wire;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::BlockHash;
+use dash_types::codec;
 
 /// Maximum filter hashes per message.
 const MAX_CFHEADERS: usize = 2_000;
@@ -34,9 +35,9 @@ pub struct GetCFHeaders {
 impl GetCFHeaders {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let filter_type = FilterType(wire::read_u8(sl)?);
-    let start_height = BlockHeight::from_u32(wire::read_u32_le(sl)?);
-    let stop_hash = BlockHash::from_bytes(wire::read_array(sl)?);
+    let filter_type = FilterType(codec::read_u8(sl)?);
+    let start_height = BlockHeight::from_u32(codec::read_u32_le(sl)?);
+    let stop_hash = BlockHash::from_bytes(codec::take(sl)?);
     Ok(Self {
       filter_type,
       start_height,
@@ -84,13 +85,13 @@ pub struct CFHeaders {
 impl CFHeaders {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let filter_type = FilterType(wire::read_u8(sl)?);
-    let stop_hash = BlockHash::from_bytes(wire::read_array(sl)?);
-    let previous_filter_header = BlockHash::from_bytes(wire::read_array(sl)?);
-    let count = wire::read_compact_size(sl, MAX_CFHEADERS)?;
+    let filter_type = FilterType(codec::read_u8(sl)?);
+    let stop_hash = BlockHash::from_bytes(codec::take(sl)?);
+    let previous_filter_header = BlockHash::from_bytes(codec::take(sl)?);
+    let count = codec::read_compact_size(sl, MAX_CFHEADERS)?;
     let mut filter_hashes = Vec::with_capacity(count);
     for _ in 0..count {
-      filter_hashes.push(BlockHash::from_bytes(wire::read_array(sl)?));
+      filter_hashes.push(BlockHash::from_bytes(codec::take(sl)?));
     }
     Ok(Self {
       filter_type,
@@ -105,7 +106,7 @@ impl CFHeaders {
     buf.push(self.filter_type.0);
     buf.extend_from_slice(&self.stop_hash.to_bytes());
     buf.extend_from_slice(&self.previous_filter_header.to_bytes());
-    encode_compact_size(self.filter_hashes.len(), &mut buf);
+    codec::write_compact_size(self.filter_hashes.len(), &mut buf);
     for h in &self.filter_hashes {
       buf.extend_from_slice(&h.to_bytes());
     }

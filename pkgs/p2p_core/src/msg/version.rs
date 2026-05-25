@@ -6,7 +6,7 @@
 
 //! Version handshake message (Dash-extended).
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::net_addr::NetAddr;
@@ -16,7 +16,9 @@ use crate::primitives::user_agent::UserAgent;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
+use dash_types::codec;
 
 /// Maximum user agent length in bytes.
 const MAX_USER_AGENT: usize = 256;
@@ -55,32 +57,32 @@ pub struct Version {
 impl Version {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let protocol_version = ProtocolVersion(wire::read_u32_le(sl)?);
-    let services = ServiceFlags(wire::read_u64_le(sl)?);
-    let timestamp = wire::read_i64_le(sl)?;
+    let protocol_version = ProtocolVersion(codec::read_u32_le(sl)?);
+    let services = ServiceFlags(codec::read_u64_le(sl)?);
+    let timestamp = codec::read_i64_le(sl)?;
     // addr_recv: services(8) + addr(16) + port(2)
-    let recv_services = ServiceFlags(wire::read_u64_le(sl)?);
+    let recv_services = ServiceFlags(codec::read_u64_le(sl)?);
     let recv_addr = wire::read_cservice(sl)?;
     let addr_recv = NetAddr {
       services: recv_services,
       addr: recv_addr,
     };
     // addr_send
-    let send_services = ServiceFlags(wire::read_u64_le(sl)?);
+    let send_services = ServiceFlags(codec::read_u64_le(sl)?);
     let send_addr = wire::read_cservice(sl)?;
     let addr_send = NetAddr {
       services: send_services,
       addr: send_addr,
     };
-    let nonce = wire::read_u64_le(sl)?;
+    let nonce = codec::read_u64_le(sl)?;
     // user agent
-    let ua_len = wire::read_compact_size(sl, MAX_USER_AGENT)?;
-    let ua_bytes = wire::read_bytes(sl, ua_len)?.to_vec();
+    let ua_len = codec::read_compact_size(sl, MAX_USER_AGENT)?;
+    let ua_bytes = codec::read_bytes(sl, ua_len)?.to_vec();
     let user_agent = UserAgent::new(ua_bytes).map_err(|e| P2pDecodeError::Consensus(format!("{e}")))?;
-    let start_height = wire::read_i32_le(sl)?;
-    let relay = wire::read_bool(sl)?;
-    let mnauth_challenge = Hash256::from_bytes(wire::read_array(sl)?);
-    let mn_connection = wire::read_bool(sl)?;
+    let start_height = codec::read_i32_le(sl)?;
+    let relay = codec::read_bool(sl)?;
+    let mnauth_challenge = Hash256::from_bytes(codec::take(sl)?);
+    let mn_connection = codec::read_bool(sl)?;
     Ok(Self {
       protocol_version,
       services,
@@ -111,7 +113,7 @@ impl Version {
     buf.extend_from_slice(&self.addr_send.addr.port.to_be_bytes());
     buf.extend_from_slice(&self.nonce.to_le_bytes());
     // user agent
-    encode_compact_size(self.user_agent.len(), &mut buf);
+    codec::write_compact_size(self.user_agent.len(), &mut buf);
     buf.extend_from_slice(self.user_agent.as_bytes());
     buf.extend_from_slice(&self.start_height.to_le_bytes());
     buf.push(u8::from(self.relay));

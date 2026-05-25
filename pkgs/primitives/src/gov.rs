@@ -13,7 +13,7 @@ use crate::wire;
 use crate::TxHash;
 
 use bitcoin_hashes::sha256d;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use hex_conservative::DisplayHex;
 
 use core::fmt;
@@ -164,13 +164,13 @@ impl GovObject {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
     let hash_parent = wire::read_hash(sl)?.into();
-    let revision = wire::read_i32_le(sl)?;
-    let time = wire::read_i64_le(sl)?;
+    let revision = codec::read_i32_le(sl)?;
+    let time = codec::read_i64_le(sl)?;
     let collateral_hash = wire::read_hash(sl)?.into();
     let obj_data = wire::read_vec(sl, 16_384)?;
-    let object_type = GovObjectType::from_i32(wire::read_i32_le(sl)?);
+    let object_type = GovObjectType::from_i32(codec::read_i32_le(sl)?);
     let mn_hash: TxHash = wire::read_hash(sl)?.into();
-    let mn_index = wire::read_u32_le(sl)?;
+    let mn_index = codec::read_u32_le(sl)?;
     let masternode_outpoint = OutPoint {
       hash: mn_hash,
       index: mn_index,
@@ -202,7 +202,7 @@ impl GovObject {
     buf.extend_from_slice(&self.revision.to_le_bytes());
     buf.extend_from_slice(&self.time.to_le_bytes());
     // data hex is serialized as a string (CompactSize + bytes)
-    crate::script::encode_compact_size(data_hex.len(), &mut buf);
+    crate::script::write_compact_size(data_hex.len(), &mut buf);
     buf.extend_from_slice(data_hex.as_bytes());
     // outpoint + dummy padding for legacy hash compat
     buf.extend_from_slice(self.masternode_outpoint.hash.as_bytes());
@@ -210,7 +210,7 @@ impl GovObject {
     buf.push(0x00);
     buf.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
     // sig with CompactSize prefix
-    crate::script::encode_compact_size(self.sig.len(), &mut buf);
+    crate::script::write_compact_size(self.sig.len(), &mut buf);
     buf.extend_from_slice(&self.sig);
 
     TxHash::from_bytes(sha256d::Hash::hash(&buf).to_byte_array())
@@ -260,15 +260,15 @@ impl GovVote {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
     let mn_hash: TxHash = wire::read_hash(sl)?.into();
-    let mn_index = wire::read_u32_le(sl)?;
+    let mn_index = codec::read_u32_le(sl)?;
     let masternode_outpoint = OutPoint {
       hash: mn_hash,
       index: mn_index,
     };
     let parent_hash = wire::read_hash(sl)?.into();
-    let outcome = wire::read_i32_le(sl)?;
-    let signal = wire::read_i32_le(sl)?;
-    let time = wire::read_i64_le(sl)?;
+    let outcome = codec::read_i32_le(sl)?;
+    let signal = codec::read_i32_le(sl)?;
+    let time = codec::read_i64_le(sl)?;
     let sig = wire::read_vec(sl, 1024)?;
 
     Ok(Self {

@@ -12,7 +12,7 @@ use crate::wire;
 use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -47,12 +47,12 @@ impl ProUpRevTx {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u16_le(sl)?;
+    let version = codec::read_u16_le(sl)?;
     let pro_tx_hash = wire::read_hash(sl)?.into();
-    let reason_raw = wire::read_u16_le(sl)?;
+    let reason_raw = codec::read_u16_le(sl)?;
     let reason = RevocationReason::from_u16(reason_raw);
     let inputs_hash = wire::read_hash(sl)?.into();
-    let sig = wire::read_type(sl)?;
+    let sig = codec::read_type(sl)?;
 
     Ok(Self {
       version,

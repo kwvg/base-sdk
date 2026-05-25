@@ -6,15 +6,17 @@
 
 //! Network address types for P2P messages.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::service_flags::ServiceFlags;
 
 use bitcoin_consensus_encoding as encoding;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_primitives::CService;
 use dash_primitives::NetworkType;
+use dash_types::codec;
 
 use core::fmt;
 
@@ -33,7 +35,7 @@ pub struct NetAddr {
 impl NetAddr {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let services = ServiceFlags(wire::read_u64_le(sl)?);
+    let services = ServiceFlags(codec::read_u64_le(sl)?);
     let addr = wire::read_cservice(sl)?;
     Ok(Self { services, addr })
   }
@@ -82,8 +84,8 @@ pub struct TimestampedAddr {
 impl TimestampedAddr {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let time = wire::read_u32_le(sl)?;
-    let services = ServiceFlags(wire::read_u64_le(sl)?);
+    let time = codec::read_u32_le(sl)?;
+    let services = ServiceFlags(codec::read_u64_le(sl)?);
     let addr = wire::read_cservice(sl)?;
     Ok(Self { time, services, addr })
   }
@@ -137,10 +139,10 @@ impl AddrV2 {
 
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let net_byte = wire::read_u8(sl)?;
+    let net_byte = codec::read_u8(sl)?;
     let network = NetworkType::from_u8(net_byte);
-    let len = wire::read_compact_size(sl, 512)?;
-    let addr = wire::read_bytes(sl, len)?.to_vec();
+    let len = codec::read_compact_size(sl, 512)?;
+    let addr = codec::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = Self::expected_len(network) {
       if addr.len() != expected {
         return Err(P2pDecodeError::Consensus(format!(
@@ -155,7 +157,7 @@ impl AddrV2 {
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
     buf.push(self.network.to_u8());
-    encode_compact_size(self.addr.len(), &mut buf);
+    codec::write_compact_size(self.addr.len(), &mut buf);
     buf.extend_from_slice(&self.addr);
     buf
   }
@@ -193,12 +195,12 @@ impl AddrV2Entry {
   /// Decodes one entry from a wire-format cursor, advancing it past
   /// the consumed bytes.
   pub(crate) fn decode_from_wire(sl: &mut &[u8]) -> Result<Self, P2pDecodeError> {
-    let time = wire::read_u32_le(sl)?;
-    let services = ServiceFlags(wire::read_compact_u64(sl)?);
-    let net_byte = wire::read_u8(sl)?;
+    let time = codec::read_u32_le(sl)?;
+    let services = ServiceFlags(codec::read_compact_u64(sl)?);
+    let net_byte = codec::read_u8(sl)?;
     let network = NetworkType::from_u8(net_byte);
-    let len = wire::read_compact_size(sl, 512)?;
-    let addr_bytes = wire::read_bytes(sl, len)?.to_vec();
+    let len = codec::read_compact_size(sl, 512)?;
+    let addr_bytes = codec::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = AddrV2::expected_len(network) {
       if addr_bytes.len() != expected {
         return Err(P2pDecodeError::Consensus(format!(
@@ -211,7 +213,7 @@ impl AddrV2Entry {
       network,
       addr: addr_bytes,
     };
-    let port = wire::read_u16_be(sl)?;
+    let port = codec::read_u16_be(sl)?;
     Ok(Self {
       time,
       services,
@@ -228,9 +230,9 @@ impl AddrV2Entry {
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
     buf.extend_from_slice(&self.time.to_le_bytes());
-    encode_compact_size(self.services.0 as usize, &mut buf);
+    codec::write_compact_size(self.services.0 as usize, &mut buf);
     buf.push(self.addr.network.to_u8());
-    encode_compact_size(self.addr.addr.len(), &mut buf);
+    codec::write_compact_size(self.addr.addr.len(), &mut buf);
     buf.extend_from_slice(&self.addr.addr);
     buf.extend_from_slice(&self.port.to_be_bytes());
     buf

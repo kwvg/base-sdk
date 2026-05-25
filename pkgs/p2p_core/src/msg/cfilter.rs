@@ -6,15 +6,16 @@
 
 //! BIP157 compact filter messages: getcfilters, cfilter.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::filter_type::FilterType;
 
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::BlockHeight;
-use dash_primitives::wire;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::BlockHash;
+use dash_types::codec;
 
 /// Maximum filter data bytes.
 const MAX_FILTER_DATA: usize = 256 * 1024;
@@ -34,9 +35,9 @@ pub struct GetCFilters {
 impl GetCFilters {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let filter_type = FilterType(wire::read_u8(sl)?);
-    let start_height = BlockHeight::from_u32(wire::read_u32_le(sl)?);
-    let stop_hash = BlockHash::from_bytes(wire::read_array(sl)?);
+    let filter_type = FilterType(codec::read_u8(sl)?);
+    let start_height = BlockHeight::from_u32(codec::read_u32_le(sl)?);
+    let stop_hash = BlockHash::from_bytes(codec::take(sl)?);
     Ok(Self {
       filter_type,
       start_height,
@@ -82,10 +83,10 @@ pub struct CFilter {
 impl CFilter {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let filter_type = FilterType(wire::read_u8(sl)?);
-    let block_hash = BlockHash::from_bytes(wire::read_array(sl)?);
-    let len = wire::read_compact_size(sl, MAX_FILTER_DATA)?;
-    let filter_data = wire::read_bytes(sl, len)?.to_vec();
+    let filter_type = FilterType(codec::read_u8(sl)?);
+    let block_hash = BlockHash::from_bytes(codec::take(sl)?);
+    let len = codec::read_compact_size(sl, MAX_FILTER_DATA)?;
+    let filter_data = codec::read_bytes(sl, len)?.to_vec();
     Ok(Self {
       filter_type,
       block_hash,
@@ -97,7 +98,7 @@ impl CFilter {
     let mut buf = Vec::new();
     buf.push(self.filter_type.0);
     buf.extend_from_slice(&self.block_hash.to_bytes());
-    encode_compact_size(self.filter_data.len(), &mut buf);
+    codec::write_compact_size(self.filter_data.len(), &mut buf);
     buf.extend_from_slice(&self.filter_data);
     buf
   }

@@ -6,14 +6,15 @@
 
 //! Block header messages: getheaders, headers, sendheaders.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::protocol_version::ProtocolVersion;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::wire;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::{BlockHash, BlockHeader, MerkleRoot};
+use dash_types::codec;
 
 /// Maximum block locator hashes.
 const MAX_LOCATOR: usize = 101;
@@ -35,13 +36,13 @@ pub struct GetHeaders {
 impl GetHeaders {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let version = ProtocolVersion(wire::read_u32_le(sl)?);
-    let count = wire::read_compact_size(sl, MAX_LOCATOR)?;
+    let version = ProtocolVersion(codec::read_u32_le(sl)?);
+    let count = codec::read_compact_size(sl, MAX_LOCATOR)?;
     let mut locator_hashes = Vec::with_capacity(count);
     for _ in 0..count {
-      locator_hashes.push(BlockHash::from_bytes(wire::read_array(sl)?));
+      locator_hashes.push(BlockHash::from_bytes(codec::take(sl)?));
     }
-    let hash_stop = BlockHash::from_bytes(wire::read_array(sl)?);
+    let hash_stop = BlockHash::from_bytes(codec::take(sl)?);
     Ok(Self {
       version,
       locator_hashes,
@@ -52,7 +53,7 @@ impl GetHeaders {
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
     buf.extend_from_slice(&self.version.0.to_le_bytes());
-    encode_compact_size(self.locator_hashes.len(), &mut buf);
+    codec::write_compact_size(self.locator_hashes.len(), &mut buf);
     for h in &self.locator_hashes {
       buf.extend_from_slice(&h.to_bytes());
     }
@@ -89,17 +90,17 @@ pub struct Headers {
 impl Headers {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let count = wire::read_compact_size(sl, MAX_HEADERS)?;
+    let count = codec::read_compact_size(sl, MAX_HEADERS)?;
     let mut headers = Vec::with_capacity(count);
     for _ in 0..count {
-      let version = wire::read_i32_le(sl)?;
-      let prev_hash = BlockHash::from_bytes(wire::read_array(sl)?);
-      let merkle_root = MerkleRoot::from_bytes(wire::read_array(sl)?);
-      let time = wire::read_u32_le(sl)?;
-      let bits = wire::read_u32_le(sl)?;
-      let nonce = wire::read_u32_le(sl)?;
+      let version = codec::read_i32_le(sl)?;
+      let prev_hash = BlockHash::from_bytes(codec::take(sl)?);
+      let merkle_root = MerkleRoot::from_bytes(codec::take(sl)?);
+      let time = codec::read_u32_le(sl)?;
+      let bits = codec::read_u32_le(sl)?;
+      let nonce = codec::read_u32_le(sl)?;
       // Consume the trailing tx_count (always 0).
-      let _tx_count = wire::read_compact_size(sl, 0)?;
+      let _tx_count = codec::read_compact_size(sl, 0)?;
       headers.push(BlockHeader {
         version,
         prev_hash,
@@ -114,7 +115,7 @@ impl Headers {
 
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
-    encode_compact_size(self.headers.len(), &mut buf);
+    codec::write_compact_size(self.headers.len(), &mut buf);
     for h in &self.headers {
       buf.extend_from_slice(&h.version.to_le_bytes());
       buf.extend_from_slice(&h.prev_hash.to_bytes());

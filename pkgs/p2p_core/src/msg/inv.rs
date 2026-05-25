@@ -6,25 +6,26 @@
 
 //! Inventory messages: inv, getdata, notfound.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::inventory::{InvType, Inventory};
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
-use dash_primitives::wire;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
+use dash_types::codec;
 
 /// Maximum inventory items per message.
 const MAX_INV_ITEMS: usize = 50_000;
 
 /// Helper: decode a CompactSize-prefixed vector of inventory items.
 fn decode_inv_list(sl: &mut &[u8]) -> Result<Vec<Inventory>, P2pDecodeError> {
-  let count = wire::read_compact_size(sl, MAX_INV_ITEMS)?;
+  let count = codec::read_compact_size(sl, MAX_INV_ITEMS)?;
   let mut items = Vec::with_capacity(count);
   for _ in 0..count {
-    let raw_type = wire::read_u32_le(sl)?;
-    let hash = Hash256::from_bytes(wire::read_array(sl)?);
+    let raw_type = codec::read_u32_le(sl)?;
+    let hash = Hash256::from_bytes(codec::take(sl)?);
     items.push(Inventory {
       inv_type: InvType::from_u32(raw_type),
       hash,
@@ -35,7 +36,7 @@ fn decode_inv_list(sl: &mut &[u8]) -> Result<Vec<Inventory>, P2pDecodeError> {
 
 /// Helper: encode a CompactSize-prefixed vector of inventory items.
 fn encode_inv_list(items: &[Inventory], buf: &mut Vec<u8>) {
-  encode_compact_size(items.len(), buf);
+  codec::write_compact_size(items.len(), buf);
   for item in items {
     buf.extend_from_slice(&item.inv_type.to_u32().to_le_bytes());
     buf.extend_from_slice(&item.hash.to_bytes());

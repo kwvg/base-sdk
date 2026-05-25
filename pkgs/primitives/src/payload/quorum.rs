@@ -12,7 +12,7 @@ use crate::wire;
 use crate::{QuorumHash, QuorumVvecHash};
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use dash_types::{BlsPublicKeyBytes, BlsSignatureBytes};
 
 use core::fmt;
@@ -63,22 +63,22 @@ impl Commitment {
 
   /// Decodes from a slice positioned mid-stream.
   pub fn decode_inner(sl: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = wire::read_u16_le(sl)?;
-    let llmq_type = LlmqType::from_u8(wire::read_u8(sl)?);
+    let version = codec::read_u16_le(sl)?;
+    let llmq_type = LlmqType::from_u8(codec::read_u8(sl)?);
     let quorum_hash = wire::read_hash(sl)?.into();
 
     let quorum_index = if version == 2 || version == 4 {
-      Some(wire::read_i16_le(sl)?)
+      Some(codec::read_i16_le(sl)?)
     } else {
       None
     };
 
     let signers = wire::read_dynbitset(sl, 1024)?;
     let valid_members = wire::read_dynbitset(sl, 1024)?;
-    let quorum_public_key = wire::read_type(sl)?;
+    let quorum_public_key = codec::read_type(sl)?;
     let quorum_vvec_hash = wire::read_hash(sl)?.into();
-    let quorum_sig = wire::read_type(sl)?;
-    let members_sig = wire::read_type(sl)?;
+    let quorum_sig = codec::read_type(sl)?;
+    let members_sig = codec::read_type(sl)?;
 
     Ok(Self {
       version,
@@ -102,9 +102,9 @@ impl Commitment {
     if let Some(idx) = self.quorum_index {
       buf.extend_from_slice(&idx.to_le_bytes());
     }
-    crate::script::encode_compact_size(self.signers.num_bits as usize, buf);
+    crate::script::write_compact_size(self.signers.num_bits as usize, buf);
     buf.extend_from_slice(&self.signers.data);
-    crate::script::encode_compact_size(self.valid_members.num_bits as usize, buf);
+    crate::script::write_compact_size(self.valid_members.num_bits as usize, buf);
     buf.extend_from_slice(&self.valid_members.data);
     buf.extend_from_slice(&self.quorum_public_key.0);
     buf.extend_from_slice(self.quorum_vvec_hash.as_bytes());
@@ -142,8 +142,8 @@ impl FinalCommitment {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u16_le(sl)?;
-    let height = bitcoin_units::BlockHeight::from_u32(wire::read_u32_le(sl)?);
+    let version = codec::read_u16_le(sl)?;
+    let height = bitcoin_units::BlockHeight::from_u32(codec::read_u32_le(sl)?);
     let commitment = Commitment::decode_inner(sl)?;
 
     Ok(Self {

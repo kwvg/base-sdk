@@ -11,7 +11,7 @@ use crate::wire;
 use crate::QuorumHash;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -45,12 +45,12 @@ impl AssetUnlock {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u8(sl)?;
-    let index = wire::read_u64_le(sl)?;
-    let fee = wire::read_u32_le(sl)?;
-    let requested_height = wire::read_u32_le(sl)?;
+    let version = codec::read_u8(sl)?;
+    let index = codec::read_u64_le(sl)?;
+    let fee = codec::read_u32_le(sl)?;
+    let requested_height = codec::read_u32_le(sl)?;
     let quorum_hash = wire::read_hash(sl)?.into();
-    let quorum_sig = wire::read_type(sl)?;
+    let quorum_sig = codec::read_type(sl)?;
 
     Ok(Self {
       version,

@@ -12,7 +12,7 @@ use crate::MerkleRoot;
 
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_units::BlockHeight;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -52,8 +52,8 @@ impl CoinbaseCommitment {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u16_le(sl)?;
-    let height = BlockHeight::from_u32(wire::read_u32_le(sl)?);
+    let version = codec::read_u16_le(sl)?;
+    let height = BlockHeight::from_u32(codec::read_u32_le(sl)?);
     let merkle_root_mn_list = wire::read_hash(sl)?.into();
 
     let merkle_root_quorums = if version >= 2 {
@@ -63,9 +63,9 @@ impl CoinbaseCommitment {
     };
 
     let (best_cl_height_diff, best_cl_signature, credit_pool_balance) = if version >= 3 {
-      let diff = wire::read_compact_u64(sl)?;
-      let sig = wire::read_type(sl)?;
-      let balance = wire::read_i64_le(sl)?;
+      let diff = codec::read_compact_u64(sl)?;
+      let sig = codec::read_type(sl)?;
+      let balance = codec::read_i64_le(sl)?;
       (Some(diff), Some(sig), Some(balance))
     } else {
       (None, None, None)

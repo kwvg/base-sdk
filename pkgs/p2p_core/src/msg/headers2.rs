@@ -6,15 +6,16 @@
 
 //! Compressed header messages: getheaders2, headers2, sendheaders2.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::compressed_header::CompressionState;
 use crate::primitives::protocol_version::ProtocolVersion;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_primitives::wire;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::BlockHash;
+use dash_types::codec;
 
 /// Maximum block locator hashes.
 const MAX_LOCATOR: usize = 101;
@@ -36,13 +37,13 @@ pub struct GetHeaders2 {
 impl GetHeaders2 {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let version = ProtocolVersion(wire::read_u32_le(sl)?);
-    let count = wire::read_compact_size(sl, MAX_LOCATOR)?;
+    let version = ProtocolVersion(codec::read_u32_le(sl)?);
+    let count = codec::read_compact_size(sl, MAX_LOCATOR)?;
     let mut locator_hashes = Vec::with_capacity(count);
     for _ in 0..count {
-      locator_hashes.push(BlockHash::from_bytes(wire::read_array(sl)?));
+      locator_hashes.push(BlockHash::from_bytes(codec::take(sl)?));
     }
-    let hash_stop = BlockHash::from_bytes(wire::read_array(sl)?);
+    let hash_stop = BlockHash::from_bytes(codec::take(sl)?);
     Ok(Self {
       version,
       locator_hashes,
@@ -53,7 +54,7 @@ impl GetHeaders2 {
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
     buf.extend_from_slice(&self.version.0.to_le_bytes());
-    encode_compact_size(self.locator_hashes.len(), &mut buf);
+    codec::write_compact_size(self.locator_hashes.len(), &mut buf);
     for h in &self.locator_hashes {
       buf.extend_from_slice(&h.to_bytes());
     }
@@ -87,7 +88,7 @@ pub struct Headers2 {
 impl Headers2 {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let count = wire::read_compact_size(sl, MAX_HEADERS)?;
+    let count = codec::read_compact_size(sl, MAX_HEADERS)?;
     let mut state = CompressionState::new();
     let mut headers = Vec::with_capacity(count);
     for _ in 0..count {
@@ -98,7 +99,7 @@ impl Headers2 {
 
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
-    encode_compact_size(self.headers.len(), &mut buf);
+    codec::write_compact_size(self.headers.len(), &mut buf);
     let mut state = CompressionState::new();
     for h in &self.headers {
       state.encode_header(h, &mut buf);

@@ -12,7 +12,7 @@ use crate::validation::DeploymentContext;
 use crate::wire;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 
 use core::fmt;
 
@@ -42,13 +42,13 @@ impl AssetLock {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u8(sl)?;
+    let version = codec::read_u8(sl)?;
 
-    let count = wire::read_compact_size(sl, 100)?;
+    let count = codec::read_compact_size(sl, 100)?;
 
     let mut credit_outputs = Vec::with_capacity(count);
     for _ in 0..count {
-      let raw = wire::read_u64_le(sl)?;
+      let raw = codec::read_u64_le(sl)?;
       let value = bitcoin_units::Amount::from_sat(raw)
         .map_err(|_| DecodeError::CompactSizeExceedsLimit { limit: 0, value: raw })?;
       let script_pubkey = wire::read_script(sl, 10_000)?;

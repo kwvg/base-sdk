@@ -6,13 +6,14 @@
 
 //! Governance sync request message.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
-use dash_primitives::wire;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
+use dash_types::codec;
 
 /// Maximum bloom filter size in bytes.
 const MAX_BLOOM_FILTER: usize = 36_000;
@@ -34,16 +35,16 @@ pub struct GovSync {
 impl GovSync {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let hash = Hash256::from_bytes(wire::read_array(sl)?);
-    let len = wire::read_compact_size(sl, MAX_BLOOM_FILTER)?;
-    let bloom_filter = wire::read_bytes(sl, len)?.to_vec();
+    let hash = Hash256::from_bytes(codec::take(sl)?);
+    let len = codec::read_compact_size(sl, MAX_BLOOM_FILTER)?;
+    let bloom_filter = codec::read_bytes(sl, len)?.to_vec();
     Ok(Self { hash, bloom_filter })
   }
 
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
     buf.extend_from_slice(&self.hash.to_bytes());
-    encode_compact_size(self.bloom_filter.len(), &mut buf);
+    codec::write_compact_size(self.bloom_filter.len(), &mut buf);
     buf.extend_from_slice(&self.bloom_filter);
     buf
   }

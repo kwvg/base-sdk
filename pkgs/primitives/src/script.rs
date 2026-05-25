@@ -137,7 +137,7 @@ impl encoding::Decodable for Script {
 }
 
 /// Encodes a `usize` as a CompactSize integer.
-pub(crate) fn encode_compact_size(value: usize, buf: &mut Vec<u8>) {
+pub(crate) fn write_compact_size(value: usize, buf: &mut Vec<u8>) {
   match value {
     0..=0xFC => buf.push(value as u8),
     0xFD..=0xFFFF => {

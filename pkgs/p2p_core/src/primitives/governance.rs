@@ -6,14 +6,16 @@
 
 //! Governance object and vote types.
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
 use dash_primitives::OutPoint;
+use dash_types::codec;
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -184,18 +186,18 @@ impl GovernanceObject {
   pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let parent_hash = wire::read_hash(sl)?;
-    let revision = wire::read_u32_le(sl)?;
-    let time = wire::read_i64_le(sl)?;
+    let revision = codec::read_u32_le(sl)?;
+    let time = codec::read_i64_le(sl)?;
     let collateral_hash = wire::read_hash(sl)?;
     let outpoint_hash: dash_primitives::TxHash = wire::read_hash(sl)?.into();
-    let outpoint_n = wire::read_u32_le(sl)?;
+    let outpoint_n = codec::read_u32_le(sl)?;
     let mn_outpoint = OutPoint {
       hash: outpoint_hash,
       index: outpoint_n,
     };
-    let data_len = wire::read_compact_size(sl, MAX_P2P_PAYLOAD)?;
-    let obj_data = wire::read_bytes(sl, data_len)?.to_vec();
-    let sig = BlsSignatureBytes(wire::read_array(sl)?);
+    let data_len = codec::read_compact_size(sl, MAX_P2P_PAYLOAD)?;
+    let obj_data = codec::read_bytes(sl, data_len)?.to_vec();
+    let sig = BlsSignatureBytes(codec::take(sl)?);
     Ok(Self {
       parent_hash,
       revision,
@@ -215,7 +217,7 @@ impl GovernanceObject {
     buf.extend_from_slice(&self.collateral_hash.to_bytes());
     buf.extend_from_slice(&self.mn_outpoint.hash.to_bytes());
     buf.extend_from_slice(&self.mn_outpoint.index.to_le_bytes());
-    encode_compact_size(self.data.len(), &mut buf);
+    codec::write_compact_size(self.data.len(), &mut buf);
     buf.extend_from_slice(&self.data);
     buf.extend_from_slice(&self.sig.0);
     buf
@@ -260,16 +262,16 @@ impl GovernanceVote {
   pub(crate) fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
     let outpoint_hash: dash_primitives::TxHash = wire::read_hash(sl)?.into();
-    let outpoint_n = wire::read_u32_le(sl)?;
+    let outpoint_n = codec::read_u32_le(sl)?;
     let mn_outpoint = OutPoint {
       hash: outpoint_hash,
       index: outpoint_n,
     };
     let parent_hash = wire::read_hash(sl)?;
-    let outcome = VoteOutcome::from_u32(wire::read_u32_le(sl)?);
-    let signal = VoteSignal::from_u32(wire::read_u32_le(sl)?);
-    let time = wire::read_i64_le(sl)?;
-    let sig = BlsSignatureBytes(wire::read_array(sl)?);
+    let outcome = VoteOutcome::from_u32(codec::read_u32_le(sl)?);
+    let signal = VoteSignal::from_u32(codec::read_u32_le(sl)?);
+    let time = codec::read_i64_le(sl)?;
+    let sig = BlsSignatureBytes(codec::take(sl)?);
     Ok(Self {
       mn_outpoint,
       parent_hash,

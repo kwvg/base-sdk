@@ -11,7 +11,7 @@ use crate::wire;
 use crate::QuorumHash;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use dash_types::BlsSignatureBytes;
 
 use core::fmt;
@@ -41,10 +41,10 @@ impl MnHardFork {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u8(sl)?;
-    let version_bit = wire::read_u8(sl)?;
+    let version = codec::read_u8(sl)?;
+    let version_bit = codec::read_u8(sl)?;
     let quorum_hash = wire::read_hash(sl)?.into();
-    let sig = wire::read_type(sl)?;
+    let sig = codec::read_type(sl)?;
 
     Ok(Self {
       version,

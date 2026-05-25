@@ -19,7 +19,7 @@ use crate::{InputsHash, TxHash};
 
 use bitcoin_consensus_encoding as encoding;
 use dash_script::KeyId;
-use dash_types::codec::DecodeError;
+use dash_types::codec::{self, DecodeError};
 use dash_types::{BlsPublicKeyBytes, PlatformNodeId};
 
 use core::fmt;
@@ -91,12 +91,12 @@ impl ProRegTx {
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
     let sl = &mut &data[..];
 
-    let version = wire::read_u16_le(sl)?;
-    let mn_type_raw = wire::read_u16_le(sl)?;
+    let version = codec::read_u16_le(sl)?;
+    let mn_type_raw = codec::read_u16_le(sl)?;
     let mn_type = MnType::from_u16(mn_type_raw);
-    let mode = wire::read_u16_le(sl)?;
+    let mode = codec::read_u16_le(sl)?;
     let collateral_hash = wire::read_hash(sl)?.into();
-    let collateral_index = wire::read_u32_le(sl)?;
+    let collateral_index = codec::read_u32_le(sl)?;
 
     let net_info = if version >= 3 {
       let raw = wire::read_vec(sl, 1024)?;
@@ -105,18 +105,18 @@ impl ProRegTx {
       NetInfo::Legacy(wire::read_cservice(sl)?)
     };
 
-    let key_id_owner = wire::read_type(sl)?;
-    let pub_key_operator = wire::read_type(sl)?;
-    let key_id_voting = wire::read_type(sl)?;
-    let operator_reward = wire::read_u16_le(sl)?;
+    let key_id_owner = codec::read_type(sl)?;
+    let pub_key_operator = codec::read_type(sl)?;
+    let key_id_voting = codec::read_type(sl)?;
+    let operator_reward = codec::read_u16_le(sl)?;
     let script_payout = wire::read_script(sl, 10_000)?;
     let inputs_hash = wire::read_hash(sl)?.into();
 
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
-      let node_id = wire::read_type(sl)?;
+      let node_id = codec::read_type(sl)?;
       if version < 3 {
-        let p2p = wire::read_u16_le(sl)?;
-        let http = wire::read_u16_le(sl)?;
+        let p2p = codec::read_u16_le(sl)?;
+        let http = codec::read_u16_le(sl)?;
         (Some(node_id), Some(p2p), Some(http))
       } else {
         (Some(node_id), None, None)

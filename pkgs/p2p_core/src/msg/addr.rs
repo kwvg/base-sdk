@@ -6,14 +6,16 @@
 
 //! Address messages: addr, addrv2 (getaddr and sendaddrv2 are empty).
 
-use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, MAX_P2P_PAYLOAD};
+use crate::encode::MAX_P2P_PAYLOAD;
 use crate::error::P2pDecodeError;
 use crate::prelude::*;
 use crate::primitives::net_addr::{AddrV2Entry, TimestampedAddr};
 use crate::primitives::service_flags::ServiceFlags;
 
 use bitcoin_consensus_encoding as encoding;
+use dash_primitives::codec::{BufferDecoder, VecEncoder};
 use dash_primitives::wire;
+use dash_types::codec;
 
 /// Maximum addresses per message.
 const MAX_ADDR: usize = 1_000;
@@ -29,11 +31,11 @@ pub struct Addr {
 impl Addr {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let count = wire::read_compact_size(sl, MAX_ADDR)?;
+    let count = codec::read_compact_size(sl, MAX_ADDR)?;
     let mut addrs = Vec::with_capacity(count);
     for _ in 0..count {
-      let time = wire::read_u32_le(sl)?;
-      let services = ServiceFlags(wire::read_u64_le(sl)?);
+      let time = codec::read_u32_le(sl)?;
+      let services = ServiceFlags(codec::read_u64_le(sl)?);
       let addr = wire::read_cservice(sl)?;
       addrs.push(TimestampedAddr { time, services, addr });
     }
@@ -42,7 +44,7 @@ impl Addr {
 
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
-    encode_compact_size(self.addrs.len(), &mut buf);
+    codec::write_compact_size(self.addrs.len(), &mut buf);
     for a in &self.addrs {
       buf.extend_from_slice(&a.time.to_le_bytes());
       buf.extend_from_slice(&a.services.0.to_le_bytes());
@@ -78,7 +80,7 @@ pub struct AddrV2Msg {
 impl AddrV2Msg {
   fn decode_from_slice(data: &[u8]) -> Result<Self, P2pDecodeError> {
     let sl = &mut &data[..];
-    let count = wire::read_compact_size(sl, MAX_ADDR)?;
+    let count = codec::read_compact_size(sl, MAX_ADDR)?;
     let mut addrs = Vec::with_capacity(count);
     for _ in 0..count {
       addrs.push(AddrV2Entry::decode_from_wire(sl)?);
@@ -88,7 +90,7 @@ impl AddrV2Msg {
 
   fn encode_to_vec(&self) -> Vec<u8> {
     let mut buf = Vec::new();
-    encode_compact_size(self.addrs.len(), &mut buf);
+    codec::write_compact_size(self.addrs.len(), &mut buf);
     for a in &self.addrs {
       let entry_bytes = encoding::encode_to_vec(a);
       buf.extend_from_slice(&entry_bytes);

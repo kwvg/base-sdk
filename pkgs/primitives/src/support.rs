@@ -9,8 +9,8 @@
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding as encoding;
-use dash_types::codec::DecodeError;
 use bitcoin_internals::array::ArrayExt as _;
+use dash_types::codec::{self, DecodeError};
 
 use core::fmt;
 
@@ -519,29 +519,27 @@ impl ExtendedNetInfo {
   ///
   /// Returns `DecodeError` if the data is malformed.
   pub fn decode(data: &[u8]) -> Result<Self, DecodeError> {
-    use crate::wire;
-
     let sl = &mut &data[..];
-    let version = wire::read_u8(sl)?;
-    let purpose_count = wire::read_compact_size(sl, MAX_PURPOSES)?;
+    let version = codec::read_u8(sl)?;
+    let purpose_count = codec::read_compact_size(sl, MAX_PURPOSES)?;
 
     let mut entries = Vec::with_capacity(purpose_count);
     for _ in 0..purpose_count {
-      let purpose = NetInfoPurpose::from_u8(wire::read_u8(sl)?);
-      let entry_count = wire::read_compact_size(sl, MAX_ENTRIES)?;
+      let purpose = NetInfoPurpose::from_u8(codec::read_u8(sl)?);
+      let entry_count = codec::read_compact_size(sl, MAX_ENTRIES)?;
       let mut group = Vec::with_capacity(entry_count);
 
       for _ in 0..entry_count {
-        let entry_type = wire::read_u8(sl)?;
+        let entry_type = codec::read_u8(sl)?;
         let entry = match entry_type {
           0x01 => NetInfoEntry::Service(CService {
-            addr: wire::read_array(sl)?,
-            port: wire::read_u16_be(sl)?,
+            addr: codec::take(sl)?,
+            port: codec::read_u16_be(sl)?,
           }),
           0x02 => {
-            let name_len = wire::read_compact_size(sl, MAX_DOMAIN)?;
-            let name = wire::read_bytes(sl, name_len)?.to_vec();
-            let port = wire::read_u16_be(sl)?;
+            let name_len = codec::read_compact_size(sl, MAX_DOMAIN)?;
+            let name = codec::read_bytes(sl, name_len)?.to_vec();
+            let port = codec::read_u16_be(sl)?;
             NetInfoEntry::Domain { name, port }
           }
           _ => NetInfoEntry::Invalid,
