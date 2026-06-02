@@ -18,7 +18,7 @@ use dash_types::BlsSignatureBytes;
 use core::fmt;
 
 /// Governance vote outcome.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VoteOutcome {
   /// No vote cast.
   None,
@@ -85,7 +85,7 @@ impl dash_types::TryFromUint<u32> for VoteOutcome {
 }
 
 /// Governance vote signal type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VoteSignal {
   /// No signal.
   None,
@@ -157,7 +157,7 @@ impl dash_types::TryFromUint<u32> for VoteSignal {
 }
 
 /// A governance object (proposal or superblock trigger).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GovernanceObject {
   /// Parent object hash (zero for root objects).
@@ -234,7 +234,7 @@ impl encoding::Decodable for GovernanceObject {
 }
 
 /// A masternode vote on a governance object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GovernanceVote {
   /// Masternode outpoint casting the vote.

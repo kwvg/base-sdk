@@ -18,14 +18,14 @@ type State = [u32; 16];
 pub(super) type BlockWords = [u32; 32];
 
 /// Selects which counter word is injected at one schedule checkpoint.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum CounterWord {
   Counter(usize),
   InvertedCounter(usize),
 }
 
 /// Schedule bundle that receives one HAIFA counter injection.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct CounterInjection {
   bundle: usize,
   words: [CounterWord; 4],

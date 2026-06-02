@@ -89,7 +89,7 @@ macro_rules! define_network_messages {
     /// not-yet-implemented messages use `Vec<u8>` to hold the raw
     /// payload so callers can identify *what* was received (for
     /// logging) without needing a full decoder.
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
     pub enum DashNetworkMessage {
       $( $(#[$p_doc])* $p_variant($p_type), )*
       $( $(#[$pe_doc])* $pe_variant, )*

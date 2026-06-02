@@ -12,7 +12,7 @@ use core::fmt;
 use core::marker::PhantomData;
 
 /// Generic decoder for N-byte hash types.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct HashDecoder<const N: usize>(encoding::ArrayDecoder<N>);
 
 impl<const N: usize> HashDecoder<N> {
@@ -29,7 +29,7 @@ impl<const N: usize> Default for HashDecoder<N> {
 }
 
 /// Decode error for hash types.
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HashDecoderError(pub encoding::UnexpectedEofError);
 
 impl fmt::Display for HashDecoderError {
@@ -59,7 +59,7 @@ impl<const N: usize> encoding::Decoder for HashDecoder<N> {
 }
 
 /// Typed decoder that produces a concrete hash type from N raw bytes.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct HashTypeDecoder<T, const N: usize>(HashDecoder<N>, PhantomData<T>);
 
 impl<T, const N: usize> HashTypeDecoder<T, N> {

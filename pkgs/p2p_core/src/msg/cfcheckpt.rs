@@ -18,7 +18,7 @@ use dash_primitives::BlockHash;
 const MAX_CFCHECKPT: usize = 1_000;
 
 /// Requests evenly-spaced compact filter checkpoints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GetCFCheckpt {
   /// Filter type.
   pub filter_type: FilterType,
@@ -57,7 +57,7 @@ impl encoding::Decodable for GetCFCheckpt {
 }
 
 /// Response carrying filter header checkpoints at 1000-block intervals.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CFCheckpt {
   /// Filter type.
   pub filter_type: FilterType,

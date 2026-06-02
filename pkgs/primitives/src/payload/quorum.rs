@@ -23,7 +23,7 @@ use core::fmt;
 /// - v2: legacy + indexed (quorum_index)
 /// - v3: basic
 /// - v4: basic + indexed (quorum_index)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Commitment {
   /// 1=legacy, 2=+indexed, 3=basic, 4=basic+idx.
@@ -124,7 +124,7 @@ impl fmt::Display for Commitment {
 }
 
 /// Tx-level wrapper for Commitment (type 6).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct FinalCommitment {
   /// Payload version.
   pub version: u16,

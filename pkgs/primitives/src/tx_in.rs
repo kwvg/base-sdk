@@ -14,7 +14,7 @@ use bitcoin_consensus_encoding as encoding;
 use core::fmt;
 
 /// A transaction input.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TxIn {
   /// The outpoint being spent.
@@ -53,7 +53,7 @@ impl encoding::Encodable for TxIn {
 }
 
 /// Decoder for [`TxIn`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TxInDecoder(encoding::Decoder3<OutPointDecoder, ScriptDecoder, encoding::ArrayDecoder<4>>);
 
 impl TxInDecoder {
@@ -74,7 +74,7 @@ impl Default for TxInDecoder {
 }
 
 /// Decode error for [`TxIn`].
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TxInDecoderError {
   /// Failed to decode the outpoint.
   Outpoint(OutPointDecoderError),

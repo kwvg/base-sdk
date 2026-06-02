@@ -31,7 +31,7 @@ const MAX_VERSION_CACHE: usize = 7;
 /// delta-encoded against its predecessor and a shared MRU version
 /// cache. Create one `CompressionState` per `headers2` message and
 /// feed headers through it in order.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CompressionState {
   /// MRU version cache (front = most recently used).
   pub version_cache: Vec<i32>,

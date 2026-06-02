@@ -35,7 +35,7 @@ pub(crate) fn encode_compact_size(value: usize, buf: &mut Vec<u8>) {
 }
 
 /// Error wrapper for cursor-based decode operations.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WireDecodeError(pub(crate) String);
 
 impl fmt::Display for WireDecodeError {

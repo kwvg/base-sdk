@@ -48,7 +48,7 @@ const P2PK_COMPRESSED_KEY_LEN: usize = 33;
 const P2PK_UNCOMPRESSED_KEY_LEN: usize = 65;
 
 /// Known output script patterns.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ScriptKind {
   /// Pay-to-public-key-hash.
   P2pkh,

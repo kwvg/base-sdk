@@ -23,7 +23,7 @@ macro_rules! define_opcodes {
     /// Every variant corresponds to exactly one byte value on the wire. Bytes `0x01..=0x4b` are
     /// direct data pushes (the byte *is* the push length); use [`Opcode::is_direct_push`] to
     /// test for them.
-    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
     #[repr(u8)]
     pub enum Opcode {
       $(

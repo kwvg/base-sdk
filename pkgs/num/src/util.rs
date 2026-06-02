@@ -136,7 +136,7 @@ macro_rules! make_hash256 {
 }
 
 /// Generic decoder for hash256 newtypes.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Hash256TypeDecoder<T>(
   bitcoin_consensus_encoding::ArrayDecoder<32>,
   core::marker::PhantomData<T>,
@@ -159,7 +159,7 @@ impl<T> Default for Hash256TypeDecoder<T> {
 }
 
 /// Decode error for hash256 newtypes.
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Hash256TypeDecoderError(pub bitcoin_consensus_encoding::UnexpectedEofError);
 
 impl core::fmt::Display for Hash256TypeDecoderError {

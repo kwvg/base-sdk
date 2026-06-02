@@ -19,7 +19,7 @@ use dash_primitives::BlockHash;
 const MAX_CFHEADERS: usize = 2_000;
 
 /// Requests compact filter headers for a range of blocks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GetCFHeaders {
   /// Filter type.
   pub filter_type: FilterType,
@@ -66,7 +66,7 @@ impl encoding::Decodable for GetCFHeaders {
 }
 
 /// Response carrying filter headers and their hashes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CFHeaders {
   /// Filter type.
   pub filter_type: FilterType,

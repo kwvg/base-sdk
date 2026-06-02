@@ -28,7 +28,7 @@ use core::fmt;
 const MAX_VCH_SIG_SIZE: usize = 256;
 
 /// Masternode network info: legacy CService or structured extended format.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum NetInfo {
   /// ADDRv1 CService (18 bytes).
   Legacy(CService),
@@ -41,7 +41,7 @@ pub enum NetInfo {
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
 /// - v3: ExtAddr (extended network info)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProRegTx {
   /// 1=LegacyBLS, 2=BasicBLS, 3=ExtAddr.
   pub version: u16,

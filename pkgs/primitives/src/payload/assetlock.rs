@@ -17,7 +17,7 @@ use bitcoin_consensus_encoding as encoding;
 use core::fmt;
 
 /// AssetLock: L1-to-Platform (type 8).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct AssetLock {
   /// Payload version.
   pub version: u8,
@@ -73,7 +73,7 @@ impl encoding::Decodable for AssetLock {
 }
 
 /// Asset lock validation failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AssetLockInvalid {
   /// `bad-assetlocktx-version`
   BadVersion { version: u8 },

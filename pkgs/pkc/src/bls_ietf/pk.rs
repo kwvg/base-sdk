@@ -15,7 +15,7 @@ use blst::min_pk;
 use blst::BLST_ERROR;
 
 /// A BLS public key (48-byte compressed G1 point).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
   feature = "serde",

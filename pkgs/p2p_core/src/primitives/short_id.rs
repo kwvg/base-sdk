@@ -107,7 +107,7 @@ static DASH_IDS: [&str; DASH_COUNT] = [
 ];
 
 /// A resolved V2 short ID.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ShortId(pub u8);
 
 impl ShortId {

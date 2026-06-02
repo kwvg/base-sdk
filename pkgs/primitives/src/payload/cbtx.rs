@@ -22,7 +22,7 @@ use core::fmt;
 /// - v1: base fields (version, height, merkle_root_mn_list)
 /// - v2: adds merkle_root_quorums
 /// - v3: adds ChainLock proof and credit pool balance
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CoinbaseCommitment {
   /// Payload version (1, 2, or 3).
   pub version: u16,
@@ -94,7 +94,7 @@ impl encoding::Decodable for CoinbaseCommitment {
 }
 
 /// Coinbase commitment validation failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CbTxInvalid {
   /// `bad-cbtx-version`
   BadVersion { version: u16 },

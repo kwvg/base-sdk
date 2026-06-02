@@ -16,7 +16,7 @@ use blst::min_pk;
 use core::fmt;
 
 /// BLS signature scheme (determines the DST).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Scheme {
   /// Basic scheme (NUL augmentation).
   Basic,

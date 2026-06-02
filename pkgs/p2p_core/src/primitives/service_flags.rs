@@ -12,7 +12,7 @@ use core::fmt;
 use core::ops;
 
 /// Bitfield advertised in `version` messages describing node capabilities.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
 pub struct ServiceFlags(pub u64);
 
 impl ServiceFlags {
@@ -87,7 +87,7 @@ impl encoding::Encodable for ServiceFlags {
 }
 
 /// Decoder for [`ServiceFlags`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ServiceFlagsDecoder(encoding::ArrayDecoder<8>);
 
 impl ServiceFlagsDecoder {

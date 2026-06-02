@@ -17,7 +17,7 @@ use core::fmt;
 pub struct CompactTarget(pub u32);
 
 /// Result of decoding a compact difficulty target.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct DecodedTarget {
   /// The decoded 256-bit target value.
   pub value: Arith256,
@@ -111,7 +111,7 @@ impl bitcoin_consensus_encoding::Decodable for CompactTarget {
 }
 
 /// Decoder for [`CompactTarget`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CompactTargetDecoder(bitcoin_consensus_encoding::ArrayDecoder<4>);
 
 impl bitcoin_consensus_encoding::Decoder for CompactTargetDecoder {

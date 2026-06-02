@@ -19,7 +19,7 @@ use hex_conservative::DisplayHex;
 use core::fmt;
 
 /// Governance object type codes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum GovObjectType {
   /// Unknown or unrecognized type.
   Unknown,
@@ -72,7 +72,7 @@ impl fmt::Display for GovObjectType {
 ///   "end_epoch": 1703000000
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Proposal {
   /// Short name (max 40 chars, lowercase alphanum + `-_`).
   pub name: String,
@@ -99,7 +99,7 @@ pub struct Proposal {
 ///   "proposal_hashes": "hash1|hash2"
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Trigger {
   /// Block height at which payments occur.
   pub event_block_height: i32,
@@ -112,7 +112,7 @@ pub struct Trigger {
 }
 
 /// Decoded governance object data payload.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum GovData {
   /// Budget proposal.
   Proposal(Proposal),
@@ -130,7 +130,7 @@ pub enum GovData {
 /// || type(i32) || masternode_outpoint(36)
 /// || sig(CompactSize + bytes)
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GovObject {
   /// Parent object hash (zero for root).
   pub hash_parent: TxHash,
@@ -229,7 +229,7 @@ impl GovObject {
 /// || outcome(i32) || signal(i32) || time(i64)
 /// || sig(CompactSize + bytes)
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GovVote {
   /// Voting masternode outpoint.
   pub masternode_outpoint: OutPoint,
@@ -294,7 +294,7 @@ impl GovVote {
 }
 
 /// Governance proposal validation failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProposalInvalid {
   /// Name is empty.
   NameEmpty,

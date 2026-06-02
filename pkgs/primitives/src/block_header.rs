@@ -14,7 +14,7 @@ use bitcoin_internals::array::ArrayExt as _;
 use core::fmt;
 
 /// A Dash block header (80 bytes on the wire).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct BlockHeader {
   /// Block version.
   pub version: i32,
@@ -72,7 +72,7 @@ impl encoding::Encodable for BlockHeader {
 }
 
 /// Decoder for [`BlockHeader`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BlockHeaderDecoder(encoding::ArrayDecoder<80>);
 
 impl BlockHeaderDecoder {
@@ -89,7 +89,7 @@ impl Default for BlockHeaderDecoder {
 }
 
 /// Decode error for [`BlockHeader`].
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlockHeaderDecoderError(encoding::UnexpectedEofError);
 
 impl fmt::Display for BlockHeaderDecoderError {

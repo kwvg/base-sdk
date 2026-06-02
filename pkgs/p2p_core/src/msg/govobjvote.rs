@@ -12,7 +12,7 @@ use crate::primitives::governance::GovernanceVote;
 use bitcoin_consensus_encoding as encoding;
 
 /// A masternode vote on a governance object.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GovObjVote {
   /// The vote.
   pub vote: GovernanceVote,

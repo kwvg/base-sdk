@@ -21,7 +21,7 @@ use core::fmt;
 ///
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProUpRevTx {
   /// 1=LegacyBLS, 2=BasicBLS.
   pub version: u16,

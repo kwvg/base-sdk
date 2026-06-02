@@ -12,7 +12,7 @@ use dash_num::Hash256;
 use core::fmt;
 
 /// Inventory object type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum InvType {
   /// Error / not used.
   Error,
@@ -78,7 +78,7 @@ impl fmt::Display for InvType {
 }
 
 /// An inventory vector: a typed 32-byte hash.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Inventory {
   /// Object type.
   pub inv_type: InvType,
@@ -112,7 +112,7 @@ impl encoding::Encodable for Inventory {
 type InventoryInnerDecoder = encoding::Decoder2<encoding::ArrayDecoder<4>, encoding::ArrayDecoder<32>>;
 
 /// Decoder for [`Inventory`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InventoryDecoder(InventoryInnerDecoder);
 
 /// Decode error for [`Inventory`].

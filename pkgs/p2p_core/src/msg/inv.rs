@@ -42,7 +42,7 @@ fn encode_inv_list(items: &[Inventory], buf: &mut Vec<u8>) {
 }
 
 /// Announces available inventory to a peer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Inv {
   /// Inventory items being announced.
   pub inventory: Vec<Inventory>,
@@ -72,7 +72,7 @@ impl encoding::Decodable for Inv {
 }
 
 /// Requests specific inventory items from a peer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GetData {
   /// Inventory items being requested.
   pub inventory: Vec<Inventory>,
@@ -102,7 +102,7 @@ impl encoding::Decodable for GetData {
 }
 
 /// Indicates requested inventory items were not found.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NotFound {
   /// Missing inventory items.
   pub inventory: Vec<Inventory>,

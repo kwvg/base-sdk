@@ -26,7 +26,7 @@ pub type Chaining = [u64; NW];
 /// One 64-byte Skein block decoded as eight little-endian words.
 pub type BlockWords = [u64; NW];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct UbiTweak {
   /// Total number of bytes seen so far in this UBI stream.
   pub position: u64,

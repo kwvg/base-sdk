@@ -48,7 +48,7 @@ impl encoding::Encodable for OutPoint {
 }
 
 /// Decoder for [`OutPoint`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OutPointDecoder(encoding::ArrayDecoder<36>);
 
 impl OutPointDecoder {
@@ -65,7 +65,7 @@ impl Default for OutPointDecoder {
 }
 
 /// Decode error for [`OutPoint`].
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutPointDecoderError(encoding::UnexpectedEofError);
 
 impl fmt::Display for OutPointDecoderError {

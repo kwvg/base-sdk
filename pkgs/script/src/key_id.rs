@@ -11,7 +11,7 @@ use bitcoin_consensus_encoding as encoding;
 use core::fmt;
 
 /// 20-byte public key hash (RIPEMD-160 of SHA-256).
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct KeyId(#[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex::w20"))] pub [u8; 20]);
@@ -87,7 +87,7 @@ impl encoding::Encodable for KeyId {
 }
 
 /// Decoder for [`KeyId`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct KeyIdDecoder(encoding::ArrayDecoder<20>);
 
 impl KeyIdDecoder {
@@ -104,7 +104,7 @@ impl Default for KeyIdDecoder {
 }
 
 /// Decode error for [`KeyId`].
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KeyIdDecoderError(encoding::UnexpectedEofError);
 
 impl fmt::Display for KeyIdDecoderError {

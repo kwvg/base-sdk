@@ -27,7 +27,7 @@ use core::fmt;
 /// - v1: LegacyBLS (no mn_type field)
 /// - v2: BasicBLS (adds mn_type)
 /// - v3: ExtAddr (extended network info)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProUpServTx {
   /// 1=LegacyBLS, 2=BasicBLS, 3=ExtAddr.
   pub version: u16,

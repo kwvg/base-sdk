@@ -34,7 +34,7 @@ pub struct ChainTxData {
 }
 
 /// Version bits deployment for a consensus rule change (BIP9).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Bip9Deployment {
   /// Bit position in the block version field.
   pub bit: i32,
@@ -69,7 +69,7 @@ impl Bip9Deployment {
 }
 
 /// Version bits deployments indexed by deployment position.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Bip9Deployments {
   /// Reserved deployment used only for testing.
   pub test_dummy: Bip9Deployment,
@@ -78,7 +78,7 @@ pub struct Bip9Deployments {
 }
 
 /// Buried deployment positions with hardcoded activation heights.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum BuriedDeployment {
   /// BIP34 (height in coinbase).
   HeightInCoinbase,
@@ -113,7 +113,7 @@ pub enum BuriedDeployment {
 }
 
 /// Long-living masternode quorum type identifiers.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum LlmqType {
   /// 50 members, 60% threshold.
   Llmq50_60,
@@ -146,7 +146,7 @@ pub enum LlmqType {
 }
 
 /// Parameters that influence chain consensus.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ConsensusParams {
   /// Hash of the genesis block.
   pub hash_genesis_block: Hash256,
@@ -290,7 +290,7 @@ impl ConsensusParams {
 }
 
 /// Base58 address version prefixes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Base58Prefixes {
   /// Version byte for pay-to-pubkey-hash addresses.
   pub pubkey_address: u8,

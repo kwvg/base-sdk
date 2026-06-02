@@ -15,7 +15,7 @@ const WORDS: usize = 16;
 const QWORDS: usize = 32;
 
 /// Selects whether a helper shift moves bits left or right.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum ShiftDir {
   Left,
   Right,

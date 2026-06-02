@@ -28,7 +28,7 @@ const MAX_VCH_SIG_SIZE: usize = 256;
 ///
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProUpRegTx {
   /// 1=LegacyBLS, 2=BasicBLS.
   pub version: u16,

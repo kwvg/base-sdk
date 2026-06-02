@@ -11,7 +11,7 @@ use bitcoin_consensus_encoding as encoding;
 use core::fmt;
 
 /// Keepalive request carrying a random nonce.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Ping {
   /// Random nonce echoed back in the corresponding `Pong`.
   pub nonce: u64,
@@ -30,7 +30,7 @@ impl encoding::Encodable for Ping {
 }
 
 /// Decoder for [`Ping`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PingDecoder(encoding::ArrayDecoder<8>);
 
 impl PingDecoder {
@@ -84,7 +84,7 @@ impl encoding::Decodable for Ping {
 }
 
 /// Keepalive response echoing the nonce from a `Ping`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Pong {
   /// Nonce from the original `Ping`.
   pub nonce: u64,
@@ -103,7 +103,7 @@ impl encoding::Encodable for Pong {
 }
 
 /// Decoder for [`Pong`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PongDecoder(encoding::ArrayDecoder<8>);
 
 impl PongDecoder {

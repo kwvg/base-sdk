@@ -11,7 +11,7 @@ use bitcoin_consensus_encoding as encoding;
 use core::fmt;
 
 /// A 12-byte, null-padded ASCII command identifying a P2P message type.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct CommandString([u8; 12]);
 
 impl CommandString {
@@ -228,7 +228,7 @@ impl encoding::Encodable for CommandString {
 }
 
 /// Decoder for [`CommandString`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CommandStringDecoder(encoding::ArrayDecoder<12>);
 
 impl CommandStringDecoder {

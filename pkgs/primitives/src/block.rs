@@ -16,7 +16,7 @@ use bitcoin_consensus_encoding as encoding;
 use core::fmt;
 
 /// A Dash block: header followed by a vector of transactions.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Block {
   /// Block header (80 bytes).
   pub header: BlockHeader,
@@ -60,7 +60,7 @@ impl encoding::Encodable for Block {
 }
 
 /// Decoder for [`Block`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BlockDecoder(encoding::Decoder2<BlockHeaderDecoder, encoding::VecDecoder<Transaction>>);
 
 impl BlockDecoder {
@@ -80,7 +80,7 @@ impl Default for BlockDecoder {
 }
 
 /// Decode error for [`Block`].
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BlockDecoderError {
   /// Failed to decode the header.
   Header(BlockHeaderDecoderError),
@@ -132,7 +132,7 @@ impl encoding::Decodable for Block {
 }
 
 /// Block validation failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BlockInvalid {
   /// `bad-blk-length`
   BadBlockLength { size: usize },

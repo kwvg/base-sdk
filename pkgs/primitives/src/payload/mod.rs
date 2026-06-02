@@ -38,7 +38,7 @@ pub use quorum::{Commitment, FinalCommitment};
 ///
 /// Provides a unified dispatch over all Dash special transaction types. Unknown
 /// or future types are stored as opaque bytes for forward compatibility.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SpecialPayload {
   /// Masternode registration (type 1).
   ProviderRegister(ProRegTx),
@@ -68,7 +68,7 @@ pub enum SpecialPayload {
 }
 
 /// Error decoding a special payload.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct PayloadError {
   /// Which transaction type was being decoded.
   pub tx_type: TxType,

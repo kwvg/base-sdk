@@ -18,7 +18,7 @@ use dash_primitives::wire;
 const MAX_ADDR: usize = 1_000;
 
 /// V1 address announcement carrying timestamped addresses.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Addr {
   /// Timestamped v1 address entries.
   pub addrs: Vec<TimestampedAddr>,
@@ -66,7 +66,7 @@ impl encoding::Decodable for Addr {
 }
 
 /// BIP155 v2 address announcement.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct AddrV2Msg {
   /// BIP155 address entries.
   pub addrs: Vec<AddrV2Entry>,

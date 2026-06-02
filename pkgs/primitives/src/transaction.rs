@@ -28,7 +28,7 @@ pub const MAX_EXTRA_PAYLOAD_SIZE: usize = 100_000;
 ///
 /// Special transactions (type != Spend, version >= 3) carry an `extra_payload`
 /// decoded separately by payload-specific decoders.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Transaction {
   /// Transaction version (lower 16 bits of the wire i32).
@@ -144,12 +144,12 @@ impl encoding::Encodable for Transaction {
 ///
 /// State machine that decodes the packed version first, then inputs, outputs,
 /// lock_time, and conditionally the extra payload.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TransactionDecoder {
   state: TxDecoderState,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum TxDecoderState {
   /// Decoding the 4-byte packed version.
   Version(encoding::ArrayDecoder<4>),
@@ -205,7 +205,7 @@ impl Default for TransactionDecoder {
 }
 
 /// Decode error for [`Transaction`].
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransactionDecoderError {
   /// Failed to decode the packed version field.
   Version(encoding::UnexpectedEofError),
@@ -400,7 +400,7 @@ impl encoding::Decodable for Transaction {
 }
 
 /// Transaction validation failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TxInvalid {
   /// `bad-txns-vin-empty`
   EmptyInputs,

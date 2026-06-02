@@ -20,7 +20,7 @@ const MAX_LOCATOR: usize = 101;
 const MAX_HEADERS: usize = 2_000;
 
 /// Requests block headers starting from a locator.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GetHeaders {
   /// Protocol version.
   pub version: ProtocolVersion,
@@ -77,7 +77,7 @@ impl encoding::Decodable for GetHeaders {
 ///
 /// Each header is followed by a CompactSize transaction count
 /// (always zero, since full blocks are not included).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Headers {
   /// Block headers.
   pub headers: Vec<BlockHeader>,

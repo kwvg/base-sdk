@@ -9,7 +9,7 @@
 use core::fmt;
 
 /// An error encountered during consensus decoding.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DecodeError {
   /// Not enough bytes remaining in the cursor.
   Eof {

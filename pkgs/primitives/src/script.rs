@@ -16,7 +16,7 @@ use core::fmt;
 const MAX_SIZE: usize = 0x0200_0000;
 
 /// A variable-length script, CompactSize-prefixed on the wire.
-#[derive(Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Eq, Hash, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct Script(#[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex"))] pub Vec<u8>);
@@ -83,7 +83,7 @@ impl encoding::Encodable for Script {
 }
 
 /// Decoder for [`Script`].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ScriptDecoder(encoding::ByteVecDecoder);
 
 impl ScriptDecoder {
@@ -100,7 +100,7 @@ impl Default for ScriptDecoder {
 }
 
 /// Decode error for [`Script`].
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScriptDecoderError(encoding::ByteVecDecoderError);
 
 impl fmt::Display for ScriptDecoderError {
