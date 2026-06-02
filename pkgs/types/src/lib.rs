@@ -13,6 +13,8 @@ extern crate alloc;
 extern crate std;
 
 mod hex;
+#[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
+mod prelude;
 mod uint;
 
 #[doc(hidden)]

@@ -238,7 +238,7 @@ impl<'de> serde::Deserialize<'de> for DynBitset {
       .map_err(|_| serde::de::Error::custom("DynBitset num_bits too large"))?;
     let required = num_bits.div_ceil(8);
     if raw.data.len() != required {
-      return Err(serde::de::Error::custom(alloc::format!(
+      return Err(serde::de::Error::custom(format!(
         "DynBitset data length mismatch: {0} bytes for {1} bits (expected {2})",
         raw.data.len(),
         raw.num_bits,
@@ -249,7 +249,7 @@ impl<'de> serde::Deserialize<'de> for DynBitset {
     if remainder != 0 {
       let mask = !((1u8 << remainder) - 1);
       if raw.data[required - 1] & mask != 0 {
-        return Err(serde::de::Error::custom(alloc::format!(
+        return Err(serde::de::Error::custom(format!(
           "DynBitset padding bits set in last byte: {:#04x} for {1} bits",
           raw.data[required - 1],
           raw.num_bits,

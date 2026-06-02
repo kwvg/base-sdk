@@ -40,7 +40,7 @@ pub fn encode_v2(msg: &DashNetworkMessage, buf: &mut Vec<u8>) {
 /// `payload` is the decrypted content from `bip324::Payload::contents()`.
 pub fn decode_v2(payload: &[u8]) -> Result<DashNetworkMessage, P2pDecodeError> {
   if payload.is_empty() {
-    return Err(P2pDecodeError::Consensus(alloc::string::String::from(
+    return Err(P2pDecodeError::Consensus(String::from(
       "unexpected eof: needed 1 byte, 0 remaining",
     )));
   }
@@ -51,7 +51,7 @@ pub fn decode_v2(payload: &[u8]) -> Result<DashNetworkMessage, P2pDecodeError> {
   if short_id == 0 {
     // Long format: next 12 bytes are the command string.
     if rest.len() < 12 {
-      return Err(P2pDecodeError::Consensus(alloc::format!(
+      return Err(P2pDecodeError::Consensus(format!(
         "unexpected eof: needed 12 bytes, {} remaining",
         rest.len()
       )));

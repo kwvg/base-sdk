@@ -21,6 +21,8 @@ mod compact;
 mod error;
 mod hash;
 mod hash_encoding;
+#[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
+mod prelude;
 #[cfg(feature = "serde")]
 #[doc(hidden)]
 pub mod serialize;

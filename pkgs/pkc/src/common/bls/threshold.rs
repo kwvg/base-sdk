@@ -7,10 +7,10 @@
 //! Lagrange interpolation and polynomial evaluation over the BLS12-381 scalar
 //! field, used by threshold BLS in both bls_ietf and bls_chia.
 
+use crate::prelude::*;
+
 use blst::*;
 use dash_num::Hash256;
-
-use crate::prelude::Vec;
 
 /// Evaluate a polynomial at `x`. Coefficients are in ascending order:
 /// `coeffs[0] + coeffs[1]*x + ...`.

@@ -139,7 +139,7 @@ impl AddrV2 {
     let addr = wire::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = Self::expected_len(network) {
       if addr.len() != expected {
-        return Err(WireDecodeError(alloc::format!(
+        return Err(WireDecodeError(format!(
           "addrv2: expected {expected} bytes for network {:?}, got {}",
           network,
           addr.len()
@@ -197,7 +197,7 @@ impl AddrV2Entry {
     let addr_bytes = wire::read_bytes(sl, len)?.to_vec();
     if let Some(expected) = AddrV2::expected_len(network) {
       if addr_bytes.len() != expected {
-        return Err(WireDecodeError(alloc::format!(
+        return Err(WireDecodeError(format!(
           "addrv2 entry: expected {expected} bytes for network {:?}, got {}",
           network,
           addr_bytes.len()

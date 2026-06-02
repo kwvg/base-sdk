@@ -111,8 +111,7 @@ macro_rules! make_bytes {
 /// (e.g. `hex::w16` for `[u8; 16]`).
 #[cfg(feature = "serde")]
 pub mod serde {
-  use alloc::string::String;
-  use alloc::vec::Vec;
+  use crate::prelude::*;
 
   use hex_conservative::{DisplayHex, FromHex};
 

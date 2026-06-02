@@ -75,13 +75,13 @@ impl fmt::Display for GovObjectType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Proposal {
   /// Short name (max 40 chars, lowercase alphanum + `-_`).
-  pub name: alloc::string::String,
+  pub name: String,
   /// Proposal URL.
-  pub url: alloc::string::String,
+  pub url: String,
   /// Dash address receiving payment.
-  pub payment_address: alloc::string::String,
+  pub payment_address: String,
   /// Payment amount in DASH as a decimal string.
-  pub payment_amount: alloc::string::String,
+  pub payment_amount: String,
   /// Unix timestamp when payments begin.
   pub start_epoch: i64,
   /// Unix timestamp when payments end.
@@ -104,11 +104,11 @@ pub struct Trigger {
   /// Block height at which payments occur.
   pub event_block_height: i32,
   /// Pipe-delimited payment addresses.
-  pub payment_addresses: alloc::string::String,
+  pub payment_addresses: String,
   /// Pipe-delimited payment amounts.
-  pub payment_amounts: alloc::string::String,
+  pub payment_amounts: String,
   /// Pipe-delimited proposal hashes.
-  pub proposal_hashes: alloc::string::String,
+  pub proposal_hashes: String,
 }
 
 /// Decoded governance object data payload.
@@ -217,7 +217,7 @@ impl GovObject {
   }
 
   /// Returns the data as a hex string.
-  pub fn data_as_hex(&self) -> alloc::string::String {
+  pub fn data_as_hex(&self) -> String {
     self.data.to_lower_hex_string()
   }
 }

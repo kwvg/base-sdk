@@ -85,7 +85,7 @@ impl CompressionState {
     } else {
       let pos = (version_offset - 1) as usize;
       if pos >= self.version_cache.len() {
-        return Err(WireDecodeError(alloc::format!("version offset {pos} out of range")));
+        return Err(WireDecodeError(format!("version offset {pos} out of range")));
       }
       let v = self.version_cache[pos];
       self.mark_version_mru(pos);

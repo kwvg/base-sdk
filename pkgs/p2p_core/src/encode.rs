@@ -36,7 +36,7 @@ pub(crate) fn encode_compact_size(value: usize, buf: &mut Vec<u8>) {
 
 /// Error wrapper for cursor-based decode operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WireDecodeError(pub(crate) alloc::string::String);
+pub struct WireDecodeError(pub(crate) String);
 
 impl fmt::Display for WireDecodeError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -46,12 +46,12 @@ impl fmt::Display for WireDecodeError {
 
 impl From<dash_primitives::codec::DecodeError> for WireDecodeError {
   fn from(e: dash_primitives::codec::DecodeError) -> Self {
-    Self(alloc::format!("{e}"))
+    Self(format!("{e}"))
   }
 }
 
 impl From<dash_primitives::error::DecodeError> for WireDecodeError {
   fn from(e: dash_primitives::error::DecodeError) -> Self {
-    Self(alloc::format!("{e}"))
+    Self(format!("{e}"))
   }
 }

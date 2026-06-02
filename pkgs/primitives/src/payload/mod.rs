@@ -73,7 +73,7 @@ pub struct PayloadError {
   /// Which transaction type was being decoded.
   pub tx_type: TxType,
   /// Human-readable description.
-  pub message: alloc::string::String,
+  pub message: String,
 }
 
 impl fmt::Display for PayloadError {
@@ -94,12 +94,12 @@ impl SpecialPayload {
   pub fn decode(tx_type: TxType, data: &[u8]) -> Result<Self, PayloadError> {
     let err = |e: crate::error::DecodeError| PayloadError {
       tx_type,
-      message: alloc::format!("{e}"),
+      message: format!("{e}"),
     };
     match tx_type {
       TxType::Spend => Err(PayloadError {
         tx_type,
-        message: alloc::string::String::from("spend transactions have no payload"),
+        message: String::from("spend transactions have no payload"),
       }),
       TxType::ProviderRegister => ProRegTx::decode(data).map(Self::ProviderRegister).map_err(err),
       TxType::ProviderUpdateService => ProUpServTx::decode(data).map(Self::ProviderUpdateService).map_err(err),

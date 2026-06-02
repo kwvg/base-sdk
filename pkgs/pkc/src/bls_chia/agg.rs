@@ -9,12 +9,11 @@
 use blst::*;
 use sha2::{Digest, Sha256};
 
-use crate::prelude::Vec;
-
 use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
+use crate::prelude::*;
 
 /// Aggregate multiple legacy BLS public keys (simple point addition in G1).
 #[expect(unsafe_code, reason = "blst C FFI")]

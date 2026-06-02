@@ -45,7 +45,7 @@ fn decode_msg<T: encoding::Decodable>(payload: &[u8]) -> Result<T, crate::P2pDec
 where
   <T::Decoder as encoding::Decoder>::Error: core::fmt::Display,
 {
-  encoding::decode_from_slice(payload).map_err(|e| crate::P2pDecodeError::Consensus(alloc::format!("{e}")))
+  encoding::decode_from_slice(payload).map_err(|e| crate::P2pDecodeError::Consensus(format!("{e}")))
 }
 
 /// Generates `DashNetworkMessage`, its `command()`, `short_id()`,

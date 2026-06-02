@@ -486,7 +486,7 @@ impl Transaction {
 
     // Duplicate inputs (CVE-2018-17144).
     if self.inputs.len() > 1 {
-      let mut seen = alloc::collections::BTreeSet::new();
+      let mut seen = BTreeSet::new();
       for input in &self.inputs {
         if !seen.insert(&input.prevout) {
           return Err(TxInvalid::DuplicateInputs {

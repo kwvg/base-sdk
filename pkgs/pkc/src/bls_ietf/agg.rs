@@ -10,13 +10,12 @@ use blst::min_pk;
 use blst::*;
 use sha2::{Digest, Sha256};
 
-use crate::prelude::Vec;
-
 use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use super::DST;
+use crate::prelude::*;
 
 /// Aggregate multiple public keys into one.
 pub fn aggregate_pk(keys: &[&PublicKey]) -> Result<PublicKey, Error> {

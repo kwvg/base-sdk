@@ -13,18 +13,20 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-pub mod key_id;
-pub mod opcode;
+#[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
+mod prelude;
 
-use alloc::string::String;
-use alloc::vec::Vec;
+use crate::prelude::*;
 
 use bitcoin_hashes::{hash160, sha256};
 
+use Opcode as Op;
+
+pub mod key_id;
+pub mod opcode;
+
 pub use key_id::KeyId;
 pub use opcode::Opcode;
-
-use Opcode as Op;
 
 /// RIPEMD-160(SHA-256) output length in bytes.
 const HASH160_LEN: usize = 20;
@@ -229,7 +231,7 @@ pub fn legacy_sigop_count(script: &[u8]) -> usize {
 
 #[cfg(test)]
 mod tests {
-  use alloc::borrow::ToOwned as _;
+  use crate::prelude::*;
 
   use hex_literal::hex;
 

@@ -18,6 +18,15 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+#[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
+mod prelude;
+mod util;
+
+use dash_num::Hash256;
+
+#[cfg(feature = "std")]
+pub mod worker;
+
 /// Makes items `pub` when the `_internal` feature is active, otherwise keeps
 /// them crate-private. Used to expose scalar reference implementations and SIMD
 /// internals for testing.
@@ -55,13 +64,6 @@ pub_if_internal! {
   mod simd_hash;
   mod skein;
 }
-
-mod util;
-
-#[cfg(feature = "std")]
-pub mod worker;
-
-use dash_num::Hash256;
 
 /// Computes the Dash proof-of-work hash.
 pub fn hash(data: &[u8]) -> Hash256 {

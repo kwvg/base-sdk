@@ -6,6 +6,8 @@
 
 //! BLS primitives shared between bls_ietf and bls_chia.
 
+use crate::prelude::*;
+
 use dash_num::Hash256;
 
 pub(crate) mod contract;
@@ -44,11 +46,11 @@ pub(crate) fn generate_shares(
   threshold: usize,
   ids: &[Hash256],
   rng: &mut impl rand_core::CryptoRngCore,
-) -> Result<crate::prelude::Vec<(Hash256, [u8; 32])>, ()> {
+) -> Result<Vec<(Hash256, [u8; 32])>, ()> {
   use blst::*;
   use zeroize::Zeroize;
 
-  let mut coeffs = crate::prelude::Vec::with_capacity(threshold);
+  let mut coeffs = Vec::with_capacity(threshold);
 
   let mut sk_fr = blst_fr::default();
   let mut sk_scalar = blst_scalar::default();
@@ -70,7 +72,7 @@ pub(crate) fn generate_shares(
     rand_bytes.zeroize();
   }
 
-  let mut shares = crate::prelude::Vec::with_capacity(ids.len());
+  let mut shares = Vec::with_capacity(ids.len());
   for id in ids {
     let x = threshold::fr_from_hash(id);
     let y = threshold::poly_eval(&coeffs, &x);

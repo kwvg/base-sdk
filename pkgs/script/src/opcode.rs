@@ -385,7 +385,7 @@ mod tests {
 
   #[test]
   fn display_formatting() {
-    use alloc::string::ToString as _;
+    use crate::prelude::*;
 
     assert_eq!(Opcode::Dup.to_string(), "OP_DUP");
     assert_eq!(Opcode::Return.to_string(), "OP_RETURN");

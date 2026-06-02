@@ -197,7 +197,7 @@ impl MnListDiffPayload {
 
     // Transaction uses encoding::Decodable. Decode from remaining bytes.
     let cb_tx = encoding::decode_from_slice_unbounded::<Transaction>(sl)
-      .map_err(|e| WireDecodeError(alloc::format!("transaction decode: {e}")))?;
+      .map_err(|e| WireDecodeError(format!("transaction decode: {e}")))?;
 
     let del_count = wire::read_compact_size(sl, MAX_DELETED_MNS)?;
     let mut deleted_mns = Vec::with_capacity(del_count);
@@ -222,8 +222,7 @@ impl MnListDiffPayload {
     let nq_count = wire::read_compact_size(sl, MAX_QUORUMS)?;
     let mut new_quorums = Vec::with_capacity(nq_count);
     for _ in 0..nq_count {
-      let commitment =
-        Commitment::decode_inner(sl).map_err(|e| WireDecodeError(alloc::format!("commitment decode: {e}")))?;
+      let commitment = Commitment::decode_inner(sl).map_err(|e| WireDecodeError(format!("commitment decode: {e}")))?;
       new_quorums.push(commitment);
     }
 

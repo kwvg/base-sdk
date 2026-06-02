@@ -4,7 +4,7 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Compatibility shim.
+//! Re-exports for no_std compatibility.
 
 pub(crate) use alloc::vec;
 pub(crate) use alloc::vec::Vec;

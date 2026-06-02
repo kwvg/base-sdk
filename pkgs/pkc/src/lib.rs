@@ -13,13 +13,11 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-pub use dash_num::Hash256;
-
-#[cfg(any(feature = "bls_ietf", feature = "bls_chia"))]
-mod prelude;
-
 #[cfg(any(feature = "bls_ietf", feature = "bls_chia"))]
 mod common;
+
+#[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
+mod prelude;
 
 #[cfg(feature = "bls_chia")]
 pub mod bls_chia;
@@ -32,3 +30,5 @@ pub mod k256;
 
 #[cfg(feature = "std")]
 pub mod worker;
+
+pub use dash_num::Hash256;

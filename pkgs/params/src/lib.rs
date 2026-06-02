@@ -13,6 +13,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+#[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
 mod prelude;
 
 pub mod types;

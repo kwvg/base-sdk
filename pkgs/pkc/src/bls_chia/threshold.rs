@@ -14,7 +14,7 @@ use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use crate::common::bls::threshold as math;
-use crate::prelude::Vec;
+use crate::prelude::*;
 
 /// Secret key share for threshold signing.
 #[derive(Clone)]
