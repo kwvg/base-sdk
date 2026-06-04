@@ -1,0 +1,8 @@
+rules:
+  - id: disambiguate-serde-derive
+    message: "use ::serde:: instead of serde:: in derive attributes"
+    severity: ERROR
+    languages: [rust]
+    paths:
+      include: [/pkgs/**/*.rs]
+    pattern-regex: 'derive\([^)]*(?<!:)serde::'
