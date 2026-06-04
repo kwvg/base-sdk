@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+# coding: latin-1
+
+#
+# Copyright (c) 2026-present, The Dash Core developers
+# SPDX-License-Identifier: MIT
+# See the accompanying file LICENSE or https://opensource.org/license/MIT
+#
+
+"""Runs CodeQL queries against the workspace."""
+
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class SarifRegion:
+  start_line: int = 0
+
+  @classmethod
+  def from_json(cls, raw: dict[str, Any]) -> SarifRegion:
+    return cls(start_line=raw.get("startLine", 0))
+
+
+@dataclass(frozen=True)
+class SarifArtifactLocation:
+  uri: str = "?"
+
+  @classmethod
+  def from_json(
+    cls, raw: dict[str, Any],
+  ) -> SarifArtifactLocation:
+    return cls(uri=raw.get("uri", "?"))
+
+
+@dataclass(frozen=True)
+class SarifPhysicalLocation:
+  artifact_location: SarifArtifactLocation = field(
+    default_factory=SarifArtifactLocation,
+  )
+  region: SarifRegion = field(default_factory=SarifRegion)
+
+  @classmethod
+  def from_json(
+    cls, raw: dict[str, Any],
+  ) -> SarifPhysicalLocation:
+    return cls(
+      artifact_location=SarifArtifactLocation.from_json(
+        raw.get("artifactLocation", {}),
+      ),
+      region=SarifRegion.from_json(raw.get("region", {})),
+    )
+
+
+@dataclass(frozen=True)
+class SarifLocation:
+  physical_location: SarifPhysicalLocation = field(
+    default_factory=SarifPhysicalLocation,
+  )
+
+  @classmethod
+  def from_json(cls, raw: dict[str, Any]) -> SarifLocation:
+    return cls(
+      physical_location=SarifPhysicalLocation.from_json(
+        raw.get("physicalLocation", {}),
+      ),
+    )
+
+
+@dataclass(frozen=True)
+class SarifMessage:
+  text: str = ""
+
+  @classmethod
+  def from_json(cls, raw: dict[str, Any]) -> SarifMessage:
+    return cls(text=raw.get("text", ""))
+
+
+@dataclass(frozen=True)
+class SarifResult:
+  message: SarifMessage = field(default_factory=SarifMessage)
+  locations: list[SarifLocation] = field(default_factory=list)
+
+  @classmethod
+  def from_json(cls, raw: dict[str, Any]) -> SarifResult:
+    return cls(
+      message=SarifMessage.from_json(raw.get("message", {})),
+      locations=[
+        SarifLocation.from_json(loc)
+        for loc in raw.get("locations", [])
+      ],
+    )
+
+
+@dataclass(frozen=True)
+class SarifRun:
+  results: list[SarifResult] = field(default_factory=list)
+
+  @classmethod
+  def from_json(cls, raw: dict[str, Any]) -> SarifRun:
+    return cls(
+      results=[
+        SarifResult.from_json(r)
+        for r in raw.get("results", [])
+      ],
+    )
+
+
+@dataclass(frozen=True)
+class SarifLog:
+  runs: list[SarifRun] = field(default_factory=list)
+
+  @classmethod
+  def from_json(cls, raw: dict[str, Any]) -> SarifLog:
+    return cls(
+      runs=[
+        SarifRun.from_json(r)
+        for r in raw.get("runs", [])
+      ],
+    )
+
+
+def _find_workspace_root(start: Path) -> Path:
+  """Walk upward from *start* until a workspace Cargo.toml is found."""
+  for directory in (start, *start.parents):
+    cargo = directory / "Cargo.toml"
+    if (
+      cargo.is_file()
+      and "[workspace]" in cargo.read_text()
+      and (directory / "pkgs").is_dir()
+    ):
+      return directory
+  raise FileNotFoundError("workspace Cargo.toml not found")
+
+
+def _discover_queries(query_dir: Path) -> list[Path]:
+  """Return all .ql files in *query_dir*, sorted by name."""
+  return sorted(query_dir.glob("*.ql"))
+
+
+def _discover_ql_sources(query_dir: Path) -> list[Path]:
+  """Return all .ql and .qll files in *query_dir* recursively."""
+  return sorted(
+    [*query_dir.rglob("*.ql"), *query_dir.rglob("*.qll")],
+  )
+
+
+def _print_sarif_diagnostics(sarif: SarifLog) -> int:
+  """Print SARIF results to stderr. Returns the finding count."""
+  count = 0
+  for run in sarif.runs:
+    for r in run.results:
+      if not r.locations:
+        continue
+      phys = r.locations[0].physical_location
+      uri = phys.artifact_location.uri
+      line = phys.region.start_line
+      print(
+        f"{uri}:{line}: {r.message.text}", file=sys.stderr,
+      )
+      count += 1
+  return count
+
+
+def main() -> int:
+  codeql_bin = shutil.which("codeql")
+  if codeql_bin is None:
+    print("codeql not found in PATH, skipping", file=sys.stderr)
+    return 77
+
+  repo_root = _find_workspace_root(Path(__file__).resolve().parent)
+  query_dir = repo_root / "contrib" / "codeql"
+  queries = _discover_queries(query_dir)
+
+  if not queries:
+    print(
+      "error: no .ql queries found in contrib/codeql/",
+      file=sys.stderr,
+    )
+    return 1
+
+  # Check QL formatting before doing any heavy lifting.
+  ql_sources = _discover_ql_sources(query_dir)
+  if ql_sources:
+    result = subprocess.run(  # noqa: S603
+      [
+        codeql_bin,
+        "query",
+        "format",
+        "--check-only",
+        "--",
+        *[str(p) for p in ql_sources],
+      ],
+      check=False,
+    )
+    if result.returncode != 0:
+      print(
+        "error: QL formatting check failed; run "
+        "'codeql query format -i' to fix",
+        file=sys.stderr,
+      )
+      return 1
+
+  # Install CodeQL pack dependencies.
+  result = subprocess.run(  # noqa: S603
+    [codeql_bin, "pack", "install", str(query_dir)],
+    check=False,
+  )
+  if result.returncode != 0:
+    print(
+      "error: codeql pack install failed", file=sys.stderr,
+    )
+    return 1
+
+  # Compile queries and treat warnings (e.g. unused imports) as errors.
+  result = subprocess.run(  # noqa: S603
+    [
+      codeql_bin,
+      "query",
+      "compile",
+      "--warnings=error",
+      "--",
+      *[str(p) for p in queries],
+    ],
+    check=False,
+  )
+  if result.returncode != 0:
+    print(
+      "error: QL compilation failed with warnings",
+      file=sys.stderr,
+    )
+    return 1
+
+  # Create database in a temporary directory.
+  with tempfile.TemporaryDirectory() as tmp_dir:
+    db_path = Path(tmp_dir) / "db"
+
+    result = subprocess.run(  # noqa: S603
+      [
+        codeql_bin,
+        "database",
+        "create",
+        str(db_path),
+        "--language=rust",
+        f"--source-root={repo_root / 'pkgs'}",
+        "--overwrite",
+        "-j0",
+        "--command=cargo check --features full,_internal",
+      ],
+      check=False,
+    )
+    if result.returncode != 0:
+      print(
+        "error: codeql database create failed",
+        file=sys.stderr,
+      )
+      return 1
+
+    # Run each query and collect diagnostics.
+    total_findings = 0
+    for query_path in queries:
+      sarif_path = Path(tmp_dir) / f"{query_path.stem}.sarif"
+
+      result = subprocess.run(  # noqa: S603
+        [
+          codeql_bin,
+          "database",
+          "analyze",
+          str(db_path),
+          str(query_path),
+          "--format=sarif-latest",
+          f"--output={sarif_path}",
+        ],
+        check=False,
+      )
+      if result.returncode != 0:
+        print(
+          f"error: codeql analyze failed for {query_path.name}",
+          file=sys.stderr,
+        )
+        return 1
+
+      with sarif_path.open() as f:
+        sarif = SarifLog.from_json(json.load(f))
+      total_findings += _print_sarif_diagnostics(sarif)
+
+    return 1 if total_findings > 0 else 0
+
+
+if __name__ == "__main__":
+  sys.exit(main())
