@@ -120,6 +120,7 @@ fn e8_agree() {
 #[cfg(feature = "_internal")]
 mod kat {
   use crate::common;
+
   use dash_pow::jh::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::jh::simd;

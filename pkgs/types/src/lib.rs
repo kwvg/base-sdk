@@ -17,17 +17,18 @@ mod hex;
 mod prelude;
 mod uint;
 
-#[doc(hidden)]
-pub mod __private {
-  pub use crate::hex::{ByteTypeDecoder, ByteTypeDecoderError};
-  pub use bitcoin_consensus_encoding;
-}
-
 /// Helpers for `#[serde(with = "...")]` annotations.
 #[cfg(feature = "serde")]
 pub mod serialize {
   pub use crate::hex::serde as hex;
   pub use crate::uint::serde as uint;
+}
+
+#[doc(hidden)]
+pub mod __private {
+  pub use crate::hex::{ByteTypeDecoder, ByteTypeDecoderError};
+
+  pub use bitcoin_consensus_encoding;
 }
 
 pub use uint::{AsUint, TryFromUint};

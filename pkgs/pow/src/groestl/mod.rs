@@ -6,10 +6,11 @@
 
 //! Groestl-512 hash function.
 
-#[cfg(feature = "_internal")]
-pub mod consts;
 #[cfg(not(feature = "_internal"))]
 pub(crate) mod consts;
+
+#[cfg(feature = "_internal")]
+pub mod consts;
 pub_if_internal! { mod scalar; }
 #[cfg(feature = "simd")]
 pub_if_internal! { mod simd; }

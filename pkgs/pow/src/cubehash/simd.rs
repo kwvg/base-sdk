@@ -10,8 +10,9 @@ use super::consts::{BLOCK, IV};
 use crate::util::arx::rotl_u32x4;
 use crate::util::memops::{load_u32_le, store_u32_le};
 
-use core::simd::Simd;
 use dash_num::Hash512;
+
+use core::simd::Simd;
 
 /// Four neighbouring state words packed into one group.
 pub type U32x4 = Simd<u32, 4>;

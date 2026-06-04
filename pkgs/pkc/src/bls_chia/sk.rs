@@ -6,15 +6,15 @@
 
 //! Legacy BLS secret key.
 
-use core::fmt;
-
-use blst::*;
-use zeroize::Zeroize;
-
 use super::error::Error;
 use super::hash;
 use super::pk::PublicKey;
 use super::sig::Signature;
+
+use blst::*;
+use zeroize::Zeroize;
+
+use core::fmt;
 
 /// A legacy BLS secret key (32-byte scalar).
 #[derive(Clone)]

@@ -6,14 +6,14 @@
 
 //! Aggregation and secure verification for legacy BLS.
 
-use blst::*;
-use sha2::{Digest, Sha256};
-
 use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use crate::prelude::*;
+
+use blst::*;
+use sha2::{Digest, Sha256};
 
 /// Aggregate multiple legacy BLS public keys (simple point addition in G1).
 #[expect(unsafe_code, reason = "blst C FFI")]

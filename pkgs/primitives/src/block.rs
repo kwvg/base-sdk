@@ -11,9 +11,9 @@ use crate::prelude::*;
 use crate::transaction::{Transaction, TransactionDecoderError, TxInvalid};
 use crate::validation::{DeploymentContext, MAX_DIP0001_BLOCK_SIZE, MAX_LEGACY_BLOCK_SIZE};
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// A Dash block: header followed by a vector of transactions.
 #[derive(Debug, Clone, PartialEq, Eq)]

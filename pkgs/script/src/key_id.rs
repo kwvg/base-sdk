@@ -6,9 +6,9 @@
 
 //! Public key hash identifier (HASH160).
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// 20-byte public key hash (RIPEMD-160 of SHA-256).
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]

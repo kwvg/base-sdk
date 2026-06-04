@@ -12,19 +12,18 @@
 //! - **cpu**: best available runtime backend. Hardware AES when `aes_hw`,
 //!   scalar fallback otherwise. Used by SIMD implementations.
 
+#[cfg(all(feature = "aes_hw", target_arch = "aarch64"))]
+pub(crate) mod aarch64;
 pub(crate) mod consts;
 #[cfg(any(test, feature = "simd"))]
 pub(crate) mod cpu;
+mod scalar;
 #[cfg(feature = "simd")]
 pub(crate) mod simd;
 
-mod scalar;
 #[cfg(test)]
 pub(crate) use scalar::sub_bytes;
 pub(crate) use scalar::{round, round_nk};
-
-#[cfg(all(feature = "aes_hw", target_arch = "aarch64"))]
-pub(crate) mod aarch64;
 
 #[cfg(test)]
 mod tests {

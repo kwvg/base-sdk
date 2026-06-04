@@ -6,15 +6,15 @@
 
 //! Thresholds for legacy scheme (m-of-n secret sharing and signature recovery).
 
-use blst::*;
-use dash_num::Hash256;
-
 use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use crate::common::bls::threshold as math;
 use crate::prelude::*;
+
+use blst::*;
+use dash_num::Hash256;
 
 /// Secret key share for threshold signing.
 #[derive(Clone)]

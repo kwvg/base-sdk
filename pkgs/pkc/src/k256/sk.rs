@@ -6,13 +6,13 @@
 
 //! secp256k1 secret key.
 
-use core::fmt;
-
-use k256::ecdsa::{self, signature::hazmat::PrehashSigner};
-
 use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::{RecoveryId, Signature};
+
+use k256::ecdsa::{self, signature::hazmat::PrehashSigner};
+
+use core::fmt;
 
 /// A secp256k1 secret key (32-byte scalar).
 #[derive(Clone)]

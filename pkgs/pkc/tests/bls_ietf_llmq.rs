@@ -17,7 +17,6 @@ mod common;
 
 use dash_pkc::bls_ietf::{aggregate_pk, aggregate_sig, threshold, PublicKey, SecretKey, Signature};
 use dash_pkc::Hash256;
-
 use hex_conservative::DisplayHex;
 
 #[test]

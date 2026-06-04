@@ -10,8 +10,9 @@ use super::consts::{BLOCK, IV, RC, RC_FIRST4_HIGH, RC_FIRST4_LOW};
 use crate::util::arx::rotl_u32x4;
 use crate::util::memops::{load_u32_le, store_u32_le};
 
-use core::simd::Simd;
 use dash_num::Hash512;
+
+use core::simd::Simd;
 
 type WordVec = Simd<u32, 4>;
 

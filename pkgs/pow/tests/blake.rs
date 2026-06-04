@@ -40,6 +40,7 @@ fn compress(#[case] block: [u8; 128], #[case] t0: u64, #[case] t1: u64) {
 #[cfg(feature = "_internal")]
 mod kat {
   use crate::common;
+
   use dash_pow::blake::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::blake::simd;

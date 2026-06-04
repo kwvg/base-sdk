@@ -8,9 +8,9 @@
 
 use crate::prelude::*;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// Maximum serialized object size (32 MiB).
 const MAX_SIZE: usize = 0x0200_0000;

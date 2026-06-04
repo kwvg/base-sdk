@@ -6,14 +6,14 @@
 
 //! IETF BLS secret key.
 
-use core::fmt;
-
-use blst::min_pk;
-
 use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::{DST, DST_POP, DST_POP_PROVE};
+
+use blst::min_pk;
+
+use core::fmt;
 
 /// BLS signature scheme (determines the DST).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

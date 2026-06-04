@@ -9,9 +9,10 @@
 use super::consts::{ALPHA_TAB, BLOCK, IV, PP8K, WBP, YOFF_B_F, YOFF_B_N};
 use crate::util::memops::{load_u32_le, store_u32_le};
 
+use dash_num::Hash512;
+
 use core::simd::cmp::SimdPartialOrd;
 use core::simd::{simd_swizzle, Select, Simd};
-use dash_num::Hash512;
 
 pub(super) type BlockWords = [u32; 32];
 type WordVec = Simd<u32, 8>;

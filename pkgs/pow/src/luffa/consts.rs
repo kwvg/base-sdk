@@ -84,6 +84,7 @@ pub(crate) const RC: [[[u32; 8]; 2]; 5] = {
 #[cfg(feature = "simd")]
 mod simd_consts {
   use super::RC;
+
   use core::simd::Simd;
 
   type WordVec = Simd<u32, 4>;

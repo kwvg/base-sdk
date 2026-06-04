@@ -9,9 +9,9 @@
 #![allow(dead_code)]
 #![expect(clippy::expect_used, reason = "test code")]
 
-use std::collections::HashMap;
-
 use hex_conservative::FromHex;
+
+use std::collections::HashMap;
 
 const NIST_MSG_BLOB: &[u8] = include_bytes!("../../corpus/nist_msg.bin");
 

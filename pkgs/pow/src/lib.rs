@@ -14,7 +14,6 @@
 #![cfg_attr(feature = "simd", feature(portable_simd))]
 
 extern crate alloc;
-
 #[cfg(feature = "std")]
 extern crate std;
 

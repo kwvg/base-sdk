@@ -6,10 +6,10 @@
 
 //! Consensus encoding support for hash types.
 
+use bitcoin_consensus_encoding as encoding;
+
 use core::fmt;
 use core::marker::PhantomData;
-
-use bitcoin_consensus_encoding as encoding;
 
 /// Generic decoder for N-byte hash types.
 #[derive(Debug)]

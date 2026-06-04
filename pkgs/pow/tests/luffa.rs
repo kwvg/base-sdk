@@ -67,6 +67,7 @@ fn inject_then_permute() {
 
 mod kat {
   use super::common;
+
   use dash_pow::luffa::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::luffa::simd;

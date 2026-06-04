@@ -6,10 +6,10 @@
 
 //! Dash service flag bitfield.
 
+use bitcoin_consensus_encoding as encoding;
+
 use core::fmt;
 use core::ops;
-
-use bitcoin_consensus_encoding as encoding;
 
 /// Bitfield advertised in `version` messages describing node capabilities.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]

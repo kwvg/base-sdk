@@ -6,9 +6,9 @@
 
 //! ECDSA signature and recovery id.
 
-use k256::ecdsa;
-
 use super::error::Error;
+
+use k256::ecdsa;
 
 /// An ECDSA signature (64-byte compact r||s).
 #[derive(Clone, Debug, PartialEq, Eq)]

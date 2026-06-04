@@ -8,10 +8,10 @@
 
 use crate::{BlockHash, MerkleRoot};
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use bitcoin_internals::array::ArrayExt as _;
+
+use core::fmt;
 
 /// A Dash block header (80 bytes on the wire).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

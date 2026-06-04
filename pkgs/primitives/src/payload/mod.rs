@@ -19,6 +19,11 @@ mod prouprevtx;
 mod proupservtx;
 mod quorum;
 
+use crate::prelude::*;
+use crate::tx_types::TxType;
+
+use core::fmt;
+
 pub use assetlock::AssetLock;
 pub use assetunlock::AssetUnlock;
 pub use cbtx::CoinbaseCommitment;
@@ -28,11 +33,6 @@ pub use proupregtx::ProUpRegTx;
 pub use prouprevtx::ProUpRevTx;
 pub use proupservtx::ProUpServTx;
 pub use quorum::{Commitment, FinalCommitment};
-
-use crate::prelude::*;
-use crate::tx_types::TxType;
-
-use core::fmt;
 
 /// A decoded special transaction payload.
 ///

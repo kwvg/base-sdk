@@ -6,12 +6,12 @@
 
 //! BLS primitives shared between bls_ietf and bls_chia.
 
+pub(crate) mod contract;
+pub(crate) mod threshold;
+
 use crate::prelude::*;
 
 use dash_num::Hash256;
-
-pub(crate) mod contract;
-pub(crate) mod threshold;
 
 /// Sum secret key scalars (mod group order) via blst FFI.
 #[expect(unsafe_code, reason = "blst C FFI")]

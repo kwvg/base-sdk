@@ -72,6 +72,7 @@ fn bytes_to_words_round_trip() {
 #[cfg(feature = "_internal")]
 mod kat {
   use crate::common;
+
   use dash_pow::bmw::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::bmw::simd;

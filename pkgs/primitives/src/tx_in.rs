@@ -9,9 +9,9 @@
 use crate::outpoint::{OutPoint, OutPointDecoder, OutPointDecoderError, OutPointEncoder};
 use crate::script::{Script, ScriptDecoder, ScriptDecoderError, ScriptEncoder};
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
+
+use core::fmt;
 
 /// A transaction input.
 #[derive(Debug, Clone, PartialEq, Eq)]

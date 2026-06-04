@@ -9,18 +9,16 @@
 #![no_std]
 
 extern crate alloc;
-
 #[cfg(feature = "std")]
 extern crate std;
 
 #[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
 mod prelude;
 
+use crate::opcode::Opcode as Op;
 use crate::prelude::*;
 
 use bitcoin_hashes::{hash160, sha256};
-
-use Opcode as Op;
 
 pub mod key_id;
 pub mod opcode;
@@ -231,11 +229,9 @@ pub fn legacy_sigop_count(script: &[u8]) -> usize {
 
 #[cfg(test)]
 mod tests {
-  use crate::prelude::*;
+  use super::*;
 
   use hex_literal::hex;
-
-  use super::*;
 
   #[test]
   fn p2pkh_valid() {

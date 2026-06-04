@@ -6,13 +6,13 @@
 
 //! IETF BLS signature (96-byte compressed G2 point).
 
-use blst::min_pk;
-use blst::BLST_ERROR;
-
 use super::error::Error;
 use super::pk::PublicKey;
 use super::sk::Scheme;
 use super::{DST, DST_POP};
+
+use blst::min_pk;
+use blst::BLST_ERROR;
 
 /// A BLS signature (96-byte compressed G2 point).
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -11,10 +11,10 @@ use crate::validation::{DeploymentContext, VERSIONBITS_NUM_BITS};
 use crate::wire;
 use crate::QuorumHash;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_types::BlsSignatureBytes;
+
+use core::fmt;
 
 /// MnHardFork -- hard-fork signal (type 7).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

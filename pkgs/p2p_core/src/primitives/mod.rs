@@ -7,15 +7,14 @@
 //! P2P-specific primitive types.
 
 pub mod command;
+pub mod compressed_header;
 pub mod filter_type;
+pub mod governance;
 pub mod inventory;
 pub mod magic;
-pub mod protocol_version;
-pub mod service_flags;
-
-pub mod compressed_header;
-pub mod governance;
 pub mod mn_list;
 pub mod net_addr;
+pub mod protocol_version;
+pub mod service_flags;
 pub mod short_id;
 pub mod user_agent;

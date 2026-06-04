@@ -43,6 +43,7 @@ fn compress(#[case] counter: [u32; 4], #[case] block: [u8; 128]) {
 
 mod kat {
   use super::common;
+
   use dash_pow::echo::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::echo::simd;

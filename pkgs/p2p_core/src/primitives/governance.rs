@@ -9,13 +9,13 @@
 use crate::encode::{encode_compact_size, BufferDecoder, VecEncoder, WireDecodeError, MAX_P2P_PAYLOAD};
 use crate::prelude::*;
 
-use core::fmt;
-
 use bitcoin_consensus_encoding as encoding;
 use dash_num::Hash256;
 use dash_primitives::wire;
 use dash_primitives::OutPoint;
 use dash_types::BlsSignatureBytes;
+
+use core::fmt;
 
 /// Governance vote outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

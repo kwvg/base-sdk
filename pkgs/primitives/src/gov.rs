@@ -13,10 +13,10 @@ use crate::validation::{MAX_PROPOSAL_NAME_LEN, MIN_URL_LEN, PROPOSAL_NAME_CHARS}
 use crate::wire;
 use crate::TxHash;
 
-use core::fmt;
-
 use bitcoin_hashes::sha256d;
 use hex_conservative::DisplayHex;
+
+use core::fmt;
 
 /// Governance object type codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

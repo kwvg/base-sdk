@@ -34,6 +34,7 @@ fn keccak_f1600(#[case] seed: u64) {
 
 mod kat {
   use super::common;
+
   use dash_pow::keccak::scalar;
   #[cfg(feature = "simd")]
   use dash_pow::keccak::simd;
