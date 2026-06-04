@@ -13,6 +13,7 @@ use core::fmt;
 
 /// Four-byte network identifier prepended to every V1 message.
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Magic(pub [u8; 4]);
 
 impl Magic {

@@ -16,7 +16,7 @@ use blst::BLST_ERROR;
 
 /// A BLS signature (96-byte compressed G2 point).
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[cfg_attr(
   feature = "serde",
   serde(into = "dash_types::BlsSignatureBytes", try_from = "dash_types::BlsSignatureBytes",)

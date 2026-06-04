@@ -20,6 +20,7 @@ const MAX_FILTER_DATA: usize = 256 * 1024;
 
 /// Requests compact filters for a range of blocks.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GetCFilters {
   /// Filter type (0 = basic).
   pub filter_type: FilterType,
@@ -67,6 +68,7 @@ impl encoding::Decodable for GetCFilters {
 
 /// A single compact block filter.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CFilter {
   /// Filter type.
   pub filter_type: FilterType,

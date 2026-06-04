@@ -29,7 +29,7 @@ pub const MAX_EXTRA_PAYLOAD_SIZE: usize = 100_000;
 /// Special transactions (type != Spend, version >= 3) carry an `extra_payload`
 /// decoded separately by payload-specific decoders.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Transaction {
   /// Transaction version (lower 16 bits of the wire i32).
   pub version: i16,

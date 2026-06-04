@@ -12,7 +12,7 @@ use core::fmt;
 
 /// 20-byte public key hash (RIPEMD-160 of SHA-256).
 #[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct KeyId(#[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex::w20"))] pub [u8; 20]);
 

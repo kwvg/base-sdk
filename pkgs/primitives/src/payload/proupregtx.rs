@@ -29,6 +29,7 @@ const MAX_VCH_SIG_SIZE: usize = 256;
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ProUpRegTx {
   /// 1=LegacyBLS, 2=BasicBLS.
   pub version: u16,

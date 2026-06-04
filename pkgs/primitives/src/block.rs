@@ -17,6 +17,7 @@ use core::fmt;
 
 /// A Dash block: header followed by a vector of transactions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Block {
   /// Block header (80 bytes).
   pub header: BlockHeader,

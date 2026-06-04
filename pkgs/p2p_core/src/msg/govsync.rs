@@ -22,6 +22,7 @@ const MAX_BLOOM_FILTER: usize = 36_000;
 /// objects. When non-zero, it responds with votes for that
 /// specific object.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GovSync {
   /// Object hash (zero for full sync).
   pub hash: Hash256,

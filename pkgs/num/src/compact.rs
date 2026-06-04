@@ -18,6 +18,7 @@ pub struct CompactTarget(pub u32);
 
 /// Result of decoding a compact difficulty target.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct DecodedTarget {
   /// The decoded 256-bit target value.
   pub value: Arith256,

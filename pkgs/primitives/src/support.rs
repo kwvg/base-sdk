@@ -15,6 +15,7 @@ use core::fmt;
 
 /// LLMQ type (quorum size/threshold configuration).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum LlmqType {
   /// 50 members, 60% threshold.
   Llmq50_60,
@@ -106,6 +107,7 @@ impl fmt::Display for LlmqType {
 
 /// Revocation reason for provider update revocation.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum RevocationReason {
   /// No specific reason.
   NotSpecified,
@@ -157,6 +159,7 @@ impl fmt::Display for RevocationReason {
 
 /// Network address type (BIP155).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetworkType {
   /// IPv4.
   Ipv4,
@@ -200,7 +203,7 @@ impl NetworkType {
 
 /// LSB-first dynamic bitset.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(into = "DynBitsetSerde"))]
 pub struct DynBitset {
   /// Number of bits in the bitset.
@@ -211,7 +214,7 @@ pub struct DynBitset {
 
 /// Serde helper for [`DynBitset`] that validates on deserialisation.
 #[cfg(feature = "serde")]
-#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
 struct DynBitsetSerde {
   num_bits: u64,
   #[serde(with = "dash_types::serialize::hex")]
@@ -332,7 +335,7 @@ impl encoding::Encodable for DynBitset {
 
 /// Legacy CService network address (ADDRv1 format, 18 bytes).
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CService {
   /// 16-byte address (IPv4-mapped IPv6 or native IPv6).
   #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex::w16"))]
@@ -422,6 +425,7 @@ impl encoding::Decodable for CService {
 
 /// Purpose tag for an extended network info entry.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetInfoPurpose {
   /// Core P2P port.
   CoreP2p,
@@ -468,6 +472,7 @@ impl fmt::Display for NetInfoPurpose {
 
 /// A single network info entry within a purpose group.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetInfoEntry {
   /// ADDRv1-style IP + port.
   Service(CService),
@@ -487,6 +492,7 @@ pub enum NetInfoEntry {
 /// Contains a versioned list of purpose-grouped network entries (core P2P,
 /// platform P2P, platform HTTPS).
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ExtendedNetInfo {
   /// Format version.
   pub version: u8,

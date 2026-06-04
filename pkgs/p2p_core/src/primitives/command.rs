@@ -12,6 +12,7 @@ use core::fmt;
 
 /// A 12-byte, null-padded ASCII command identifying a P2P message type.
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CommandString([u8; 12]);
 
 impl CommandString {

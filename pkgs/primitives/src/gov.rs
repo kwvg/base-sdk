@@ -20,6 +20,7 @@ use core::fmt;
 
 /// Governance object type codes.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum GovObjectType {
   /// Unknown or unrecognized type.
   Unknown,
@@ -73,6 +74,7 @@ impl fmt::Display for GovObjectType {
 /// }
 /// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Proposal {
   /// Short name (max 40 chars, lowercase alphanum + `-_`).
   pub name: String,
@@ -100,6 +102,7 @@ pub struct Proposal {
 /// }
 /// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Trigger {
   /// Block height at which payments occur.
   pub event_block_height: i32,
@@ -113,6 +116,7 @@ pub struct Trigger {
 
 /// Decoded governance object data payload.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum GovData {
   /// Budget proposal.
   Proposal(Proposal),
@@ -131,6 +135,7 @@ pub enum GovData {
 /// || sig(CompactSize + bytes)
 /// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GovObject {
   /// Parent object hash (zero for root).
   pub hash_parent: TxHash,
@@ -230,6 +235,7 @@ impl GovObject {
 /// || sig(CompactSize + bytes)
 /// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GovVote {
   /// Voting masternode outpoint.
   pub masternode_outpoint: OutPoint,

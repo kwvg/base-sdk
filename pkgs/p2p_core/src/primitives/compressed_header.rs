@@ -32,6 +32,7 @@ const MAX_VERSION_CACHE: usize = 7;
 /// cache. Create one `CompressionState` per `headers2` message and
 /// feed headers through it in order.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CompressionState {
   /// MRU version cache (front = most recently used).
   pub version_cache: Vec<i32>,

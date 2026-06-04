@@ -21,6 +21,7 @@ use core::fmt;
 ///
 /// Wire format: `u64 services` + `[u8; 16] addr` + `u16 BE port`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct NetAddr {
   /// Advertised services.
   pub services: ServiceFlags,
@@ -67,6 +68,7 @@ impl fmt::Display for NetAddr {
 
 /// Timestamped v1 address entry used in `addr` messages.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TimestampedAddr {
   /// Seconds since Unix epoch.
   pub time: u32,
@@ -111,6 +113,7 @@ impl encoding::Decodable for TimestampedAddr {
 
 /// BIP155 v2 network address supporting multiple transport types.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct AddrV2 {
   /// Network transport type.
   pub network: NetworkType,
@@ -174,6 +177,7 @@ impl encoding::Decodable for AddrV2 {
 
 /// BIP155 timestamped v2 address entry used in `addrv2` messages.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct AddrV2Entry {
   /// Seconds since Unix epoch.
   pub time: u32,

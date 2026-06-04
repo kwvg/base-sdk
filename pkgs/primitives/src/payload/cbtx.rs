@@ -23,6 +23,7 @@ use core::fmt;
 /// - v2: adds merkle_root_quorums
 /// - v3: adds ChainLock proof and credit pool balance
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CoinbaseCommitment {
   /// Payload version (1, 2, or 3).
   pub version: u16,

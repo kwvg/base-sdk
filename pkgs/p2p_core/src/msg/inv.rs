@@ -43,6 +43,7 @@ fn encode_inv_list(items: &[Inventory], buf: &mut Vec<u8>) {
 
 /// Announces available inventory to a peer.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Inv {
   /// Inventory items being announced.
   pub inventory: Vec<Inventory>,
@@ -73,6 +74,7 @@ impl encoding::Decodable for Inv {
 
 /// Requests specific inventory items from a peer.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GetData {
   /// Inventory items being requested.
   pub inventory: Vec<Inventory>,
@@ -103,6 +105,7 @@ impl encoding::Decodable for GetData {
 
 /// Indicates requested inventory items were not found.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct NotFound {
   /// Missing inventory items.
   pub inventory: Vec<Inventory>,

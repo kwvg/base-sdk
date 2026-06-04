@@ -13,6 +13,7 @@ use bitcoin_consensus_encoding as encoding;
 
 /// A masternode vote on a governance object.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GovObjVote {
   /// The vote.
   pub vote: GovernanceVote,

@@ -17,7 +17,7 @@ const MAX_SIZE: usize = 0x0200_0000;
 
 /// A variable-length script, CompactSize-prefixed on the wire.
 #[derive(Clone, Eq, Hash, PartialEq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct Script(#[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex"))] pub Vec<u8>);
 

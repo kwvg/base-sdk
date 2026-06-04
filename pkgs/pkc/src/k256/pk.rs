@@ -13,7 +13,7 @@ use k256::ecdsa::{self, signature::hazmat::PrehashVerifier};
 
 /// A secp256k1 public key.
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[cfg_attr(
   feature = "serde",
   serde(

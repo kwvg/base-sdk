@@ -18,6 +18,7 @@ use core::fmt;
 
 /// AssetUnlock: Platform-to-L1 (type 9).
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct AssetUnlock {
   /// Payload version.
   pub version: u8,

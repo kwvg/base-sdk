@@ -16,7 +16,7 @@ macro_rules! make_bytes {
   ) => {
     $(#[$attr])*
     #[derive(Clone, Copy, Eq, Hash, PartialEq)]
-    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
     #[cfg_attr(feature = "serde", serde(transparent))]
     pub struct $name(
       #[cfg_attr(feature = "serde", serde(with = $serde_with))]

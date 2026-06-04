@@ -25,6 +25,7 @@ const MAX_USER_AGENT: usize = 256;
 /// Dash extends the Bitcoin version message with two additional
 /// fields for masternode authentication.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Version {
   /// Sender's protocol version.
   pub protocol_version: ProtocolVersion,

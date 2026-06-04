@@ -15,7 +15,7 @@ use core::fmt;
 
 /// A transaction output.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TxOut {
   /// Output value in duffs.
   #[cfg_attr(feature = "serde", serde(with = "crate::serialize::amount"))]

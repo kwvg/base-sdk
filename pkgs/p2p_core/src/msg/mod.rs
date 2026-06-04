@@ -90,6 +90,7 @@ macro_rules! define_network_messages {
     /// payload so callers can identify *what* was received (for
     /// logging) without needing a full decoder.
     #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
     pub enum DashNetworkMessage {
       $( $(#[$p_doc])* $p_variant($p_type), )*
       $( $(#[$pe_doc])* $pe_variant, )*

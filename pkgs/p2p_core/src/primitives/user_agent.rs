@@ -19,6 +19,7 @@ const MAX_USER_AGENT: usize = 256;
 
 /// CompactSize-prefixed user agent bytestring.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct UserAgent(Vec<u8>);
 
 /// The user agent exceeds the 256-byte limit.

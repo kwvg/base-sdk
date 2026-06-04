@@ -49,6 +49,7 @@ const P2PK_UNCOMPRESSED_KEY_LEN: usize = 65;
 
 /// Known output script patterns.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum ScriptKind {
   /// Pay-to-public-key-hash.
   P2pkh,

@@ -13,6 +13,7 @@ use core::ops;
 
 /// Bitfield advertised in `version` messages describing node capabilities.
 #[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ServiceFlags(pub u64);
 
 impl ServiceFlags {

@@ -15,7 +15,7 @@ use core::fmt;
 
 /// A transaction input.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TxIn {
   /// The outpoint being spent.
   pub prevout: OutPoint,

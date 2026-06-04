@@ -57,6 +57,7 @@ pub(crate) const PROTX_VERSION_EXT_ADDR: u16 = 3;
 /// `Some(false)` means it is not yet active, and `None` means the caller does
 /// not know and the corresponding checks should be skipped.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct DeploymentContext {
   /// DIP0001 (2 MB blocks, relaxed sigops).
   pub dip0001_active: Option<bool>,

@@ -29,6 +29,7 @@ const MAX_VCH_SIG_SIZE: usize = 256;
 
 /// Masternode network info: legacy CService or structured extended format.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NetInfo {
   /// ADDRv1 CService (18 bytes).
   Legacy(CService),
@@ -42,6 +43,7 @@ pub enum NetInfo {
 /// - v2: BasicBLS
 /// - v3: ExtAddr (extended network info)
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ProRegTx {
   /// 1=LegacyBLS, 2=BasicBLS, 3=ExtAddr.
   pub version: u16,

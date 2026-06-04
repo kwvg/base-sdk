@@ -20,6 +20,7 @@ const MAX_CFHEADERS: usize = 2_000;
 
 /// Requests compact filter headers for a range of blocks.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct GetCFHeaders {
   /// Filter type.
   pub filter_type: FilterType,
@@ -67,6 +68,7 @@ impl encoding::Decodable for GetCFHeaders {
 
 /// Response carrying filter headers and their hashes.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CFHeaders {
   /// Filter type.
   pub filter_type: FilterType,
