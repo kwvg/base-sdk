@@ -21,6 +21,9 @@ import rust
 /** Gets a required trait name. */
 string requiredTrait() { result = ["Clone", "Debug", "Eq", "Hash", "PartialEq"] }
 
+/** Gets a required serde trait name. */
+string requiredSerdeTrait() { result = ["Serialize", "Deserialize"] }
+
 /** Holds if `t` is codec infrastructure (decoder or encoder wrappers). */
 predicate isCodecType(TypeItem t) {
   t.getName().getText().matches("%Decoder%") or
@@ -33,6 +36,14 @@ predicate isCheckableType(TypeItem t) {
   not isCodecType(t) and
   not isSecretType(t) and
   not isIteratorType(t)
+}
+
+/** Holds if `t` lives in a crate that does not have a `serde` feature. */
+predicate isNonSerdeCrate(TypeItem t) {
+  exists(string path |
+    path = fileOf(t).getAbsolutePath() and
+    (path.matches("%/pkgs/params/%") or path.matches("%/pkgs/pow/%"))
+  )
 }
 
 /**
@@ -52,6 +63,25 @@ predicate isSuppressed(TypeItem t, string trait) {
   isOpaqueType(t) and trait = "Hash"
 }
 
+/** Holds if `t` is exempt from serde derivation requirements. */
+predicate isSerdeExempt(TypeItem t) {
+  isNonSerdeCrate(t)
+  or
+  isNotEncodable(t)
+  or
+  isCodecType(t)
+  or
+  isErrorType(t)
+  or
+  isDispatchType(t)
+  or
+  hasLifetime(t)
+  or
+  // Single-field wrappers without PartialEq are exempt.
+  isSingleTupleField(t) and
+  not implementsTrait(t, "PartialEq")
+}
+
 /** Gets a comma-separated list of missing required traits for `t`. */
 string missingTraits(TypeItem t) {
   isCheckableType(t) and
@@ -66,8 +96,28 @@ string missingTraits(TypeItem t) {
   result != ""
 }
 
-from TypeItem t, string missing
+from TypeItem t, string message
 where
-  isCheckableType(t) and
-  missing = missingTraits(t)
-select t, fmt("missing required derivations: {0}", missing)
+  (
+    isCheckableType(t) and
+    exists(string missing |
+      missing = missingTraits(t) and
+      message = fmt("missing required derivations: {0}", missing)
+    )
+    or
+    // Serde: every non-exempt type must derive Serialize + Deserialize.
+    isCheckableType(t) and
+    not isSerdeExempt(t) and
+    exists(string missing |
+      missing =
+        concat(string trait |
+          trait = requiredSerdeTrait() and
+          not implementsSerdeTrait(t, trait)
+        |
+          trait, ", " order by trait
+        ) and
+      missing != "" and
+      message = fmt("missing serde derivations: {0}", missing)
+    )
+  )
+select t, message

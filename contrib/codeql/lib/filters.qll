@@ -41,6 +41,15 @@ predicate isTestCode(TypeItem t) {
   )
 }
 
+/** Holds if `t` carries `#[derive(Unencodable)]` or `#[derive(dash_types::Unencodable)]`. */
+predicate isNotEncodable(TypeItem t) {
+  exists(Attr a |
+    a = t.getAnAttr() and
+    a.getMeta().getPath().getSegment().getIdentifier().getText() = "derive" and
+    a.getMeta().getTokenTree().toAbbreviatedString().regexpMatch(".*\\bUnencodable\\b.*")
+  )
+}
+
 /** Holds if `t` holds secret or security-sensitive material. */
 predicate isSecretType(TypeItem t) {
   t.getName().getText().regexpMatch(".*(Secret|Private|Seed|Password|Mnemonic|Share).*") and
@@ -91,6 +100,11 @@ predicate isSingleTupleField(TypeItem t) {
     s = t and
     count(s.getFieldList().(TupleFieldList).getField(_)) = 1
   )
+}
+
+/** Holds if `t` has a lifetime parameter in its generic params. */
+predicate hasLifetime(TypeItem t) {
+  exists(t.getGenericParamList().getAGenericParam().(LifetimeParam))
 }
 
 /** Gets the crate directory prefix for a source type. */
