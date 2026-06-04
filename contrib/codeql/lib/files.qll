@@ -17,6 +17,36 @@ int endLine(Locatable n) { result = n.getLocation().getEndLine() }
 /** Gets the file containing `n`. */
 File fileOf(Locatable n) { result = n.getLocation().getFile() }
 
+/**
+ * Gets the effective start line of `u`, accounting for leading
+ * attributes (e.g. `#[cfg(...)]`).
+ */
+int effectiveStartUse(Use u) {
+  if exists(u.getAnAttr())
+  then result = min(Attr a | a = u.getAnAttr() | startLine(a))
+  else result = startLine(u)
+}
+
+/**
+ * Gets the effective start line of a module declaration `m`,
+ * accounting for leading attributes.
+ */
+int effectiveStartMod(Module m) {
+  if exists(m.getAnAttr())
+  then result = min(Attr a | a = m.getAnAttr() | startLine(a))
+  else result = startLine(m)
+}
+
+/**
+ * Gets the effective start line of an extern crate declaration `e`,
+ * accounting for leading attributes.
+ */
+int effectiveStartExternCrate(ExternCrate e) {
+  if exists(e.getAnAttr())
+  then result = min(Attr a | a = e.getAnAttr() | startLine(a))
+  else result = startLine(e)
+}
+
 /** Gets the root (qualifier-less) segment of path `p`. */
 Path rootPath(Path p) {
   not exists(p.getQualifier()) and result = p
