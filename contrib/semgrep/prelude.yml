@@ -1,0 +1,18 @@
+rules:
+  - id: alloc-only-in-prelude
+    message: "use crate::prelude instead of alloc:: directly"
+    severity: ERROR
+    languages: [rust]
+    paths:
+      include: [/pkgs/**/*.rs]
+      exclude: [/pkgs/**/prelude.rs, /pkgs/**/prelude/mod.rs]
+    pattern-regex: '\buse\s+(::)?alloc::'
+
+  - id: prelude-named-import
+    message: "use crate::prelude::* instead of named imports from prelude"
+    severity: ERROR
+    languages: [rust]
+    paths:
+      include: [/pkgs/**/*.rs]
+      exclude: [/pkgs/**/prelude.rs, /pkgs/**/prelude/mod.rs]
+    pattern-regex: '\buse\s+crate::prelude::[^*]'
