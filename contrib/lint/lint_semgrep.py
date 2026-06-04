@@ -40,11 +40,9 @@ def main() -> int:
     configs.extend(["--config", str(cfg)])
 
   if not configs:
-    print(
-      "error: no semgrep configs found in contrib/semgrep/",
-      file=sys.stderr,
+    raise FileNotFoundError(
+      "no semgrep configs found in contrib/semgrep/",
     )
-    return RETCODE_ERR
 
   result = subprocess.run(  # noqa: S603
     [

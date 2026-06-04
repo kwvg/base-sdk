@@ -226,11 +226,7 @@ def main() -> int:
   queries = _discover_queries(query_dir)
 
   if not queries:
-    print(
-      "error: no .ql queries found in contrib/codeql/",
-      file=sys.stderr,
-    )
-    return RETCODE_ERR
+    raise FileNotFoundError("no .ql queries found in contrib/codeql/")
 
   # Generate source-line data for queries that need raw text.
   generated = _generate_source_lines(
@@ -265,15 +261,10 @@ def main() -> int:
       return RETCODE_ERR
 
   # Install CodeQL pack dependencies.
-  result = subprocess.run(  # noqa: S603
+  subprocess.run(  # noqa: S603
     [codeql_bin, "pack", "install", str(query_dir)],
-    check=False,
+    check=True,
   )
-  if result.returncode != 0:
-    print(
-      "error: codeql pack install failed", file=sys.stderr,
-    )
-    return RETCODE_ERR
 
   # Compile queries and treat warnings (e.g. unused imports) as errors.
   result = subprocess.run(  # noqa: S603
@@ -298,7 +289,7 @@ def main() -> int:
   with tempfile.TemporaryDirectory() as tmp_dir:
     db_path = Path(tmp_dir) / "db"
 
-    result = subprocess.run(  # noqa: S603
+    subprocess.run(  # noqa: S603
       [
         codeql_bin,
         "database",
@@ -310,21 +301,15 @@ def main() -> int:
         "-j0",
         "--command=cargo check --features full,_internal",
       ],
-      check=False,
+      check=True,
     )
-    if result.returncode != 0:
-      print(
-        "error: codeql database create failed",
-        file=sys.stderr,
-      )
-      return RETCODE_ERR
 
     # Run each query and collect diagnostics.
     total_findings = 0
     for query_path in queries:
       sarif_path = Path(tmp_dir) / f"{query_path.stem}.sarif"
 
-      result = subprocess.run(  # noqa: S603
+      subprocess.run(  # noqa: S603
         [
           codeql_bin,
           "database",
@@ -334,14 +319,8 @@ def main() -> int:
           "--format=sarif-latest",
           f"--output={sarif_path}",
         ],
-        check=False,
+        check=True,
       )
-      if result.returncode != 0:
-        print(
-          f"error: codeql analyze failed for {query_path.name}",
-          file=sys.stderr,
-        )
-        return RETCODE_ERR
 
       with sarif_path.open() as f:
         sarif = SarifLog.from_json(json.load(f))
