@@ -43,6 +43,9 @@ jobs:
           key: cargo-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-deps-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Run SDK linter
+        run: python3 contrib/lint/lint_codeql.py
+
       - name: Build package
         run: cargo build -p ${{ inputs.package }} --features ${{ inputs.features }}
 

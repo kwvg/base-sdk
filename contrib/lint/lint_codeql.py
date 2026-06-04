@@ -217,6 +217,15 @@ def main() -> int:
     print(f"{e}, skipping", file=sys.stderr)
     return RETCODE_SKIP
 
+  try:
+    require_bin("rustc")
+  except FileNotFoundError:
+    print(
+      "error: rust compiler unavailable, skipping",
+      file=sys.stderr,
+    )
+    return RETCODE_SKIP
+
   repo_root = find_up(
     Path(__file__).resolve().parent,
     is_workspace_root,
