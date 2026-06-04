@@ -57,3 +57,87 @@ predicate isSourceType(TypeItem t) {
   not isMacroGenerated(t) and
   not isLocalType(t)
 }
+
+/** Holds if `t` is an iterator type (name ends with Iterator or Iter). */
+predicate isIteratorType(TypeItem t) {
+  t.getName().getText().matches("%Iterator") or
+  t.getName().getText().matches("%Iter")
+}
+
+/** Holds if `t` is an error type (name ends with Error, Invalid, TooLong, or TooShort). */
+predicate isErrorType(TypeItem t) {
+  t.getName().getText().matches("%Error") or
+  t.getName().getText().matches("%Invalid") or
+  t.getName().getText().matches("%TooLong") or
+  t.getName().getText().matches("%TooShort")
+}
+
+/** Holds if `t` is a dispatch/message type (name ends with Message). */
+predicate isDispatchType(TypeItem t) { t.getName().getText().matches("%Message") }
+
+/** Holds if `t` is an opaque single-field wrapper in the pkc crate. */
+predicate isOpaqueType(TypeItem t) {
+  t instanceof Struct and
+  exists(string path |
+    path = fileOf(t).getAbsolutePath() and
+    path.matches("%/pkgs/pkc/%")
+  ) and
+  isSingleTupleField(t)
+}
+
+/** Holds if struct `t` has exactly one unnamed (tuple) field. */
+predicate isSingleTupleField(TypeItem t) {
+  exists(Struct s |
+    s = t and
+    count(s.getFieldList().(TupleFieldList).getField(_)) = 1
+  )
+}
+
+/** Gets the crate directory prefix for a source type. */
+string cratePrefix(TypeItem t) {
+  exists(string path |
+    path = fileOf(t).getAbsolutePath() and
+    result = path.regexpCapture("(.*/pkgs/[^/]+/).*", 1)
+  )
+}
+
+/** Holds if struct `s` contains a float field, directly or transitively. */
+predicate hasFloatField(TypeItem t) {
+  typeFieldName(t) = ["f32", "f64"]
+  or
+  exists(TypeItem inner |
+    inner.getName().getText() = typeFieldName(t) and
+    cratePrefix(inner) = cratePrefix(t) and
+    hasFloatField(inner)
+  )
+}
+
+/** Gets the type name of a field in struct `s`. */
+string structFieldTypeName(Struct s) {
+  exists(TypeRepr tr |
+    tr = s.getFieldList().(StructFieldList).getAField().getTypeRepr() or
+    tr = s.getFieldList().(TupleFieldList).getField(_).getTypeRepr()
+  |
+    result = tr.(PathTypeRepr).getPath().getSegment().getIdentifier().getText()
+  )
+}
+
+/** Gets the type name of a field in enum variant of `e`. */
+string enumFieldTypeName(Enum e) {
+  exists(Variant v, TypeRepr tr |
+    v = e.getVariantList().getAVariant() and
+    (
+      tr = v.getFieldList().(StructFieldList).getAField().getTypeRepr() or
+      tr = v.getFieldList().(TupleFieldList).getField(_).getTypeRepr()
+    )
+  |
+    result = tr.(PathTypeRepr).getPath().getSegment().getIdentifier().getText()
+  )
+}
+
+/** Gets the type name of a field in type item `t` (struct or enum). */
+string typeFieldName(TypeItem t) {
+  result = structFieldTypeName(t)
+  or
+  result = enumFieldTypeName(t)
+}

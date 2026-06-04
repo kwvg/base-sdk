@@ -91,7 +91,7 @@ The type system is the first line of defence. A constraint expressed as a type i
 - Wrap primitive types in newtypes when two values of the same underlying type carry different semantics; this prevents accidental transposition of arguments
 - Prefer enums over booleans for function parameters because `Script::classify(P2pkh)` communicates intent where `Script::classify(true)` does not
 - Make invalid states unrepresentable; if a combination of fields is logically impossible, restructure the type so the compiler rejects it
-- Derive common traits eagerly on public types: `Clone`, `Debug`, `PartialEq`, `Eq`, `Hash`, `Default`; the orphan rule prevents downstream crates from adding them later
+- Derive common traits eagerly on public types: `Clone`, `Debug`, `PartialEq`, `Eq`, `Hash`; the orphan rule prevents downstream crates from adding them later
 - All public types implement `Debug` because diagnostic output and test assertions depend on it; for types holding sensitive data, provide a custom implementation that redacts the secret
 
 > [!TIP]

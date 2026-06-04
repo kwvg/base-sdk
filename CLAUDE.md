@@ -9,7 +9,7 @@ The full guide is at [`docs/guide_rust.md`](./docs/guide_rust.md). Key points:
 - **Naming**: `UpperCamelCase` for types/traits/enum variants, `snake_case` for functions/variables/modules,
   `SCREAMING_SNAKE_CASE` for constants. Acronyms as words (`TxId` not `TXID`). Getters omit `get_` prefix.
 - **Type safety**: newtypes over primitives when semantics differ, enums over booleans, make invalid states
-  unrepresentable. Derive `Clone`, `Debug`, `PartialEq`, `Eq`, `Hash`, `Default` eagerly.
+  unrepresentable. Derive `Clone`, `Debug`, `PartialEq`, `Eq`, `Hash` eagerly.
 - **Error handling**: never `.unwrap()` or `.expect()` in library code. Propagate with `?`. Domain error enums implement
   `Display`. Lowercase messages without trailing punctuation. Use `#[expect]` over `#[allow]`.
 - **Ownership**: prefer borrowing over cloning, accept `&str` over `&String`, `&[T]` over `&Vec<T>`. Let the caller
