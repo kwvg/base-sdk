@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -27,6 +26,7 @@ from common import (
   RETCODE_SKIP,
   find_up,
   is_workspace_root,
+  require_bin,
 )
 
 
@@ -211,9 +211,10 @@ def _print_sarif_diagnostics(sarif: SarifLog) -> int:
 
 
 def main() -> int:
-  codeql_bin = shutil.which("codeql")
-  if codeql_bin is None:
-    print("codeql not found in PATH, skipping", file=sys.stderr)
+  try:
+    codeql_bin = require_bin("codeql")
+  except FileNotFoundError as e:
+    print(f"{e}, skipping", file=sys.stderr)
     return RETCODE_SKIP
 
   repo_root = find_up(
@@ -350,4 +351,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-  sys.exit(main())
+  try:
+    sys.exit(main())
+  except Exception as exc:
+    print(exc, file=sys.stderr)
+    sys.exit(RETCODE_ERR)

@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -42,3 +44,14 @@ def is_workspace_root(d: Path) -> bool:
     and "[workspace]" in cargo.read_text(encoding="utf-8")
     and (d / "pkgs").is_dir()
   )
+
+
+def require_bin(name: str, path: str | None = None) -> str:
+  """Return the path to *name* or raise FileNotFoundError."""
+  result = shutil.which(name, path=path)
+  if result is None and os.name == "nt":
+    result = shutil.which(f"{name}.exe", path=path)
+  if result is None:
+    where = "in expected path" if path else "in PATH"
+    raise FileNotFoundError(f"error: {name} binary not found {where}")
+  return result

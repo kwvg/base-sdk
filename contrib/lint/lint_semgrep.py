@@ -11,19 +11,21 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from common import RETCODE_ERR, RETCODE_PASS, find_up, is_workspace_root
+from common import (
+  RETCODE_ERR,
+  RETCODE_PASS,
+  find_up,
+  is_workspace_root,
+  require_bin,
+)
 
 
 def main() -> int:
-  semgrep_bin = shutil.which("semgrep")
-  if semgrep_bin is None:
-    print("error: semgrep not found in PATH", file=sys.stderr)
-    return RETCODE_ERR
+  semgrep_bin = require_bin("semgrep")
 
   repo_root = find_up(
     Path(__file__).resolve().parent,
@@ -58,4 +60,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-  sys.exit(main())
+  try:
+    sys.exit(main())
+  except Exception as exc:
+    print(exc, file=sys.stderr)
+    sys.exit(RETCODE_ERR)

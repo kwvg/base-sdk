@@ -9,37 +9,29 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from common import RETCODE_ERR, find_up, require_bin
 
 ESLINT_VERSION = "9.39.3"
 
 DEFAULT_TARGETS: tuple[str, ...] = (".github/scripts",)
 
 
-def find_repo_root(start: Path) -> Path:
-  """Walk upward from *start* until a pyproject.toml file is found."""
-  for directory in (start, *start.parents):
-    if (directory / "pyproject.toml").is_file():
-      return directory
-
-  raise FileNotFoundError("pyproject.toml not found")
-
-
 def main() -> int:
-  npx_bin = shutil.which("npx")
-  if npx_bin is None:
-    print("error: npx binary not found in PATH", file=sys.stderr)
-    return 2
+  npx_bin = require_bin("npx")
 
-  repo_root = find_repo_root(Path(__file__).resolve().parent)
+  repo_root = find_up(
+    Path(__file__).resolve().parent,
+    lambda d: (d / "pyproject.toml").is_file(),
+    "pyproject.toml",
+  )
   config_path = repo_root / "contrib" / "js" / "eslint.config.mjs"
 
   if not config_path.is_file():
-    print(f"error: eslint config not found: {config_path}", file=sys.stderr)
-    return 2
+    raise FileNotFoundError(f"error: eslint config not found: {config_path}")
 
   targets = [str(repo_root / t) for t in DEFAULT_TARGETS]
 
@@ -59,4 +51,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-  sys.exit(main())
+  try:
+    sys.exit(main())
+  except Exception as exc:
+    print(exc, file=sys.stderr)
+    sys.exit(RETCODE_ERR)
