@@ -43,8 +43,28 @@ jobs:
           key: cargo-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-deps-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+
+      - name: Restore CodeQL database cache
+        id: codeql-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: contrib/codeql/.cache
+          key: codeql-db-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkgs/**/*.rs', 'Cargo.lock') }}
+          restore-keys: codeql-db-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Run SDK linter
         run: python3 contrib/lint/lint_codeql.py
+
+      - name: Save CodeQL database cache
+        if: success() && steps.codeql-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: contrib/codeql/.cache
+          key: codeql-db-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkgs/**/*.rs', 'Cargo.lock') }}
 
       - name: Build package
         run: cargo build -p ${{ inputs.package }} --features ${{ inputs.features }}

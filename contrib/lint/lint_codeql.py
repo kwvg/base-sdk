@@ -15,7 +15,6 @@ import datetime
 import json
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -198,11 +197,13 @@ def _print_sarif_diagnostics(sarif: SarifLog) -> int:
   count = 0
   for run in sarif.runs:
     for r in run.results:
-      if not r.locations:
-        continue
-      phys = r.locations[0].physical_location
-      uri = phys.artifact_location.uri
-      line = phys.region.start_line
+      if r.locations:
+        phys = r.locations[0].physical_location
+        uri = phys.artifact_location.uri
+        line = phys.region.start_line
+      else:
+        uri = "?"
+        line = 0
       print(
         f"{uri}:{line}: {r.message.text}", file=sys.stderr,
       )
@@ -292,12 +293,15 @@ def main() -> int:
       "error: QL compilation failed with warnings",
       file=sys.stderr,
     )
-    return 1
+    return RETCODE_ERR
 
-  # Create database in a temporary directory.
-  with tempfile.TemporaryDirectory() as tmp_dir:
-    db_path = Path(tmp_dir) / "db"
+  # Database lives at a fixed path; CI cache restore/save handles
+  # invalidation via hashFiles.  Locally, delete .cache/ to rebuild.
+  db_path = query_dir / ".cache" / "db"
+  sarif_dir = query_dir / ".cache" / "sarif"
 
+  if not db_path.is_dir():
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(  # noqa: S603
       [
         codeql_bin,
@@ -310,32 +314,34 @@ def main() -> int:
         "-j0",
         "--command=cargo check --features full,_internal",
       ],
+      cwd=str(repo_root),
       check=True,
     )
 
-    # Run each query and collect diagnostics.
-    total_findings = 0
-    for query_path in queries:
-      sarif_path = Path(tmp_dir) / f"{query_path.stem}.sarif"
+  # Run each query and collect diagnostics.
+  sarif_dir.mkdir(parents=True, exist_ok=True)
+  total_findings = 0
+  for query_path in queries:
+    sarif_path = sarif_dir / f"{query_path.stem}.sarif"
 
-      subprocess.run(  # noqa: S603
-        [
-          codeql_bin,
-          "database",
-          "analyze",
-          str(db_path),
-          str(query_path),
-          "--format=sarif-latest",
-          f"--output={sarif_path}",
-        ],
-        check=True,
-      )
+    subprocess.run(  # noqa: S603
+      [
+        codeql_bin,
+        "database",
+        "analyze",
+        str(db_path),
+        str(query_path),
+        "--format=sarif-latest",
+        f"--output={sarif_path}",
+      ],
+      check=True,
+    )
 
-      with sarif_path.open() as f:
-        sarif = SarifLog.from_json(json.load(f))
-      total_findings += _print_sarif_diagnostics(sarif)
+    with sarif_path.open() as f:
+      sarif = SarifLog.from_json(json.load(f))
+    total_findings += _print_sarif_diagnostics(sarif)
 
-    return RETCODE_ERR if total_findings > 0 else RETCODE_PASS
+  return RETCODE_ERR if total_findings > 0 else RETCODE_PASS
 
 
 if __name__ == "__main__":
