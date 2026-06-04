@@ -130,3 +130,25 @@ predicate hasCfgAttrDeriveInSource(TypeItem t, string traitName, string feature,
     text.matches("%" + traitName + "%")
   )
 }
+
+/** Gets the line of a hand-written `impl Trait for name` in file `f`. */
+int traitImplLine(File f, string name, string trait) {
+  exists(Impl i |
+    not exists(MacroItems m | i = m.getItem(_)) and
+    fileOf(i) = f and
+    implSelfName(i) = name and
+    implTraitName(i) = trait and
+    result = startLine(i)
+  )
+}
+
+/** Gets the line of an inherent impl (no trait) for `name` in file `f`. */
+int inherentImplLine(File f, string name) {
+  exists(Impl i |
+    not exists(MacroItems m | i = m.getItem(_)) and
+    fileOf(i) = f and
+    implSelfName(i) = name and
+    not exists(implTraitName(i)) and
+    result = startLine(i)
+  )
+}

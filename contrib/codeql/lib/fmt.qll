@@ -15,3 +15,9 @@ bindingset[template, a, b]
 string fmt(string template, string a, string b) {
   result = template.replaceAll("{0}", a).replaceAll("{1}", b)
 }
+
+/** Gets `template` with `{0}` .. `{2}` replaced. */
+bindingset[template, a, b, c]
+string fmt(string template, string a, string b, string c) {
+  result = template.replaceAll("{0}", a).replaceAll("{1}", b).replaceAll("{2}", c)
+}
