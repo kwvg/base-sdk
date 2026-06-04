@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
+from common import RETCODE_ERR, RETCODE_PASS, RETCODE_SKIP
+
 
 @dataclass
 class LintResult:
@@ -29,7 +31,7 @@ class LintResult:
   def status(self) -> str:
     if self.retcode is None:
       return "skip"
-    return "pass" if self.retcode == 0 else "fail"
+    return "pass" if self.retcode == RETCODE_PASS else "fail"
 
 
 GREEN = "\033[32m"
@@ -81,7 +83,7 @@ async def _run_linter(script: Path) -> LintResult:
   )
 
   await proc.wait()
-  result.retcode = proc.returncode
+  result.retcode = None if proc.returncode == RETCODE_SKIP else proc.returncode
   result.elapsed = time.monotonic() - start
   return result
 
@@ -140,7 +142,7 @@ async def _main() -> int:
 
   if not scripts:
     print("no lint_*.py scripts found", file=sys.stderr)
-    return 1
+    return RETCODE_ERR
 
   print(f"{BOLD}running {len(scripts)} linter(s)...{RESET}\n")
 
@@ -149,7 +151,9 @@ async def _main() -> int:
 
   print(f"\n{_format_table(results)}\n")
 
-  return 1 if any(r.status == "fail" for r in results) else 0
+  return (
+    RETCODE_ERR if any(r.status == "fail" for r in results) else RETCODE_PASS
+  )
 
 
 if __name__ == "__main__":

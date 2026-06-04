@@ -16,28 +16,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-def _find_workspace_root(start: Path) -> Path:
-  """Walk upward from *start* until a workspace Cargo.toml is found."""
-  for directory in (start, *start.parents):
-    cargo = directory / "Cargo.toml"
-    if (
-      cargo.is_file()
-      and "[workspace]" in cargo.read_text()
-      and (directory / "pkgs").is_dir()
-    ):
-      return directory
-  raise FileNotFoundError("workspace Cargo.toml not found")
+from common import RETCODE_ERR, RETCODE_PASS, find_up, is_workspace_root
 
 
 def main() -> int:
   semgrep_bin = shutil.which("semgrep")
   if semgrep_bin is None:
     print("error: semgrep not found in PATH", file=sys.stderr)
-    return 1
+    return RETCODE_ERR
 
-  repo_root = _find_workspace_root(
+  repo_root = find_up(
     Path(__file__).resolve().parent,
+    is_workspace_root,
+    "workspace Cargo.toml",
   )
   config_dir = repo_root / "contrib" / "semgrep"
   target_dir = repo_root / "pkgs"
@@ -51,7 +42,7 @@ def main() -> int:
       "error: no semgrep configs found in contrib/semgrep/",
       file=sys.stderr,
     )
-    return 1
+    return RETCODE_ERR
 
   result = subprocess.run(  # noqa: S603
     [
@@ -63,7 +54,7 @@ def main() -> int:
     ],
     check=False,
   )
-  return 0 if result.returncode == 0 else 1
+  return RETCODE_PASS if result.returncode == 0 else RETCODE_ERR
 
 
 if __name__ == "__main__":

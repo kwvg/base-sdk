@@ -21,6 +21,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from common import (
+  RETCODE_ERR,
+  RETCODE_PASS,
+  RETCODE_SKIP,
+  find_up,
+  is_workspace_root,
+)
+
 
 @dataclass(frozen=True)
 class SarifRegion:
@@ -129,19 +137,6 @@ class SarifLog:
     )
 
 
-def _find_workspace_root(start: Path) -> Path:
-  """Walk upward from *start* until a workspace Cargo.toml is found."""
-  for directory in (start, *start.parents):
-    cargo = directory / "Cargo.toml"
-    if (
-      cargo.is_file()
-      and "[workspace]" in cargo.read_text()
-      and (directory / "pkgs").is_dir()
-    ):
-      return directory
-  raise FileNotFoundError("workspace Cargo.toml not found")
-
-
 def _discover_queries(query_dir: Path) -> list[Path]:
   """Return all .ql files in *query_dir*, sorted by name."""
   return sorted(query_dir.glob("*.ql"))
@@ -219,9 +214,13 @@ def main() -> int:
   codeql_bin = shutil.which("codeql")
   if codeql_bin is None:
     print("codeql not found in PATH, skipping", file=sys.stderr)
-    return 77
+    return RETCODE_SKIP
 
-  repo_root = _find_workspace_root(Path(__file__).resolve().parent)
+  repo_root = find_up(
+    Path(__file__).resolve().parent,
+    is_workspace_root,
+    "workspace Cargo.toml",
+  )
   query_dir = repo_root / "contrib" / "codeql"
   queries = _discover_queries(query_dir)
 
@@ -230,7 +229,7 @@ def main() -> int:
       "error: no .ql queries found in contrib/codeql/",
       file=sys.stderr,
     )
-    return 1
+    return RETCODE_ERR
 
   # Generate source-line data for queries that need raw text.
   generated = _generate_source_lines(
@@ -262,7 +261,7 @@ def main() -> int:
         "'codeql query format -i' to fix",
         file=sys.stderr,
       )
-      return 1
+      return RETCODE_ERR
 
   # Install CodeQL pack dependencies.
   result = subprocess.run(  # noqa: S603
@@ -273,7 +272,7 @@ def main() -> int:
     print(
       "error: codeql pack install failed", file=sys.stderr,
     )
-    return 1
+    return RETCODE_ERR
 
   # Compile queries and treat warnings (e.g. unused imports) as errors.
   result = subprocess.run(  # noqa: S603
@@ -317,7 +316,7 @@ def main() -> int:
         "error: codeql database create failed",
         file=sys.stderr,
       )
-      return 1
+      return RETCODE_ERR
 
     # Run each query and collect diagnostics.
     total_findings = 0
@@ -341,13 +340,13 @@ def main() -> int:
           f"error: codeql analyze failed for {query_path.name}",
           file=sys.stderr,
         )
-        return 1
+        return RETCODE_ERR
 
       with sarif_path.open() as f:
         sarif = SarifLog.from_json(json.load(f))
       total_findings += _print_sarif_diagnostics(sarif)
 
-    return 1 if total_findings > 0 else 0
+    return RETCODE_ERR if total_findings > 0 else RETCODE_PASS
 
 
 if __name__ == "__main__":
