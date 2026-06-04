@@ -1,0 +1,79 @@
+name: Build and lint on MSRV
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-msrv:
+    name: Build and lint on MSRV
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Install Python dependencies
+        run: pip install ".[dev]"
+
+      - name: Restore cargo registry
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-deps-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Restore CodeQL database cache
+        id: codeql-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: contrib/codeql/.cache
+          key: codeql-db-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkgs/**/*.rs', 'Cargo.lock') }}
+          restore-keys: codeql-db-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Run linters
+        run: python3 contrib/lint/all_lint.py
+
+      - name: Save CodeQL database cache
+        if: success() && steps.codeql-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: contrib/codeql/.cache
+          key: codeql-db-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkgs/**/*.rs', 'Cargo.lock') }}
+
+      - name: Build workspace
+        run: cargo build --workspace --features full,_internal
+
+      - name: Test workspace
+        run: cargo test --workspace --features full,_internal
+
+      - name: Check PR commit messages
+        if: github.event_name == 'pull_request'
+        run: >
+          python3 contrib/lint/lint_unconv.py
+          -r "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"

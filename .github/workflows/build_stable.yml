@@ -1,4 +1,4 @@
-name: Build on MSRV and stable
+name: Build on stable
 
 on:
   workflow_call:
@@ -21,57 +21,6 @@ permissions:
   contents: read
 
 jobs:
-  msrv:
-    name: ubuntu-24.04-arm (MSRV)
-    runs-on: ubuntu-24.04-arm
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.85.0
-
-      - name: Restore cargo registry
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: cargo-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-deps-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: rust
-
-      - name: Restore CodeQL database cache
-        id: codeql-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: contrib/codeql/.cache
-          key: codeql-db-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkgs/**/*.rs', 'Cargo.lock') }}
-          restore-keys: codeql-db-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Run SDK linter
-        run: python3 contrib/lint/lint_codeql.py
-
-      - name: Save CodeQL database cache
-        if: success() && steps.codeql-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: contrib/codeql/.cache
-          key: codeql-db-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkgs/**/*.rs', 'Cargo.lock') }}
-
-      - name: Build package
-        run: cargo build -p ${{ inputs.package }} --features ${{ inputs.features }}
-
-      - name: Test package
-        run: cargo test -p ${{ inputs.package }} --features ${{ inputs.features }}
-
   stable:
     strategy:
       fail-fast: false
