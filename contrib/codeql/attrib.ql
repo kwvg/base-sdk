@@ -15,8 +15,27 @@
 import lib.files
 import lib.filters
 import lib.fmt
+import lib.policy
+import lib.source_lines
 import lib.traits
 import rust
+
+/**
+ * Holds if `t` implements a serde trait via crate-qualified impl
+ * or a cfg_attr/cfg gate that mentions serde.
+ */
+bindingset[traitName]
+predicate implementsSerdeTrait(TypeItem t, string traitName) {
+  implementsTraitInCrate(t, traitName, "serde")
+  or
+  exists(Attr a, int serdeLine |
+    a = t.getAnAttr() and
+    a.getMeta().getPath().getSegment().getIdentifier().getText() = ["cfg_attr", "cfg"] and
+    hasSerdeMention(fileOf(t).getAbsolutePath().regexpCapture(".*/pkgs/(.*)", 1), serdeLine) and
+    serdeLine >= a.getLocation().getStartLine() and
+    serdeLine <= a.getLocation().getEndLine()
+  )
+}
 
 /** Gets a required trait name. */
 string requiredTrait() { result = ["Clone", "Debug", "Eq", "Hash", "PartialEq"] }
@@ -74,6 +93,8 @@ predicate isSerdeExempt(TypeItem t) {
   isErrorType(t)
   or
   isDispatchType(t)
+  or
+  isOpaqueType(t)
   or
   hasLifetime(t)
   or

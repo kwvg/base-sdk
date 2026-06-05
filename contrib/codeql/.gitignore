@@ -4,6 +4,9 @@
 *.testproj/
 *.actual
 
+# Generated source-line data
+lib/source_lines.qll
+
 # Test files / folders
 test.ql
 test-*.ql

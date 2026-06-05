@@ -106,7 +106,7 @@ predicate preambleItem(Locatable item, File f, int group, int effStart, int end)
     item = u and
     f = fileOf(u) and
     group = useGroup(u) and
-    effStart = effectiveStartUse(u) and
+    effStart = effectiveStart(u) and
     end = endLine(u)
   )
   or
@@ -114,7 +114,7 @@ predicate preambleItem(Locatable item, File f, int group, int effStart, int end)
     item = m and
     f = fileOf(m) and
     group = modGroup(m) and
-    effStart = effectiveStartMod(m) and
+    effStart = effectiveStart(m) and
     end = endLine(m)
   )
   or
@@ -122,7 +122,7 @@ predicate preambleItem(Locatable item, File f, int group, int effStart, int end)
     item = e and
     f = fileOf(e) and
     group = 0 and
-    effStart = effectiveStartExternCrate(e) and
+    effStart = effectiveStart(e) and
     end = endLine(e)
   )
 }

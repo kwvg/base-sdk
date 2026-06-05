@@ -7,7 +7,6 @@
  */
 
 import lib.files
-import lib.traits
 import rust
 
 /** Holds if `t` is defined inside a function body rather than at module level. */
@@ -41,23 +40,6 @@ predicate isTestCode(TypeItem t) {
   )
 }
 
-/** Holds if `t` carries `#[derive(Unencodable)]` or `#[derive(dash_types::Unencodable)]`. */
-predicate isNotEncodable(TypeItem t) {
-  exists(Attr a |
-    a = t.getAnAttr() and
-    a.getMeta().getPath().getSegment().getIdentifier().getText() = "derive" and
-    a.getMeta().getTokenTree().toAbbreviatedString().regexpMatch(".*\\bUnencodable\\b.*")
-  )
-}
-
-/** Holds if `t` holds secret or security-sensitive material. */
-predicate isSecretType(TypeItem t) {
-  t.getName().getText().regexpMatch(".*(Secret|Private|Seed|Password|Mnemonic|Share).*") and
-  // Exclude types whose name contains "Shared" (e.g. SharedState),
-  // which match the Share substring but are not secret holders.
-  not t.getName().getText().regexpMatch(".*Shared.*")
-}
-
 /** Holds if `t` is a source type eligible for any check. */
 predicate isSourceType(TypeItem t) {
   (t instanceof Struct or t instanceof Enum or t instanceof Union) and
@@ -65,33 +47,6 @@ predicate isSourceType(TypeItem t) {
   not isTestCode(t) and
   not isMacroGenerated(t) and
   not isLocalType(t)
-}
-
-/** Holds if `t` is an iterator type (name ends with Iterator or Iter). */
-predicate isIteratorType(TypeItem t) {
-  t.getName().getText().matches("%Iterator") or
-  t.getName().getText().matches("%Iter")
-}
-
-/** Holds if `t` is an error type (name ends with Error, Invalid, TooLong, or TooShort). */
-predicate isErrorType(TypeItem t) {
-  t.getName().getText().matches("%Error") or
-  t.getName().getText().matches("%Invalid") or
-  t.getName().getText().matches("%TooLong") or
-  t.getName().getText().matches("%TooShort")
-}
-
-/** Holds if `t` is a dispatch/message type (name ends with Message). */
-predicate isDispatchType(TypeItem t) { t.getName().getText().matches("%Message") }
-
-/** Holds if `t` is an opaque single-field wrapper in the pkc crate. */
-predicate isOpaqueType(TypeItem t) {
-  t instanceof Struct and
-  exists(string path |
-    path = fileOf(t).getAbsolutePath() and
-    path.matches("%/pkgs/pkc/%")
-  ) and
-  isSingleTupleField(t)
 }
 
 /** Holds if struct `t` has exactly one unnamed (tuple) field. */
@@ -112,17 +67,6 @@ string cratePrefix(TypeItem t) {
   exists(string path |
     path = fileOf(t).getAbsolutePath() and
     result = path.regexpCapture("(.*/pkgs/[^/]+/).*", 1)
-  )
-}
-
-/** Holds if struct `s` contains a float field, directly or transitively. */
-predicate hasFloatField(TypeItem t) {
-  typeFieldName(t) = ["f32", "f64"]
-  or
-  exists(TypeItem inner |
-    inner.getName().getText() = typeFieldName(t) and
-    cratePrefix(inner) = cratePrefix(t) and
-    hasFloatField(inner)
   )
 }
 

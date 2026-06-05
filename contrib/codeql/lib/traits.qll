@@ -57,39 +57,39 @@ predicate implementsTrait(TypeItem t, string traitName) {
 }
 
 /**
- * Holds if `t` has a derived impl for `traitName` under the `serde` crate
- * (i.e. the trait path is `::serde::<traitName>`).
+ * Holds if `t` has a derived impl for `traitName` under `crate`
+ * (i.e. the trait path is `::<crate>::<traitName>`).
  */
-predicate hasSerdeDerivedImpl(TypeItem t, string traitName) {
+predicate hasDerivedImplInCrate(TypeItem t, string traitName, string crate) {
   exists(MacroItems expansion, Impl i, Path p |
     expansion = t.getADeriveMacroExpansion() and
     i = expansion.getItem(_) and
     p = i.getTrait().(PathTypeRepr).getPath() and
     p.getSegment().getIdentifier().getText() = traitName and
-    p.getQualifier().getSegment().getIdentifier().getText() = "serde"
+    p.getQualifier().getSegment().getIdentifier().getText() = crate
   )
 }
 
 /**
- * Holds if `t` has a manual impl for `traitName` under the `serde`
- * crate (i.e. the trait path is `serde::<traitName>`).
+ * Holds if `t` has a manual impl for `traitName` under `crate`
+ * (i.e. the trait path is `<crate>::<traitName>`).
  */
-predicate hasManualSerdeImpl(TypeItem t, string traitName) {
+predicate hasManualImplInCrate(TypeItem t, string traitName, string crate) {
   exists(Impl i, Path p |
     fileOf(i) = fileOf(t) and
     implSelfName(i) = t.getName().getText() and
     not exists(MacroItems m | i = m.getItem(_)) and
     p = i.getTrait().(PathTypeRepr).getPath() and
     p.getSegment().getIdentifier().getText() = traitName and
-    p.getQualifier().getSegment().getIdentifier().getText() = "serde"
+    p.getQualifier().getSegment().getIdentifier().getText() = crate
   )
 }
 
 /**
  * Holds if `t` has a macro-generated (non-derive) impl for `traitName`
- * under the `serde` crate (e.g. from `impl_num!`).
+ * under `crate` (e.g. from `impl_num!`).
  */
-predicate hasMacroSerdeImpl(TypeItem t, string traitName) {
+predicate hasMacroImplInCrate(TypeItem t, string traitName, string crate) {
   exists(MacroItems m, Impl i, Path p |
     i = m.getItem(_) and
     not m = t.getADeriveMacroExpansion() and
@@ -97,16 +97,36 @@ predicate hasMacroSerdeImpl(TypeItem t, string traitName) {
     implSelfName(i) = t.getName().getText() and
     p = i.getTrait().(PathTypeRepr).getPath() and
     p.getSegment().getIdentifier().getText() = traitName and
-    p.getQualifier().getSegment().getIdentifier().getText() = "serde"
+    p.getQualifier().getSegment().getIdentifier().getText() = crate
   )
 }
 
 /**
- * Holds if `t` implements a serde trait via derive, manual impl, or
- * non-derive macro expansion (e.g. `impl_num!`).
+ * Holds if `t` implements `traitName` under `crate` via derive,
+ * manual impl, or non-derive macro expansion.
  */
-predicate implementsSerdeTrait(TypeItem t, string traitName) {
-  hasSerdeDerivedImpl(t, traitName) or
-  hasManualSerdeImpl(t, traitName) or
-  hasMacroSerdeImpl(t, traitName)
+predicate implementsTraitInCrate(TypeItem t, string traitName, string crate) {
+  hasDerivedImplInCrate(t, traitName, crate) or
+  hasManualImplInCrate(t, traitName, crate) or
+  hasMacroImplInCrate(t, traitName, crate)
+}
+
+/**
+ * Holds if `t` has a `cfg_attr`-wrapped derive that mentions
+ * `traitName` gated on `feature` under `crate`.
+ *
+ * `getADeriveMacroExpansion()` does not trace through `cfg_attr`,
+ * so we fall back to inspecting the attribute text.
+ */
+bindingset[traitName, feature, crate]
+predicate hasCfgAttrDeriveInSource(TypeItem t, string traitName, string feature, string crate) {
+  exists(Attr a, string text |
+    a = t.getAnAttr() and
+    a.getMeta().getPath().getSegment().getIdentifier().getText() = "cfg_attr" and
+    text = a.getMeta().getTokenTree().toAbbreviatedString() and
+    text.matches("%" + feature + "%") and
+    text.matches("%derive%") and
+    text.matches("%" + crate + "%") and
+    text.matches("%" + traitName + "%")
+  )
 }
