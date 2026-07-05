@@ -8,12 +8,42 @@
 
 use crate::prelude::*;
 
+#[cfg(all(feature = "std", feature = "serde"))]
+pub mod ecdsa;
+
 /// A typed corpus entry pairing raw wire hex with expected details.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CorpusEntry<T> {
   pub raw: String,
   pub details: T,
+}
+
+/// Loads a JSON corpus file and parses it.
+///
+/// The file lives at `<manifest_dir>/corpus/<file>.json`.
+///
+/// # Panics
+///
+/// Panics if the file cannot be read or parsed.
+#[cfg(feature = "std")]
+pub fn load_corpus_json(manifest_dir: &str, file: &str) -> serde_json::Value {
+  let path = format!("{manifest_dir}/corpus/{file}.json");
+  let data = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+  serde_json::from_str(&data).unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+/// Extracts a named section from a JSON corpus as a typed vector.
+///
+/// # Panics
+///
+/// Panics if the section is missing or cannot be deserialized.
+#[cfg(all(feature = "std", feature = "serde"))]
+pub fn corpus_vectors<T: ::serde::de::DeserializeOwned>(corpus: &serde_json::Value, section: &str) -> Vec<T> {
+  let val = corpus
+    .get(section)
+    .unwrap_or_else(|| panic!("missing section '{section}'"));
+  serde_json::from_value(val.clone()).unwrap_or_else(|e| panic!("cannot parse '{section}': {e}"))
 }
 
 /// Reads a corpus JSON5 file from disk.

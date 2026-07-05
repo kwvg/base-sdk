@@ -19,6 +19,9 @@ cfg_if::cfg_if! {
     mod public_ops;
     mod secret_ops;
     mod sig_ops;
+    #[cfg(test)]
+    #[expect(clippy::unwrap_used, reason = "test code")]
+    mod tests;
 
     pub use public_ops::EcdsaPublicKey;
     pub use secret_ops::EcdsaSecretKey;

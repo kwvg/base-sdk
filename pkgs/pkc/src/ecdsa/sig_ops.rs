@@ -136,3 +136,62 @@ impl PartialEq for EcdsaDerSignature {
     self.as_bytes() == other.as_bytes()
   }
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "test code")]
+mod tests {
+  use crate::ecdsa::tests::*;
+  use crate::ecdsa::{EcdsaRecoveryId, EcdsaSignature};
+
+  use cfg_if::cfg_if;
+  use rstest::*;
+
+  #[rstest]
+  fn compact_roundtrip(alice_sig: EcdsaSignature) {
+    let bytes = alice_sig.to_compact();
+    let restored = EcdsaSignature::from_compact(&bytes).unwrap();
+    assert_eq!(restored, alice_sig);
+  }
+
+  #[rstest]
+  fn der_roundtrip(alice_sig: EcdsaSignature) {
+    let der = alice_sig.to_der();
+    let restored = EcdsaSignature::from_der(der.as_bytes()).unwrap();
+    assert_eq!(restored, alice_sig);
+  }
+
+  #[rstest]
+  fn recovery_id_rejects_out_of_range() {
+    assert!(EcdsaRecoveryId::new(4).is_err());
+    assert!(EcdsaRecoveryId::new(255).is_err());
+  }
+
+  #[rstest]
+  #[case(0)]
+  #[case(1)]
+  #[case(2)]
+  #[case(3)]
+  fn recovery_id_roundtrip(#[case] id: u8) {
+    let rid = EcdsaRecoveryId::new(id).unwrap();
+    assert_eq!(rid.to_byte(), id);
+  }
+
+  cfg_if! {
+    if #[cfg(feature = "serde")] {
+      #[rstest]
+      fn serde_sig_roundtrip(alice_sig: EcdsaSignature) {
+        let json = serde_json::to_string(&alice_sig).unwrap();
+        let restored: EcdsaSignature = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, alice_sig);
+      }
+
+      #[rstest]
+      fn serde_recovery_id_roundtrip() {
+        let rid = EcdsaRecoveryId::new(1).unwrap();
+        let json = serde_json::to_string(&rid).unwrap();
+        let restored: EcdsaRecoveryId = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, rid);
+      }
+    }
+  }
+}

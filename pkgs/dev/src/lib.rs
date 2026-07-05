@@ -7,19 +7,25 @@
 //! Development and test utilities.
 
 #![no_std]
-#![expect(clippy::panic, reason = "development crate")]
+#![expect(clippy::panic, clippy::unwrap_used, reason = "development crate")]
 
 extern crate alloc;
-#[cfg(feature = "std")]
-extern crate std;
 
 mod corpus;
 mod lambda;
 mod prelude;
 
-#[cfg(feature = "std")]
-pub use corpus::load_corpus_file;
 pub use corpus::CorpusEntry;
-#[cfg(all(feature = "std", feature = "serde"))]
-pub use corpus::{assert_serde_rt, read_corpus, write_corpus};
 pub use lambda::{check_sptx, check_tx, check_wire};
+
+cfg_if::cfg_if! {
+  if #[cfg(feature = "std")] {
+    extern crate std;
+
+    pub use corpus::{load_corpus_file, load_corpus_json};
+    #[cfg(feature = "serde")]
+    pub use corpus::{assert_serde_rt, corpus_vectors, read_corpus, write_corpus};
+    #[cfg(feature = "serde")]
+    pub use corpus::ecdsa::{ecdsa_keygen, ecdsa_recover, ecdsa_sign, EcdsaKeygenEntry, EcdsaRecoverEntry, EcdsaSignEntry};
+  }
+}

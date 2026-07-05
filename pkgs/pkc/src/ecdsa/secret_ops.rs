@@ -72,3 +72,76 @@ impl Debug for EcdsaSecretKey {
     write!(f, "EcdsaSecretKey(..)")
   }
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "test code")]
+mod tests {
+  use crate::ecdsa::tests::*;
+  use crate::ecdsa::{EcdsaPublicKey, EcdsaSecretKey};
+
+  use dash_dev::{ecdsa_keygen, ecdsa_sign, load_corpus_json};
+  use hex_literal::hex;
+  use rstest::*;
+
+  #[rstest]
+  fn corpus_derive_pk() {
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "k256_keygen");
+    for v in ecdsa_keygen(&corpus, "derive_pk") {
+      let sk = EcdsaSecretKey::from_bytes(&v.sk).unwrap();
+      assert_eq!(sk.public_key().to_bytes(), v.pk_compressed);
+    }
+  }
+
+  #[rstest]
+  fn corpus_sign_recoverable() {
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "k256_sign");
+    for v in ecdsa_sign(&corpus, "sign_recoverable") {
+      let sk = EcdsaSecretKey::from_bytes(&v.sk).unwrap();
+      let (sig, rid) = sk.sign_recoverable(&v.msg).unwrap();
+      assert_eq!(sig.to_compact(), v.sig);
+      assert_eq!(rid.to_byte(), v.recovery_id);
+    }
+  }
+
+  #[rstest]
+  fn from_bytes_roundtrip(alice_sk: EcdsaSecretKey) {
+    let bytes = alice_sk.to_bytes();
+    let restored = EcdsaSecretKey::from_bytes(&bytes).unwrap();
+    assert_eq!(restored.public_key().to_bytes(), alice_sk.public_key().to_bytes());
+  }
+
+  #[rstest]
+  fn rejects_zero() {
+    assert!(EcdsaSecretKey::from_bytes(&[0u8; 32]).is_err());
+  }
+
+  #[rstest]
+  fn sign_is_deterministic(alice_sk: EcdsaSecretKey) {
+    let sig1 = alice_sk.sign(&MSG).unwrap();
+    let sig2 = alice_sk.sign(&MSG).unwrap();
+    assert_eq!(sig1, sig2);
+  }
+
+  #[rstest]
+  fn sign_recoverable_roundtrip(alice_sk: EcdsaSecretKey) {
+    let (sig, rid) = alice_sk.sign_recoverable(&MSG).unwrap();
+    let recovered = EcdsaPublicKey::recover(&MSG, &sig, rid).unwrap();
+    assert_eq!(recovered, alice_sk.public_key());
+  }
+
+  #[rstest]
+  fn sign_verify_roundtrip(alice_sk: EcdsaSecretKey) {
+    let sig = alice_sk.sign(&MSG).unwrap();
+    assert!(alice_sk.public_key().verify(&MSG, &sig).is_ok());
+  }
+
+  #[rstest]
+  fn verify_rejects_wrong_key(alice_sk: EcdsaSecretKey) {
+    let sig = alice_sk.sign(&MSG).unwrap();
+    let bob = EcdsaSecretKey::from_bytes(&hex!(
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ))
+    .unwrap();
+    assert!(bob.public_key().verify(&MSG, &sig).is_err());
+  }
+}
