@@ -11,6 +11,8 @@ use super::sig::{RecoveryId, Signature};
 
 use k256::ecdsa::{self, signature::hazmat::PrehashVerifier};
 
+use core::hash::{Hash, Hasher};
+
 /// A secp256k1 public key.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -64,8 +66,8 @@ impl PublicKey {
   }
 }
 
-impl core::hash::Hash for PublicKey {
-  fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+impl Hash for PublicKey {
+  fn hash<H: Hasher>(&self, state: &mut H) {
     self.to_bytes().hash(state);
   }
 }

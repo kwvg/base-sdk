@@ -10,6 +10,8 @@ use super::error::Error;
 
 use k256::ecdsa;
 
+use core::hash::{Hash, Hasher};
+
 /// An ECDSA signature (64-byte compact r||s).
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -53,8 +55,8 @@ impl Signature {
   }
 }
 
-impl core::hash::Hash for Signature {
-  fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+impl Hash for Signature {
+  fn hash<H: Hasher>(&self, state: &mut H) {
     self.to_compact().hash(state);
   }
 }

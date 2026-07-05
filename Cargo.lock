@@ -485,6 +485,7 @@ dependencies = [
  "base58ck",
  "bitcoin-consensus-encoding 0.2.0",
  "bitcoin_hashes",
+ "dash-types",
  "hex-literal",
  "serde",
 ]

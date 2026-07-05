@@ -19,6 +19,7 @@ use crate::opcode::Opcode as Op;
 use crate::prelude::*;
 
 use bitcoin_hashes::{hash160, sha256};
+use dash_types::Unencodable;
 
 pub mod opcode;
 
@@ -46,7 +47,7 @@ const P2PK_COMPRESSED_KEY_LEN: usize = 33;
 const P2PK_UNCOMPRESSED_KEY_LEN: usize = 65;
 
 /// Known output script patterns.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum ScriptKind {
   /// Pay-to-public-key-hash.
@@ -138,6 +139,7 @@ fn encode_base58_check(prefix: u8, hash: &[u8]) -> Option<String> {
   }
   let mut payload = Vec::with_capacity(HASH160_LEN + 1);
   payload.push(prefix);
+  // nosemgrep: codec-no-raw-extend
   payload.extend_from_slice(hash);
   Some(base58ck::encode_check(&payload))
 }

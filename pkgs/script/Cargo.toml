@@ -10,6 +10,7 @@ std = [
   "bitcoin_hashes/std",
   "base58ck/std",
   "bitcoin-consensus-encoding/std",
+  "dash-types/std",
 ]
 full = ["std", "serde"]
 serde = ["dep:serde"]
@@ -23,6 +24,7 @@ bitcoin-consensus-encoding = { version = "0.2", default-features = false, featur
 bitcoin_hashes = { version = "0.20", default-features = false, features = [
   "alloc",
 ] }
+dash-types = { version = "0.0.0", path = "../types", default-features = false }
 serde = { version = "1", default-features = false, features = [
   "derive",
   "alloc",

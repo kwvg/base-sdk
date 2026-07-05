@@ -9,7 +9,7 @@
 use crate::hash_impl;
 use crate::prelude::*;
 
-use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
+use dash_types::codec::{ArrayBuf, BaseCodec, DecodeError, EncodeBuf};
 use dash_types::{impl_type, make_bytes, TypeId};
 
 use core::fmt;
@@ -84,10 +84,10 @@ hash_impl!(KeyId);
 
 impl KeyId {
   /// Encode as a Base58Check string with the given version prefix.
-  pub fn to_base58c(&self, prefix: u8) -> alloc::string::String {
-    let mut payload = Vec::with_capacity(21);
-    payload.push(prefix);
-    self.encode(&mut payload);
-    base58ck::encode_check(&payload)
+  pub fn to_base58c(&self, prefix: u8) -> String {
+    let mut buf = ArrayBuf::<21>::new();
+    buf.push(prefix);
+    self.encode(&mut buf);
+    base58ck::encode_check(&buf.into_array())
   }
 }

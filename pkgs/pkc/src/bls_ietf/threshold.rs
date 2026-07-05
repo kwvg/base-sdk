@@ -15,6 +15,9 @@ use crate::prelude::*;
 
 use blst::*;
 use dash_num::Hash256;
+use rand_core::CryptoRngCore;
+
+use core::fmt;
 
 /// Secret key share for threshold signing.
 #[derive(Clone)]
@@ -48,8 +51,8 @@ impl SecretKeyShare {
   }
 }
 
-impl core::fmt::Debug for SecretKeyShare {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for SecretKeyShare {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "SecretKeyShare(id={:?})", self.id)
   }
 }
@@ -59,12 +62,6 @@ impl core::fmt::Debug for SecretKeyShare {
 pub struct SignatureShare {
   id: Hash256,
   sig: Signature,
-}
-
-impl core::fmt::Debug for SignatureShare {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    write!(f, "SignatureShare(id={:?})", self.id)
-  }
 }
 
 impl SignatureShare {
@@ -84,6 +81,12 @@ impl SignatureShare {
   }
 }
 
+impl fmt::Debug for SignatureShare {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "SignatureShare(id={:?})", self.id)
+  }
+}
+
 /// Split a secret key into shares for the given participant
 /// IDs, requiring `threshold` shares to recover.
 ///
@@ -95,7 +98,7 @@ pub fn split_sk(
   sk: &SecretKey,
   threshold: usize,
   ids: &[Hash256],
-  rng: &mut impl rand_core::CryptoRngCore,
+  rng: &mut impl CryptoRngCore,
 ) -> Result<Vec<SecretKeyShare>, Error> {
   if threshold == 0 || ids.is_empty() || threshold > ids.len() {
     return Err(Error::ThresholdTooLarge);

@@ -12,6 +12,7 @@ pub(crate) mod threshold;
 use crate::prelude::*;
 
 use dash_num::Hash256;
+use rand_core::CryptoRngCore;
 
 /// Sum secret key scalars (mod group order) via blst FFI.
 #[expect(unsafe_code, reason = "blst C FFI")]
@@ -45,7 +46,7 @@ pub(crate) fn generate_shares(
   sk_bytes: &[u8; 32],
   threshold: usize,
   ids: &[Hash256],
-  rng: &mut impl rand_core::CryptoRngCore,
+  rng: &mut impl CryptoRngCore,
 ) -> Result<Vec<(Hash256, [u8; 32])>, ()> {
   use blst::*;
   use zeroize::Zeroize;
