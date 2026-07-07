@@ -8,14 +8,18 @@
 
 use super::error::EcdsaError;
 use super::public_ops::EcdsaPublicKey;
+use super::secret_bytes::EcdsaSkBytes;
 use super::sig_ops::{EcdsaRecoveryId, EcdsaSignature};
 
+use dash_types::type_cvrt;
 use k256::ecdsa::{signature::hazmat::PrehashSigner, SigningKey};
 
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// A secp256k1 secret key.
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(into = "EcdsaSkBytes", try_from = "EcdsaSkBytes"))]
 pub struct EcdsaSecretKey(SigningKey);
 
 impl EcdsaSecretKey {
@@ -72,6 +76,14 @@ impl Debug for EcdsaSecretKey {
     write!(f, "EcdsaSecretKey(..)")
   }
 }
+
+type_cvrt!(From<EcdsaSecretKey> for EcdsaSkBytes, |sk| {
+  Self::from(sk.to_bytes())
+});
+
+type_cvrt!(TryFrom<EcdsaSkBytes> for EcdsaSecretKey, EcdsaError, |bytes| {
+  Self::from_bytes(bytes.as_bytes())
+});
 
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
@@ -133,6 +145,14 @@ mod tests {
   fn sign_verify_roundtrip(alice_sk: EcdsaSecretKey) {
     let sig = alice_sk.sign(&MSG).unwrap();
     assert!(alice_sk.public_key().verify(&MSG, &sig).is_ok());
+  }
+
+  #[cfg(feature = "serde")]
+  #[rstest]
+  fn serde_roundtrip(alice_sk: EcdsaSecretKey) {
+    let json = serde_json::to_string(&alice_sk).unwrap();
+    let restored: EcdsaSecretKey = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored.to_bytes(), alice_sk.to_bytes());
   }
 
   #[rstest]

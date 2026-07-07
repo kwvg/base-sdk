@@ -8,10 +8,12 @@
 
 mod error;
 mod public_bytes;
+mod secret_bytes;
 mod sig_bytes;
 
 pub use error::EcdsaError;
 pub use public_bytes::EcdsaPkBytes;
+pub use secret_bytes::EcdsaSkBytes;
 pub use sig_bytes::EcdsaSigBytes;
 
 cfg_if::cfg_if! {

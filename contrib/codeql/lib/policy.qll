@@ -39,7 +39,7 @@ predicate isNotEncodable(TypeItem t) {
 
 /** Holds if `t` holds secret or security-sensitive material. */
 predicate isSecretType(TypeItem t) {
-  t.getName().getText().regexpMatch(".*(Secret|Private|Seed|Password|Mnemonic|Share).*") and
+  t.getName().getText().regexpMatch(".*(Secret|Private|Seed|Password|Mnemonic|Share|SkBytes).*") and
   // Exclude types whose name contains "Shared" (e.g. SharedState),
   // which match the Share substring but are not secret holders.
   not t.getName().getText().regexpMatch(".*Shared.*")
