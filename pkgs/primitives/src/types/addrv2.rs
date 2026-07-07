@@ -53,9 +53,9 @@ impl BaseCodec for AddrV2 {
     let len = codec::read_compact_size(data, MAX_ADDR_LEN)?;
     if let Some(expected) = network.expected_len() {
       if len != expected {
-        return Err(DecodeError::InvalidValue {
-          expected: expected as u64,
-          actual: len as u64,
+        return Err(DecodeError::BadLen {
+          expected: vec![expected],
+          actual: len,
         });
       }
     }

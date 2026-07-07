@@ -196,7 +196,7 @@ impl BaseCodec for DynBitset {
       let mask = !((1u8 << remainder) - 1);
       if raw[byte_len - 1] & mask != 0 {
         return Err(DecodeError::InvalidValue {
-          expected: 0,
+          expected: vec![0],
           actual: u64::from(raw[byte_len - 1] & mask),
         });
       }

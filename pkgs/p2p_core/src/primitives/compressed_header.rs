@@ -93,7 +93,7 @@ impl CompressionState {
       let pos = (version_offset - 1) as usize;
       if pos >= self.version_cache.len() {
         return Err(DecodeError::InvalidValue {
-          expected: self.version_cache.len() as u64,
+          expected: vec![self.version_cache.len() as u64],
           actual: pos as u64,
         });
       }

@@ -104,7 +104,7 @@ impl BaseCodec for TxOut {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let raw = u64::decode(data)?;
     let value = Amount::from_sat(raw).map_err(|_| DecodeError::InvalidValue {
-      expected: Amount::MAX_MONEY.to_sat(),
+      expected: vec![Amount::MAX_MONEY.to_sat()],
       actual: raw,
     })?;
     Ok(Self {

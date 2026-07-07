@@ -219,7 +219,10 @@ impl BaseCodec for NIEntry {
         Ok(Self::Domain { name, port })
       }
       NIEntryCode::Unknown(t) => Err(DecodeError::InvalidValue {
-        expected: NIEntryCode::Service.to_base() as u64,
+        expected: vec![
+          NIEntryCode::Service.to_base() as u64,
+          NIEntryCode::Domain.to_base() as u64,
+        ],
         actual: u64::from(t),
       }),
     }

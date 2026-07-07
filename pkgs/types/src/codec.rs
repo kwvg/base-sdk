@@ -8,26 +8,24 @@
 
 use crate::prelude::*;
 
-use core::fmt;
+use core::convert::Infallible;
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 /// Maximum bytes to pre-allocate per batch when deserializing vectors.
 const MAX_VECTOR_ALLOCATE: usize = 5_000_000;
 
 /// An error encountered during consensus decoding.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DecodeError {
-  /// Not enough bytes remaining in the cursor.
-  Eof {
-    /// Bytes needed for the read.
-    needed: usize,
-    /// Bytes actually remaining.
-    remaining: usize,
+pub enum DecodeError<E = Infallible> {
+  /// A decoded field has an invalid byte length.
+  BadLen {
+    /// Acceptable lengths.
+    expected: Vec<usize>,
+    /// The length that was decoded.
+    actual: usize,
   },
-  /// CompactSize encoding is not minimal.
-  NonMinimalCompactSize {
-    /// The decoded value that was not minimally encoded.
-    value: u64,
-  },
+  /// Decode validation error.
+  DecError(E),
   /// CompactSize value exceeds the allowed limit.
   CompactSizeExceedsLimit {
     /// The configured limit.
@@ -35,47 +33,79 @@ pub enum DecodeError {
     /// The decoded value.
     value: u64,
   },
-  /// A decoded value does not match the expected value.
+  /// Not enough bytes remaining in the cursor.
+  Eof {
+    /// Bytes needed for the read.
+    needed: usize,
+    /// Bytes actually remaining.
+    remaining: usize,
+  },
+  /// Decoded bytes are not valid UTF-8.
+  InvalidUtf8,
+  /// A decoded value does not match any expected value.
   InvalidValue {
-    /// The value that was expected.
-    expected: u64,
+    /// Acceptable values.
+    expected: Vec<u64>,
     /// The value that was decoded.
     actual: u64,
+  },
+  /// CompactSize encoding is not minimal.
+  NonMinimalCompactSize {
+    /// The decoded value that was not minimally encoded.
+    value: u64,
   },
   /// Unconsumed bytes remain after decoding.
   TrailingBytes {
     /// Number of bytes left over.
     remaining: usize,
   },
-  /// Decoded bytes are not valid UTF-8.
-  InvalidUtf8,
 }
 
-impl fmt::Display for DecodeError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<E: Display> Display for DecodeError<E> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     match self {
+      Self::BadLen { expected, actual } => {
+        write!(f, "invalid length: expected one of {expected:?}, got {actual}")
+      }
+      Self::DecError(e) => write!(f, "decode validation: {e}"),
+      Self::CompactSizeExceedsLimit { limit, value } => {
+        write!(f, "compact size value {value} exceeds limit {limit}",)
+      }
       Self::Eof { needed, remaining } => {
         write!(f, "unexpected eof: needed {needed} bytes, {remaining} remaining",)
+      }
+      Self::InvalidUtf8 => write!(f, "invalid utf-8 in string"),
+      Self::InvalidValue { expected, actual } => {
+        write!(f, "invalid value: expected one of {expected:?}, got {actual}")
       }
       Self::NonMinimalCompactSize { value } => {
         write!(f, "non-minimal compact size encoding for value {value}",)
       }
-      Self::CompactSizeExceedsLimit { limit, value } => {
-        write!(f, "compact size value {value} exceeds limit {limit}",)
-      }
-      Self::InvalidValue { expected, actual } => {
-        write!(f, "invalid value: expected {expected}, got {actual}")
-      }
       Self::TrailingBytes { remaining } => {
         write!(f, "{remaining} trailing bytes after decode")
       }
-      Self::InvalidUtf8 => write!(f, "invalid utf-8 in string"),
+    }
+  }
+}
+
+impl DecodeError {
+  /// Convert a `DecodeError<Infallible>` into `DecodeError<F>`.
+  pub fn lift<F>(self) -> DecodeError<F> {
+    match self {
+      Self::BadLen { expected, actual } => DecodeError::BadLen { expected, actual },
+      Self::CompactSizeExceedsLimit { limit, value } => DecodeError::CompactSizeExceedsLimit { limit, value },
+      Self::DecError(inf) => match inf {},
+      Self::Eof { needed, remaining } => DecodeError::Eof { needed, remaining },
+      Self::InvalidUtf8 => DecodeError::InvalidUtf8,
+      Self::InvalidValue { expected, actual } => DecodeError::InvalidValue { expected, actual },
+      Self::NonMinimalCompactSize { value } => DecodeError::NonMinimalCompactSize { value },
+      Self::TrailingBytes { remaining } => DecodeError::TrailingBytes { remaining },
     }
   }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for DecodeError {}
+impl<E: Debug + Display> std::error::Error for DecodeError<E> {}
 
 /// Checks that `data` has at least `n` bytes remaining.
 ///
@@ -263,13 +293,13 @@ pub trait TypeId {
 }
 
 /// Cursor-based encode/decode for consensus wire types.
-pub trait BaseCodec: Sized {
+pub trait BaseCodec<E = Infallible>: Sized {
   /// Decodes from the cursor, advancing it past consumed bytes.
   ///
   /// # Errors
   ///
   /// Returns `DecodeError` on malformed input.
-  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError>;
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError<E>>;
 
   /// Encodes into the buffer.
   fn encode(&self, buf: &mut impl EncodeBuf);
@@ -362,7 +392,7 @@ impl BaseCodec for bool {
       0 => Ok(false),
       1 => Ok(true),
       _ => Err(DecodeError::InvalidValue {
-        expected: 1,
+        expected: vec![0, 1],
         actual: u64::from(byte),
       }),
     }
@@ -456,28 +486,15 @@ impl<T: BaseCodec> __UnencodableMarker for T {}
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "serde")] {
-    pub trait Codec:
-      BaseCodec
-        + Hashable
-        + TypeId
-        + ::serde::Serialize
-        + ::serde::de::DeserializeOwned
-    {
-    }
+    use serde::{Serialize, de::DeserializeOwned};
 
-    impl<
-        T: BaseCodec
-          + Hashable
-          + TypeId
-          + ::serde::Serialize
-          + ::serde::de::DeserializeOwned,
-      > Codec for T
-    {
-    }
+    pub trait Codec<E = Infallible>: BaseCodec<E> + Hashable + TypeId + Serialize + DeserializeOwned {}
+
+    impl<T: BaseCodec<E> + Hashable + TypeId + Serialize + DeserializeOwned, E> Codec<E> for T {}
   } else {
-    pub trait Codec: BaseCodec + Hashable + TypeId {}
+    pub trait Codec<E = Infallible>: BaseCodec<E> + Hashable + TypeId {}
 
-    impl<T: BaseCodec + Hashable + TypeId> Codec for T {}
+    impl<T: BaseCodec<E> + Hashable + TypeId, E> Codec<E> for T {}
   }
 }
 
