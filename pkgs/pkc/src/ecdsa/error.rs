@@ -10,48 +10,48 @@ use core::fmt;
 
 /// Errors produced by secp256k1 operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Error {
-  /// secret key bytes are not a valid scalar
-  InvalidSecretKey,
+pub enum EcdsaError {
   /// public key bytes are not a valid curve point
   InvalidPublicKey,
-  /// signature bytes are malformed
-  InvalidSignature,
-  /// signature verification failed
-  VerifyFailed,
   /// recovery id is out of range (must be 0..4)
   InvalidRecoveryId,
+  /// secret key bytes are not a valid scalar
+  InvalidSecretKey,
+  /// signature bytes are malformed
+  InvalidSignature,
   /// recovery failed; no valid public key for this signature and message
   RecoveryFailed,
   /// signing operation failed
   SigningFailed,
+  /// signature verification failed
+  VerifyFailed,
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for EcdsaError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::InvalidSecretKey => {
-        write!(f, "secret key bytes are not a valid scalar")
-      }
       Self::InvalidPublicKey => {
         write!(f, "public key bytes are not a valid curve point")
       }
-      Self::InvalidSignature => {
-        write!(f, "signature bytes are malformed")
-      }
-      Self::VerifyFailed => {
-        write!(f, "signature verification failed")
-      }
       Self::InvalidRecoveryId => {
         write!(f, "recovery id out of range (must be 0..4)")
+      }
+      Self::InvalidSecretKey => {
+        write!(f, "secret key bytes are not a valid scalar")
+      }
+      Self::InvalidSignature => {
+        write!(f, "signature bytes are malformed")
       }
       Self::RecoveryFailed => {
         write!(f, "recovery failed; no valid public key")
       }
       Self::SigningFailed => write!(f, "signing failed"),
+      Self::VerifyFailed => {
+        write!(f, "signature verification failed")
+      }
     }
   }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for Error {}
+impl std::error::Error for EcdsaError {}

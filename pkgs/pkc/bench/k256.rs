@@ -6,14 +6,14 @@
 
 //! Benchmarks for the k256 (secp256k1) feature
 
-use dash_pkc::k256::{PublicKey, SecretKey};
+use dash_pkc::ecdsa::{EcdsaPublicKey, EcdsaSecretKey};
 
-fn test_key() -> SecretKey {
+fn test_key() -> EcdsaSecretKey {
   let bytes = [
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba,
     0x98, 0x76, 0x54, 0x32, 0x10, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
   ];
-  SecretKey::from_bytes(&bytes).unwrap()
+  EcdsaSecretKey::from_bytes(&bytes).unwrap()
 }
 
 fn test_msg_hash(i: u8) -> [u8; 32] {
@@ -58,7 +58,7 @@ fn recover(bencher: divan::Bencher) {
   let (sig, rid) = sk.sign_recoverable(&msg).unwrap();
   bencher
     .counter(divan::counter::ItemsCount::new(1u32))
-    .bench(|| PublicKey::recover(&msg, &sig, rid));
+    .bench(|| EcdsaPublicKey::recover(&msg, &sig, rid));
 }
 
 #[divan::bench]
@@ -70,16 +70,16 @@ fn ser_pk(bencher: divan::Bencher) {
 #[divan::bench]
 fn deser_pk(bencher: divan::Bencher) {
   let bytes = test_key().public_key().to_bytes();
-  bencher.bench(|| PublicKey::from_bytes(&bytes));
+  bencher.bench(|| EcdsaPublicKey::from_bytes(&bytes));
 }
 
 #[cfg(feature = "std")]
 mod worker_benches {
-  use dash_pkc::k256::{PublicKey, SecretKey, Signature};
+  use dash_pkc::ecdsa::{EcdsaPublicKey, EcdsaSecretKey, EcdsaSignature};
   use dash_pkc::worker;
 
-  fn setup_sigs(n: usize) -> Vec<(Signature, PublicKey, [u8; 32])> {
-    let sk = SecretKey::from_bytes(&[0x42u8; 32]).unwrap();
+  fn setup_sigs(n: usize) -> Vec<(EcdsaSignature, EcdsaPublicKey, [u8; 32])> {
+    let sk = EcdsaSecretKey::from_bytes(&[0x42u8; 32]).unwrap();
     let pk = sk.public_key();
     (0..n)
       .map(|i| {

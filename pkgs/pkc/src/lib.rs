@@ -21,8 +21,7 @@ mod prelude;
 pub mod bls_chia;
 #[cfg(feature = "bls_ietf")]
 pub mod bls_ietf;
-#[cfg(feature = "k256")]
-pub mod k256;
+pub mod ecdsa;
 #[cfg(feature = "std")]
 pub mod worker;
 
@@ -34,14 +33,4 @@ dash_types::make_bytes! {
 dash_types::make_bytes! {
   /// Raw BLS signature bytes (96 bytes, unvalidated).
   BlsSignatureBytes, 96
-}
-
-dash_types::make_bytes! {
-  /// Raw compressed ECDSA public key bytes (33 bytes, unvalidated).
-  EcdsaPublicKeyBytes, 33
-}
-
-dash_types::make_bytes! {
-  /// Raw compact ECDSA signature bytes (64 bytes, unvalidated).
-  EcdsaSignatureBytes, 64
 }

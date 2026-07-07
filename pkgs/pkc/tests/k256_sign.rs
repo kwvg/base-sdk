@@ -11,14 +11,14 @@
 
 mod common;
 
-use dash_pkc::k256::{PublicKey, RecoveryId, SecretKey, Signature};
+use dash_pkc::ecdsa::{EcdsaPublicKey, EcdsaRecoveryId, EcdsaSecretKey, EcdsaSignature};
 use hex_literal::hex;
 use rstest::*;
 
 /// Shared test keypair.
 #[fixture]
-fn alice() -> SecretKey {
-  SecretKey::from_bytes(&hex!(
+fn alice() -> EcdsaSecretKey {
+  EcdsaSecretKey::from_bytes(&hex!(
     "0123456789abcdef0123456789abcdef"
     "fedcba9876543210fedcba9876543210"
   ))
@@ -33,7 +33,7 @@ fn msg_hash() -> [u8; 32] {
 
 /// Sign then verify with the same key succeeds.
 #[rstest]
-fn sign_verify_roundtrip(alice: SecretKey, msg_hash: [u8; 32]) {
+fn sign_verify_roundtrip(alice: EcdsaSecretKey, msg_hash: [u8; 32]) {
   let sig = alice.sign(&msg_hash).unwrap();
   let pk = alice.public_key();
   assert!(pk.verify(&msg_hash, &sig).is_ok());
@@ -41,7 +41,7 @@ fn sign_verify_roundtrip(alice: SecretKey, msg_hash: [u8; 32]) {
 
 /// Verification rejects a tampered message.
 #[rstest]
-fn verify_rejects_wrong_message(alice: SecretKey, msg_hash: [u8; 32]) {
+fn verify_rejects_wrong_message(alice: EcdsaSecretKey, msg_hash: [u8; 32]) {
   let sig = alice.sign(&msg_hash).unwrap();
   let pk = alice.public_key();
   let mut bad_hash = msg_hash;
@@ -51,9 +51,9 @@ fn verify_rejects_wrong_message(alice: SecretKey, msg_hash: [u8; 32]) {
 
 /// Verification rejects a different signer's key.
 #[rstest]
-fn verify_rejects_wrong_key(alice: SecretKey, msg_hash: [u8; 32]) {
+fn verify_rejects_wrong_key(alice: EcdsaSecretKey, msg_hash: [u8; 32]) {
   let sig = alice.sign(&msg_hash).unwrap();
-  let bob = SecretKey::from_bytes(&hex!(
+  let bob = EcdsaSecretKey::from_bytes(&hex!(
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   ))
@@ -63,26 +63,26 @@ fn verify_rejects_wrong_key(alice: SecretKey, msg_hash: [u8; 32]) {
 
 /// Compact signature round-trips.
 #[rstest]
-fn signature_compact_roundtrip(alice: SecretKey, msg_hash: [u8; 32]) {
+fn signature_compact_roundtrip(alice: EcdsaSecretKey, msg_hash: [u8; 32]) {
   let sig = alice.sign(&msg_hash).unwrap();
   let bytes = sig.to_compact();
-  let restored = Signature::from_compact(&bytes).unwrap();
+  let restored = EcdsaSignature::from_compact(&bytes).unwrap();
   assert_eq!(restored, sig);
 }
 
 /// Recoverable signature yields the original public key.
 #[rstest]
-fn sign_recoverable_roundtrip(alice: SecretKey, msg_hash: [u8; 32]) {
+fn sign_recoverable_roundtrip(alice: EcdsaSecretKey, msg_hash: [u8; 32]) {
   let (sig, rid) = alice.sign_recoverable(&msg_hash).unwrap();
-  let recovered = PublicKey::recover(&msg_hash, &sig, rid).unwrap();
+  let recovered = EcdsaPublicKey::recover(&msg_hash, &sig, rid).unwrap();
   assert_eq!(recovered, alice.public_key());
 }
 
 /// Out-of-range recovery ids are rejected.
 #[rstest]
 fn recovery_id_rejects_out_of_range() {
-  assert!(RecoveryId::new(4).is_err());
-  assert!(RecoveryId::new(255).is_err());
+  assert!(EcdsaRecoveryId::new(4).is_err());
+  assert!(EcdsaRecoveryId::new(255).is_err());
 }
 
 /// Valid recovery ids round-trip.
@@ -92,35 +92,35 @@ fn recovery_id_rejects_out_of_range() {
 #[case(2)]
 #[case(3)]
 fn recovery_id_roundtrip(#[case] id: u8) {
-  let rid = RecoveryId::new(id).unwrap();
+  let rid = EcdsaRecoveryId::new(id).unwrap();
   assert_eq!(rid.to_byte(), id);
 }
 
 /// RFC 6979 signing is deterministic.
 #[rstest]
-fn sign_is_deterministic(alice: SecretKey, msg_hash: [u8; 32]) {
+fn sign_is_deterministic(alice: EcdsaSecretKey, msg_hash: [u8; 32]) {
   let sig1 = alice.sign(&msg_hash).unwrap();
   let sig2 = alice.sign(&msg_hash).unwrap();
   assert_eq!(sig1, sig2);
 }
 
-/// Serde round-trip for Signature.
+/// Serde round-trip for EcdsaSignature.
 #[cfg(feature = "serde")]
 #[rstest]
-fn serde_sig_roundtrip(alice: SecretKey, msg_hash: [u8; 32]) {
+fn serde_sig_roundtrip(alice: EcdsaSecretKey, msg_hash: [u8; 32]) {
   let sig = alice.sign(&msg_hash).unwrap();
   let json = serde_json::to_string(&sig).unwrap();
-  let restored: Signature = serde_json::from_str(&json).unwrap();
+  let restored: EcdsaSignature = serde_json::from_str(&json).unwrap();
   assert_eq!(restored, sig);
 }
 
-/// Serde round-trip for RecoveryId.
+/// Serde round-trip for EcdsaRecoveryId.
 #[cfg(feature = "serde")]
 #[rstest]
 fn serde_recovery_id_roundtrip() {
-  let rid = RecoveryId::new(1).unwrap();
+  let rid = EcdsaRecoveryId::new(1).unwrap();
   let json = serde_json::to_string(&rid).unwrap();
-  let restored: RecoveryId = serde_json::from_str(&json).unwrap();
+  let restored: EcdsaRecoveryId = serde_json::from_str(&json).unwrap();
   assert_eq!(restored, rid);
 }
 
@@ -154,7 +154,7 @@ mod kat {
     for v in &vecs {
       let sk_bytes: [u8; 32] = decode_hex(&v.sk).try_into().unwrap();
       let msg: [u8; 32] = decode_hex(&v.msg).try_into().unwrap();
-      let sk = dash_pkc::k256::SecretKey::from_bytes(&sk_bytes).unwrap();
+      let sk = dash_pkc::ecdsa::EcdsaSecretKey::from_bytes(&sk_bytes).unwrap();
       let (sig, rid) = sk.sign_recoverable(&msg).unwrap();
       assert_eq!(
         sig.to_compact().to_lower_hex_string(),
@@ -175,9 +175,9 @@ mod kat {
     for v in &vecs {
       let msg: [u8; 32] = decode_hex(&v.msg).try_into().unwrap();
       let sig_bytes: [u8; 64] = decode_hex(&v.sig).try_into().unwrap();
-      let sig = dash_pkc::k256::Signature::from_compact(&sig_bytes).unwrap();
-      let rid = dash_pkc::k256::RecoveryId::new(v.recovery_id).unwrap();
-      let pk = dash_pkc::k256::PublicKey::recover(&msg, &sig, rid).unwrap();
+      let sig = dash_pkc::ecdsa::EcdsaSignature::from_compact(&sig_bytes).unwrap();
+      let rid = dash_pkc::ecdsa::EcdsaRecoveryId::new(v.recovery_id).unwrap();
+      let pk = dash_pkc::ecdsa::EcdsaPublicKey::recover(&msg, &sig, rid).unwrap();
       assert_eq!(pk.to_bytes().to_lower_hex_string(), v.pk, "recovered pk mismatch");
     }
   }
