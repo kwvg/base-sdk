@@ -21,7 +21,7 @@ pub(super) fn alice_pk() -> EcdsaPublicKey {
 
 #[fixture]
 pub(super) fn alice_sk() -> EcdsaSecretKey {
-  EcdsaSecretKey::from_bytes(&ALICE_SK).unwrap()
+  EcdsaSecretKey::from_bytes(&ALICE_SK, true).unwrap()
 }
 
 #[fixture]

@@ -30,6 +30,11 @@ impl EcdsaPublicKey {
     Self { inner, compressed }
   }
 
+  /// Borrow the inner verifying key.
+  pub(super) fn as_inner(&self) -> &VerifyingKey {
+    &self.inner
+  }
+
   /// Set the compression flag to uncompressed.
   pub fn decompress(&mut self) {
     self.compressed = false;
@@ -141,7 +146,7 @@ mod tests {
 
   #[rstest]
   fn recover_roundtrip() {
-    let sk = EcdsaSecretKey::from_bytes(&ALICE_SK).unwrap();
+    let sk = EcdsaSecretKey::from_bytes(&ALICE_SK, true).unwrap();
     let msg = [0xbb; 32];
     let (sig, rid) = sk.sign_recoverable(&msg).unwrap();
     let recovered = EcdsaPublicKey::recover(&msg, &sig, rid).unwrap();
@@ -168,7 +173,7 @@ mod tests {
 
   #[rstest]
   fn verify_rejects_wrong_message(alice_pk: EcdsaPublicKey) {
-    let sk = EcdsaSecretKey::from_bytes(&ALICE_SK).unwrap();
+    let sk = EcdsaSecretKey::from_bytes(&ALICE_SK, true).unwrap();
     let msg = [0xaa; 32];
     let sig = sk.sign(&msg).unwrap();
     let mut bad = msg;

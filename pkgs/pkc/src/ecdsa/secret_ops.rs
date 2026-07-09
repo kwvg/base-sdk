@@ -11,33 +11,59 @@ use super::public_ops::EcdsaPublicKey;
 use super::secret_bytes::EcdsaSkBytes;
 use super::sig_ops::{EcdsaRecoveryId, EcdsaSignature};
 
-use dash_types::type_cvrt;
+use dash_num::Hash256;
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf, Hashable};
+use dash_types::{impl_type, type_cvrt, TypeId, MAX_SER_SIZE};
 use k256::ecdsa::{signature::hazmat::PrehashSigner, SigningKey};
+use k256::elliptic_curve::ops::Neg;
+use rand_core::CryptoRngCore;
 
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// A secp256k1 secret key.
-#[derive(Clone)]
+#[derive(Clone, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(into = "EcdsaSkBytes", try_from = "EcdsaSkBytes"))]
-pub struct EcdsaSecretKey(SigningKey);
+pub struct EcdsaSecretKey {
+  inner: SigningKey,
+  compressed: bool,
+}
 
 impl EcdsaSecretKey {
   /// Parse a secret key from a 32-byte big-endian scalar.
-  pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, EcdsaError> {
+  pub fn from_bytes(bytes: &[u8; 32], compressed: bool) -> Result<Self, EcdsaError> {
     SigningKey::from_bytes(bytes.into())
-      .map(Self)
+      .map(|key| Self { inner: key, compressed })
       .map_err(|_| EcdsaError::InvalidSecretKey)
   }
 
-  /// Serialize to a 32-byte big-endian scalar.
-  pub fn to_bytes(&self) -> [u8; 32] {
-    self.0.to_bytes().into()
+  /// Generate a new random secret key.
+  pub fn generate(rng: &mut impl CryptoRngCore, compressed: bool) -> Self {
+    Self {
+      inner: SigningKey::random(rng),
+      compressed,
+    }
+  }
+
+  /// Whether the corresponding public key should be compressed.
+  pub fn is_compressed(&self) -> bool {
+    self.compressed
+  }
+
+  /// Negate the secret scalar in place.
+  pub fn negate(&mut self) {
+    let neg = self.inner.as_nonzero_scalar().neg();
+    self.inner = SigningKey::from(neg);
   }
 
   /// Derive the corresponding public key.
   pub fn public_key(&self) -> EcdsaPublicKey {
-    EcdsaPublicKey::from_inner(*self.0.verifying_key(), true)
+    EcdsaPublicKey::from_inner(*self.inner.verifying_key(), self.compressed)
+  }
+
+  /// Serialize to a 32-byte big-endian scalar.
+  pub fn to_bytes(&self) -> [u8; 32] {
+    self.inner.to_bytes().into()
   }
 
   /// Produce an ECDSA signature over a 32-byte prehashed message
@@ -49,7 +75,7 @@ impl EcdsaSecretKey {
   /// rejects the prehash.
   pub fn sign(&self, msg_hash: &[u8; 32]) -> Result<EcdsaSignature, EcdsaError> {
     self
-      .0
+      .inner
       .sign_prehash(msg_hash)
       .map(EcdsaSignature::from_inner)
       .map_err(|_| EcdsaError::SigningFailed)
@@ -64,10 +90,15 @@ impl EcdsaSecretKey {
   /// rejects the prehash.
   pub fn sign_recoverable(&self, msg_hash: &[u8; 32]) -> Result<(EcdsaSignature, EcdsaRecoveryId), EcdsaError> {
     self
-      .0
+      .inner
       .sign_prehash(msg_hash)
       .map(|(sig, rid)| (EcdsaSignature::from_inner(sig), EcdsaRecoveryId::from_inner(rid)))
       .map_err(|_| EcdsaError::SigningFailed)
+  }
+
+  /// Verify that a public key matches this secret key.
+  pub fn verify_pubkey(&self, pubkey: &EcdsaPublicKey) -> bool {
+    pubkey.is_compressed() == self.compressed && self.inner.verifying_key() == pubkey.as_inner()
   }
 }
 
@@ -77,12 +108,42 @@ impl Debug for EcdsaSecretKey {
   }
 }
 
+impl Eq for EcdsaSecretKey {}
+
+impl PartialEq for EcdsaSecretKey {
+  fn eq(&self, other: &Self) -> bool {
+    use subtle::ConstantTimeEq;
+    self.to_bytes().ct_eq(&other.to_bytes()).into() && self.compressed == other.compressed
+  }
+}
+
+impl BaseCodec<EcdsaError> for EcdsaSecretKey {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError<EcdsaError>> {
+    let inner = <EcdsaSkBytes as BaseCodec<EcdsaError>>::decode(data)?;
+    Self::try_from(inner).map_err(DecodeError::DecError)
+  }
+
+  fn encode(&self, buf: &mut impl EncodeBuf) {
+    EcdsaSkBytes::from(self.clone()).encode(buf);
+  }
+}
+
+impl Hashable for EcdsaSecretKey {
+  type Hash = Hash256;
+
+  fn hash(&self) -> Hash256 {
+    Hashable::hash(&EcdsaSkBytes::from(self.clone()))
+  }
+}
+
+impl_type!(EcdsaSecretKey, MAX_SER_SIZE, EcdsaError);
+
 type_cvrt!(From<EcdsaSecretKey> for EcdsaSkBytes, |sk| {
-  Self::from(sk.to_bytes())
+  Self::from_bytes(sk.to_bytes(), sk.is_compressed())
 });
 
 type_cvrt!(TryFrom<EcdsaSkBytes> for EcdsaSecretKey, EcdsaError, |bytes| {
-  Self::from_bytes(bytes.as_bytes())
+  Self::from_bytes(bytes.as_bytes(), bytes.is_compressed())
 });
 
 #[cfg(test)]
@@ -99,7 +160,7 @@ mod tests {
   fn corpus_derive_pk() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "k256_keygen");
     for v in ecdsa_keygen(&corpus, "derive_pk") {
-      let sk = EcdsaSecretKey::from_bytes(&v.sk).unwrap();
+      let sk = EcdsaSecretKey::from_bytes(&v.sk, true).unwrap();
       assert_eq!(sk.public_key().to_bytes(), v.pk_compressed);
     }
   }
@@ -108,7 +169,7 @@ mod tests {
   fn corpus_sign_recoverable() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "k256_sign");
     for v in ecdsa_sign(&corpus, "sign_recoverable") {
-      let sk = EcdsaSecretKey::from_bytes(&v.sk).unwrap();
+      let sk = EcdsaSecretKey::from_bytes(&v.sk, true).unwrap();
       let (sig, rid) = sk.sign_recoverable(&v.msg).unwrap();
       assert_eq!(sig.to_compact(), v.sig);
       assert_eq!(rid.to_byte(), v.recovery_id);
@@ -118,13 +179,23 @@ mod tests {
   #[rstest]
   fn from_bytes_roundtrip(alice_sk: EcdsaSecretKey) {
     let bytes = alice_sk.to_bytes();
-    let restored = EcdsaSecretKey::from_bytes(&bytes).unwrap();
+    let restored = EcdsaSecretKey::from_bytes(&bytes, true).unwrap();
     assert_eq!(restored.public_key().to_bytes(), alice_sk.public_key().to_bytes());
   }
 
   #[rstest]
+  fn negate_changes_key(alice_sk: EcdsaSecretKey) {
+    let original_bytes = alice_sk.to_bytes();
+    let mut negated = alice_sk.clone();
+    negated.negate();
+    assert_ne!(negated.to_bytes(), original_bytes);
+    negated.negate();
+    assert_eq!(negated.to_bytes(), original_bytes);
+  }
+
+  #[rstest]
   fn rejects_zero() {
-    assert!(EcdsaSecretKey::from_bytes(&[0u8; 32]).is_err());
+    assert!(EcdsaSecretKey::from_bytes(&[0u8; 32], true).is_err());
   }
 
   #[rstest]
@@ -156,12 +227,19 @@ mod tests {
   }
 
   #[rstest]
+  fn verify_pubkey_matches(alice_sk: EcdsaSecretKey) {
+    assert!(alice_sk.verify_pubkey(&alice_sk.public_key()));
+  }
+
+  #[rstest]
   fn verify_rejects_wrong_key(alice_sk: EcdsaSecretKey) {
-    let sig = alice_sk.sign(&MSG).unwrap();
-    let bob = EcdsaSecretKey::from_bytes(&hex!(
-      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    ))
+    let bob = EcdsaSecretKey::from_bytes(
+      &hex!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+      true,
+    )
     .unwrap();
+    assert!(!alice_sk.verify_pubkey(&bob.public_key()));
+    let sig = alice_sk.sign(&MSG).unwrap();
     assert!(bob.public_key().verify(&MSG, &sig).is_err());
   }
 }

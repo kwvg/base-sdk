@@ -13,7 +13,7 @@ fn test_key() -> EcdsaSecretKey {
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba,
     0x98, 0x76, 0x54, 0x32, 0x10, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
   ];
-  EcdsaSecretKey::from_bytes(&bytes).unwrap()
+  EcdsaSecretKey::from_bytes(&bytes, true).unwrap()
 }
 
 fn test_msg_hash(i: u8) -> [u8; 32] {
@@ -79,7 +79,7 @@ mod worker_benches {
   use dash_pkc::worker;
 
   fn setup_sigs(n: usize) -> Vec<(EcdsaSignature, EcdsaPublicKey, [u8; 32])> {
-    let sk = EcdsaSecretKey::from_bytes(&[0x42u8; 32]).unwrap();
+    let sk = EcdsaSecretKey::from_bytes(&[0x42u8; 32], true).unwrap();
     let pk = sk.public_key();
     (0..n)
       .map(|i| {

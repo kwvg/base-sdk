@@ -423,6 +423,7 @@ dependencies = [
 name = "dash-pkc"
 version = "0.0.0"
 dependencies = [
+ "base58ck",
  "bitcoin-consensus-encoding 0.2.0",
  "bitcoin_hashes",
  "blst",
@@ -440,6 +441,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "subtle",
  "zeroize",
 ]
 
