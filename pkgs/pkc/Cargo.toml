@@ -13,6 +13,9 @@ harness = false
 bitcoin-consensus-encoding = { version = "0.2", default-features = false, features = [
   "alloc",
 ] }
+bitcoin_hashes = { version = "0.20", default-features = false, features = [
+  "alloc",
+] }
 blst = { version = "0.3", default-features = false, optional = true }
 cfg-if = "1"
 dash-num = { version = "0.0.0", path = "../num" }
@@ -46,10 +49,11 @@ serde_json = "1"
 [features]
 default = []
 std = [
-  "dep:rayon",
-  "rand_core/getrandom",
+  "bitcoin_hashes/std",
   "dash-types/std",
+  "dep:rayon",
   "hex-conservative/std",
+  "rand_core/getrandom",
 ]
 bls_chia = ["dep:blst", "dep:sha2"]
 bls_ietf = ["dep:blst", "dep:sha2"]

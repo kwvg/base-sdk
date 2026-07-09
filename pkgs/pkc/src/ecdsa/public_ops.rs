@@ -7,38 +7,53 @@
 //! secp256k1 public key.
 
 use super::error::EcdsaError;
+use super::public_bytes::{EcdsaPkBytes, Sec1Byte};
 use super::sig_ops::{EcdsaRecoveryId, EcdsaSignature};
-use super::EcdsaPkBytes;
 
-use dash_types::type_cvrt;
+use dash_num::Hash160;
+use dash_types::{dlgt_codec, type_cvrt, TypeId};
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, VerifyingKey};
 
 use core::hash::{Hash, Hasher};
 
 /// A secp256k1 public key.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(
-  feature = "serde",
-  serde(into = "super::EcdsaPkBytes", try_from = "super::EcdsaPkBytes",)
-)]
-pub struct EcdsaPublicKey(VerifyingKey);
+#[cfg_attr(feature = "serde", serde(into = "EcdsaPkBytes", try_from = "EcdsaPkBytes"))]
+pub struct EcdsaPublicKey {
+  inner: VerifyingKey,
+  compressed: bool,
+}
 
 impl EcdsaPublicKey {
-  pub(super) fn from_inner(inner: VerifyingKey) -> Self {
-    Self(inner)
+  pub(super) fn from_inner(inner: VerifyingKey, compressed: bool) -> Self {
+    Self { inner, compressed }
+  }
+
+  /// Set the compression flag to uncompressed.
+  pub fn decompress(&mut self) {
+    self.compressed = false;
   }
 
   /// Parse from SEC1 (un)compressed bytes.
   pub fn from_bytes(bytes: &[u8]) -> Result<Self, EcdsaError> {
+    let compressed = bytes
+      .first()
+      .and_then(|&b| Sec1Byte::from_base(b))
+      .is_some_and(|s| s.is_compressed());
     VerifyingKey::from_sec1_bytes(bytes)
-      .map(Self)
+      .map(|key| Self { inner: key, compressed })
       .map_err(|_| EcdsaError::InvalidPublicKey)
+  }
+
+  /// Whether this key serializes as compressed.
+  pub fn is_compressed(&self) -> bool {
+    self.compressed
   }
 
   /// Serialize as 33-byte compressed SEC1.
   pub fn to_bytes(&self) -> [u8; 33] {
-    let pt = self.0.to_encoded_point(true);
+    let pt = self.inner.to_encoded_point(true);
     let mut out = [0u8; 33];
     out.copy_from_slice(pt.as_bytes());
     out
@@ -46,25 +61,28 @@ impl EcdsaPublicKey {
 
   /// Serialize as 65-byte uncompressed SEC1.
   pub fn to_uncompressed_bytes(&self) -> [u8; 65] {
-    let pt = self.0.to_encoded_point(false);
+    let pt = self.inner.to_encoded_point(false);
     let mut out = [0u8; 65];
     out.copy_from_slice(pt.as_bytes());
     out
   }
 
-  /// Verify a signature over a 32-byte prehashed message.
-  pub fn verify(&self, msg_hash: &[u8; 32], sig: &EcdsaSignature) -> Result<(), EcdsaError> {
-    self
-      .0
-      .verify_prehash(msg_hash, sig.as_inner())
-      .map_err(|_| EcdsaError::VerifyFailed)
-  }
-
   /// Recover a public key from a signature, prehashed message, and recovery id.
   pub fn recover(msg_hash: &[u8; 32], sig: &EcdsaSignature, rid: EcdsaRecoveryId) -> Result<Self, EcdsaError> {
     VerifyingKey::recover_from_prehash(msg_hash, sig.as_inner(), rid.as_inner())
-      .map(Self)
+      .map(|key| Self {
+        inner: key,
+        compressed: true,
+      })
       .map_err(|_| EcdsaError::RecoveryFailed)
+  }
+
+  /// Verify a signature over a 32-byte prehashed message.
+  pub fn verify(&self, msg_hash: &[u8; 32], sig: &EcdsaSignature) -> Result<(), EcdsaError> {
+    self
+      .inner
+      .verify_prehash(msg_hash, sig.as_inner())
+      .map_err(|_| EcdsaError::VerifyFailed)
   }
 }
 
@@ -74,12 +92,18 @@ impl Hash for EcdsaPublicKey {
   }
 }
 
+dlgt_codec!(EcdsaPublicKey => EcdsaPkBytes, Hash160, EcdsaError);
+
 type_cvrt!(From<EcdsaPublicKey> for EcdsaPkBytes, |pk| {
-  Self(pk.to_bytes())
+  if pk.is_compressed() {
+    Self::from_raw(&pk.to_bytes())
+  } else {
+    Self::from_raw(&pk.to_uncompressed_bytes())
+  }
 });
 
 type_cvrt!(TryFrom<EcdsaPkBytes> for EcdsaPublicKey, EcdsaError, |bytes| {
-  Self::from_bytes(&bytes.0)
+  Self::from_bytes(bytes.as_bytes())
 });
 
 #[cfg(test)]
@@ -134,10 +158,12 @@ mod tests {
 
   #[rstest]
   fn uncompressed_roundtrip(alice_pk: EcdsaPublicKey) {
-    let bytes = alice_pk.to_uncompressed_bytes();
+    let mut pk = alice_pk;
+    pk.decompress();
+    let bytes = pk.to_uncompressed_bytes();
     assert_eq!(bytes.len(), 65);
     let restored = EcdsaPublicKey::from_bytes(&bytes).unwrap();
-    assert_eq!(restored, alice_pk);
+    assert_eq!(restored, pk);
   }
 
   #[rstest]

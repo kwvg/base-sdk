@@ -12,7 +12,7 @@ mod secret_bytes;
 mod sig_bytes;
 
 pub use error::EcdsaError;
-pub use public_bytes::EcdsaPkBytes;
+pub use public_bytes::{EcdsaPkBytes, ECDSA_PK_LEN};
 pub use secret_bytes::EcdsaSkBytes;
 pub use sig_bytes::EcdsaSigBytes;
 

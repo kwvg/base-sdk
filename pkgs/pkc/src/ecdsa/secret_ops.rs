@@ -37,7 +37,7 @@ impl EcdsaSecretKey {
 
   /// Derive the corresponding public key.
   pub fn public_key(&self) -> EcdsaPublicKey {
-    EcdsaPublicKey::from_inner(*self.0.verifying_key())
+    EcdsaPublicKey::from_inner(*self.0.verifying_key(), true)
   }
 
   /// Produce an ECDSA signature over a 32-byte prehashed message

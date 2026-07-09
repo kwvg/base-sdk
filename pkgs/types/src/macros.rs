@@ -263,3 +263,60 @@ macro_rules! type_cvrt {
     }
   };
 }
+
+/// Delegates `BaseCodec`, `Hashable`, and `impl_type!` through another type.
+#[macro_export]
+macro_rules! dlgt_codec {
+  ($ops:ty => $bytes:ty, $hash:ty) => {
+    impl $crate::codec::BaseCodec for $ops {
+      fn decode(data: &mut &[u8]) -> Result<Self, $crate::codec::DecodeError> {
+        let inner = <$bytes as $crate::codec::BaseCodec>::decode(data)?;
+        Self::try_from(inner).map_err(|_| $crate::codec::DecodeError::InvalidValue {
+          expected: ::alloc::vec![],
+          actual: 0,
+        })
+      }
+
+      fn encode(&self, buf: &mut impl $crate::codec::EncodeBuf) {
+        <$bytes as core::convert::From<Self>>::from(self.clone()).encode(buf);
+      }
+    }
+
+    impl $crate::codec::Hashable for $ops {
+      type Hash = $hash;
+
+      fn hash(&self) -> $hash {
+        $crate::codec::Hashable::hash(&<$bytes as core::convert::From<Self>>::from(self.clone()))
+      }
+    }
+
+    $crate::impl_type!($ops);
+  };
+  ($ops:ty => $bytes:ty, $hash:ty, $err:ty) => {
+    impl $crate::codec::BaseCodec<$err> for $ops {
+      fn decode(data: &mut &[u8]) -> Result<Self, $crate::codec::DecodeError<$err>> {
+        let inner = <$bytes as $crate::codec::BaseCodec>::decode(data).map_err(|e| e.lift())?;
+        Self::try_from(inner).map_err($crate::codec::DecodeError::DecError)
+      }
+
+      fn encode(&self, buf: &mut impl $crate::codec::EncodeBuf) {
+        if let Ok(bytes) = <$bytes as core::convert::TryFrom<Self>>::try_from(self.clone()) {
+          bytes.encode(buf);
+        }
+      }
+    }
+
+    impl $crate::codec::Hashable for $ops {
+      type Hash = $hash;
+
+      fn hash(&self) -> $hash {
+        match <$bytes as core::convert::TryFrom<Self>>::try_from(self.clone()) {
+          Ok(bytes) => $crate::codec::Hashable::hash(&bytes),
+          Err(_) => <$hash as Default>::default(),
+        }
+      }
+    }
+
+    $crate::impl_type!($ops, $crate::MAX_SER_SIZE, $err);
+  };
+}

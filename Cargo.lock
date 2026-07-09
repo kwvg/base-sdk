@@ -424,6 +424,7 @@ name = "dash-pkc"
 version = "0.0.0"
 dependencies = [
  "bitcoin-consensus-encoding 0.2.0",
+ "bitcoin_hashes",
  "blst",
  "cfg-if",
  "dash-dev",
