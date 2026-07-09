@@ -11,6 +11,8 @@ use core::fmt;
 /// Errors produced by secp256k1 operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EcdsaError {
+  /// compact signature header byte is not a valid flag
+  InvalidCompactFlags,
   /// public key bytes are not a valid curve point
   InvalidPublicKey,
   /// recovery id is out of range (must be 0..4)
@@ -32,6 +34,9 @@ pub enum EcdsaError {
 impl fmt::Display for EcdsaError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
+      Self::InvalidCompactFlags => {
+        write!(f, "compact signature header byte is not a valid flag")
+      }
       Self::InvalidPublicKey => {
         write!(f, "public key bytes are not a valid curve point")
       }

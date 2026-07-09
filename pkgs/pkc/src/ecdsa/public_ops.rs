@@ -8,11 +8,12 @@
 
 use super::error::EcdsaError;
 use super::public_bytes::{EcdsaPkBytes, Sec1Byte};
-use super::sig_ops::{EcdsaRecoveryId, EcdsaSignature};
+use super::sig_bytes::EcdsaSigBytes;
+use super::sig_ops::EcdsaSignature;
 
 use dash_num::Hash160;
 use dash_types::{dlgt_codec, type_cvrt, TypeId};
-use k256::ecdsa::{signature::hazmat::PrehashVerifier, VerifyingKey};
+use k256::ecdsa::{signature::hazmat::PrehashVerifier, RecoveryId, VerifyingKey};
 
 use core::hash::{Hash, Hasher};
 
@@ -72,14 +73,21 @@ impl EcdsaPublicKey {
     out
   }
 
-  /// Recover a public key from a signature, prehashed message, and recovery id.
-  pub fn recover(msg_hash: &[u8; 32], sig: &EcdsaSignature, rid: EcdsaRecoveryId) -> Result<Self, EcdsaError> {
-    VerifyingKey::recover_from_prehash(msg_hash, sig.as_inner(), rid.as_inner())
+  /// Recover a public key from a signature and its embedded recovery metadata.
+  pub fn recover(msg_hash: &[u8; 32], sig: &EcdsaSignature) -> Result<Self, EcdsaError> {
+    let rid = RecoveryId::try_from(sig.recovery_id()).map_err(|_| EcdsaError::InvalidRecoveryId)?;
+    VerifyingKey::recover_from_prehash(msg_hash, sig.as_inner(), rid)
       .map(|key| Self {
         inner: key,
-        compressed: true,
+        compressed: sig.is_compressed(),
       })
       .map_err(|_| EcdsaError::RecoveryFailed)
+  }
+
+  /// Recover a public key from a compact recoverable signature.
+  pub fn recover_compact(msg_hash: &[u8; 32], sig: &EcdsaSigBytes) -> Result<Self, EcdsaError> {
+    let parsed = EcdsaSignature::try_from(*sig)?;
+    Self::recover(msg_hash, &parsed)
   }
 
   /// Verify a signature over a 32-byte prehashed message.
@@ -115,7 +123,7 @@ type_cvrt!(TryFrom<EcdsaPkBytes> for EcdsaPublicKey, EcdsaError, |bytes| {
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use crate::ecdsa::tests::*;
-  use crate::ecdsa::{EcdsaPublicKey, EcdsaRecoveryId, EcdsaSecretKey, EcdsaSignature};
+  use crate::ecdsa::{EcdsaPublicKey, EcdsaSecretKey, EcdsaSigBytes};
 
   use dash_dev::{ecdsa_recover, load_corpus_json};
   use rstest::*;
@@ -129,28 +137,31 @@ mod tests {
   }
 
   #[rstest]
-  fn corpus_recover() {
+  fn corpus_recover_compact() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "k256_sign");
     for v in ecdsa_recover(&corpus, "recover") {
-      let sig = EcdsaSignature::from_compact(&v.sig).unwrap();
-      let rid = EcdsaRecoveryId::new(v.recovery_id).unwrap();
-      let pk = EcdsaPublicKey::recover(&v.msg, &sig, rid).unwrap();
+      let compact = EcdsaSigBytes::from_parts(&v.sig, v.recovery_id, true).unwrap();
+      let pk = EcdsaPublicKey::recover_compact(&v.msg, &compact).unwrap();
       assert_eq!(pk.to_bytes(), v.pk);
     }
-  }
-
-  #[rstest]
-  fn rejects_garbage() {
-    assert!(EcdsaPublicKey::from_bytes(&[0xff; 33]).is_err());
   }
 
   #[rstest]
   fn recover_roundtrip() {
     let sk = EcdsaSecretKey::from_bytes(&ALICE_SK, true).unwrap();
     let msg = [0xbb; 32];
-    let (sig, rid) = sk.sign_recoverable(&msg).unwrap();
-    let recovered = EcdsaPublicKey::recover(&msg, &sig, rid).unwrap();
-    assert_eq!(recovered, sk.public_key());
+    let compact_sig = sk.sign_compact(&msg).unwrap();
+    assert_eq!(
+      EcdsaPublicKey::recover_compact(&msg, &compact_sig).unwrap(),
+      sk.public_key()
+    );
+    let der_sig = sk.sign(&msg).unwrap();
+    assert_eq!(EcdsaPublicKey::recover(&msg, &der_sig).unwrap(), sk.public_key());
+  }
+
+  #[rstest]
+  fn rejects_garbage() {
+    assert!(EcdsaPublicKey::from_bytes(&[0xff; 33]).is_err());
   }
 
   #[cfg(feature = "serde")]

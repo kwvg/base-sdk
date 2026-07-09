@@ -9,12 +9,13 @@
 use super::error::EcdsaError;
 use super::public_ops::EcdsaPublicKey;
 use super::secret_bytes::EcdsaSkBytes;
-use super::sig_ops::{EcdsaRecoveryId, EcdsaSignature};
+use super::sig_bytes::EcdsaSigBytes;
+use super::sig_ops::EcdsaSignature;
 
 use dash_num::Hash256;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf, Hashable};
 use dash_types::{impl_type, type_cvrt, TypeId, MAX_SER_SIZE};
-use k256::ecdsa::{signature::hazmat::PrehashSigner, SigningKey};
+use k256::ecdsa::{signature::hazmat::PrehashSigner, RecoveryId, Signature, SigningKey};
 use k256::elliptic_curve::ops::Neg;
 use rand_core::CryptoRngCore;
 
@@ -74,26 +75,21 @@ impl EcdsaSecretKey {
   /// Returns [`EcdsaError::SigningFailed`] if the underlying library
   /// rejects the prehash.
   pub fn sign(&self, msg_hash: &[u8; 32]) -> Result<EcdsaSignature, EcdsaError> {
-    self
+    let (sig, rid): (Signature, RecoveryId) = self
       .inner
       .sign_prehash(msg_hash)
-      .map(EcdsaSignature::from_inner)
-      .map_err(|_| EcdsaError::SigningFailed)
+      .map_err(|_| EcdsaError::SigningFailed)?;
+    Ok(EcdsaSignature::from_inner(sig, rid, self.compressed))
   }
 
-  /// Sign and return the recovery id needed to recover the public
-  /// key from the signature.
+  /// Sign and return the compact recoverable signature.
   ///
   /// # Errors
   ///
   /// Returns [`EcdsaError::SigningFailed`] if the underlying library
   /// rejects the prehash.
-  pub fn sign_recoverable(&self, msg_hash: &[u8; 32]) -> Result<(EcdsaSignature, EcdsaRecoveryId), EcdsaError> {
-    self
-      .inner
-      .sign_prehash(msg_hash)
-      .map(|(sig, rid)| (EcdsaSignature::from_inner(sig), EcdsaRecoveryId::from_inner(rid)))
-      .map_err(|_| EcdsaError::SigningFailed)
+  pub fn sign_compact(&self, msg_hash: &[u8; 32]) -> Result<EcdsaSigBytes, EcdsaError> {
+    self.sign(msg_hash)?.try_into()
   }
 
   /// Verify that a public key matches this secret key.
@@ -166,13 +162,13 @@ mod tests {
   }
 
   #[rstest]
-  fn corpus_sign_recoverable() {
+  fn corpus_sign_compact() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "k256_sign");
     for v in ecdsa_sign(&corpus, "sign_recoverable") {
       let sk = EcdsaSecretKey::from_bytes(&v.sk, true).unwrap();
-      let (sig, rid) = sk.sign_recoverable(&v.msg).unwrap();
-      assert_eq!(sig.to_compact(), v.sig);
-      assert_eq!(rid.to_byte(), v.recovery_id);
+      let sig = sk.sign_compact(&v.msg).unwrap();
+      assert_eq!(sig.compact(), v.sig);
+      assert_eq!(sig.recovery_id().unwrap(), v.recovery_id);
     }
   }
 
@@ -206,9 +202,9 @@ mod tests {
   }
 
   #[rstest]
-  fn sign_recoverable_roundtrip(alice_sk: EcdsaSecretKey) {
-    let (sig, rid) = alice_sk.sign_recoverable(&MSG).unwrap();
-    let recovered = EcdsaPublicKey::recover(&MSG, &sig, rid).unwrap();
+  fn sign_compact_roundtrip(alice_sk: EcdsaSecretKey) {
+    let sig = alice_sk.sign_compact(&MSG).unwrap();
+    let recovered = EcdsaPublicKey::recover_compact(&MSG, &sig).unwrap();
     assert_eq!(recovered, alice_sk.public_key());
   }
 

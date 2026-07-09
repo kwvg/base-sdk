@@ -44,21 +44,21 @@ fn verify(bencher: divan::Bencher) {
 }
 
 #[divan::bench]
-fn sign_recoverable(bencher: divan::Bencher) {
+fn sign_compact(bencher: divan::Bencher) {
   let sk = test_key();
   bencher
     .counter(divan::counter::ItemsCount::new(1u32))
-    .bench(|| sk.sign_recoverable(&test_msg_hash(7)).unwrap());
+    .bench(|| sk.sign_compact(&test_msg_hash(7)).unwrap());
 }
 
 #[divan::bench]
-fn recover(bencher: divan::Bencher) {
+fn recover_compact(bencher: divan::Bencher) {
   let sk = test_key();
   let msg = test_msg_hash(55);
-  let (sig, rid) = sk.sign_recoverable(&msg).unwrap();
+  let sig = sk.sign_compact(&msg).unwrap();
   bencher
     .counter(divan::counter::ItemsCount::new(1u32))
-    .bench(|| EcdsaPublicKey::recover(&msg, &sig, rid));
+    .bench(|| EcdsaPublicKey::recover_compact(&msg, &sig));
 }
 
 #[divan::bench]

@@ -14,7 +14,7 @@ mod sig_bytes;
 pub use error::EcdsaError;
 pub use public_bytes::{EcdsaPkBytes, ECDSA_PK_LEN};
 pub use secret_bytes::{EcdsaSkBytes, ECDSA_SK_LEN};
-pub use sig_bytes::EcdsaSigBytes;
+pub use sig_bytes::{EcdsaSigBytes, ECDSA_SIG_LEN};
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "k256")] {
@@ -27,6 +27,6 @@ cfg_if::cfg_if! {
 
     pub use public_ops::EcdsaPublicKey;
     pub use secret_ops::EcdsaSecretKey;
-    pub use sig_ops::{EcdsaDerSignature, EcdsaSignature, EcdsaRecoveryId};
+    pub use sig_ops::EcdsaSignature;
   }
 }
