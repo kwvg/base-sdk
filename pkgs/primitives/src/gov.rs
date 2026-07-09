@@ -13,8 +13,8 @@ use crate::{codec_base, hash_impl, TxHash};
 use bitcoin_hashes::sha256d;
 use bitcoin_units::Amount;
 use dash_num::Hash256;
-use dash_types::codec::{ArrayBuf, BaseCodec, Checkable, Hashable, NumCodec};
-use dash_types::{impl_num, TypeId, Unencodable};
+use dash_types::codec::{ArrayBuf, BaseCodec, Checkable, Hashable};
+use dash_types::{enum_map, impl_num, TypeId, Unencodable};
 use hex_conservative::DisplayHex;
 
 use core::fmt;
@@ -28,48 +28,20 @@ const MIN_URL_LEN: usize = 4;
 /// Allowed characters in governance proposal names.
 const PROPOSAL_NAME_CHARS: &[u8] = b"-_abcdefghijklmnopqrstuvwxyz0123456789";
 
+enum_map! {
 /// Governance object type codes.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
-pub enum GovObjectType {
+pub enum GovObjectType, i32, Unknown {
   /// Budget proposal.
-  Proposal,
+  Proposal = 1 => "proposal",
   /// Superblock trigger.
-  Trigger,
-  /// Unknown or unrecognized type.
-  Unknown(i32),
+  Trigger = 2 => "trigger",
 }
-
-impl NumCodec<i32> for GovObjectType {
-  fn from_base(v: i32) -> Self {
-    match v {
-      1 => Self::Proposal,
-      2 => Self::Trigger,
-      other => Self::Unknown(other),
-    }
-  }
-
-  fn to_base(&self) -> i32 {
-    match self {
-      Self::Proposal => 1,
-      Self::Trigger => 2,
-      Self::Unknown(v) => *v,
-    }
-  }
 }
 
 impl_num!(GovObjectType, i32);
 
 hash_impl!(GovObjectType);
-
-impl fmt::Display for GovObjectType {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Proposal => write!(f, "proposal"),
-      Self::Trigger => write!(f, "trigger"),
-      Self::Unknown(v) => write!(f, "unknown({v})"),
-    }
-  }
-}
 
 /// A governance proposal payload (type 1 JSON).
 ///
@@ -222,116 +194,45 @@ impl GovObject {
   }
 }
 
+enum_map! {
 /// Governance vote outcome.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeId)]
-pub enum VoteOutcome {
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
+pub enum VoteOutcome, u32, Unknown {
   /// No vote cast.
-  None,
+  None = 0 => "none",
   /// Vote in favour.
-  Yes,
+  Yes = 1 => "yes",
   /// Vote against.
-  No,
+  No = 2 => "no",
   /// Abstention.
-  Abstain,
-  /// Unrecognised outcome.
-  Unknown(u32),
+  Abstain = 3 => "abstain",
 }
-
-impl NumCodec<u32> for VoteOutcome {
-  fn from_base(v: u32) -> Self {
-    match v {
-      0 => Self::None,
-      1 => Self::Yes,
-      2 => Self::No,
-      3 => Self::Abstain,
-      other => Self::Unknown(other),
-    }
-  }
-
-  fn to_base(&self) -> u32 {
-    match self {
-      Self::None => 0,
-      Self::Yes => 1,
-      Self::No => 2,
-      Self::Abstain => 3,
-      Self::Unknown(v) => *v,
-    }
-  }
 }
 
 impl_num!(VoteOutcome, u32);
 
 hash_impl!(VoteOutcome);
 
-impl fmt::Display for VoteOutcome {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::None => f.write_str("none"),
-      Self::Yes => f.write_str("yes"),
-      Self::No => f.write_str("no"),
-      Self::Abstain => f.write_str("abstain"),
-      Self::Unknown(v) => write!(f, "unknown({v})"),
-    }
-  }
-}
-
+enum_map! {
 /// Governance vote signal type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeId)]
-pub enum VoteSignal {
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
+pub enum VoteSignal, u32, Unknown {
   /// No signal.
-  None,
+  None = 0 => "none",
   /// Fund this object.
-  Funding,
+  Funding = 1 => "funding",
   /// Object checks out.
-  Valid,
+  Valid = 2 => "valid",
   /// Object should be deleted.
-  Delete,
+  Delete = 3 => "delete",
   /// Officially endorsed.
-  Endorsed,
-  /// Unrecognised signal.
-  Unknown(u32),
+  Endorsed = 4 => "endorsed",
 }
-
-impl NumCodec<u32> for VoteSignal {
-  fn from_base(v: u32) -> Self {
-    match v {
-      0 => Self::None,
-      1 => Self::Funding,
-      2 => Self::Valid,
-      3 => Self::Delete,
-      4 => Self::Endorsed,
-      other => Self::Unknown(other),
-    }
-  }
-
-  fn to_base(&self) -> u32 {
-    match self {
-      Self::None => 0,
-      Self::Funding => 1,
-      Self::Valid => 2,
-      Self::Delete => 3,
-      Self::Endorsed => 4,
-      Self::Unknown(v) => *v,
-    }
-  }
 }
 
 impl_num!(VoteSignal, u32);
 
 hash_impl!(VoteSignal);
-
-impl fmt::Display for VoteSignal {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::None => f.write_str("none"),
-      Self::Funding => f.write_str("funding"),
-      Self::Valid => f.write_str("valid"),
-      Self::Delete => f.write_str("delete"),
-      Self::Endorsed => f.write_str("endorsed"),
-      Self::Unknown(v) => write!(f, "unknown({v})"),
-    }
-  }
-}
 
 /// A governance vote.
 ///

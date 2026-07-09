@@ -25,6 +25,7 @@ bitcoin_hashes = { version = "0.20", default-features = false, features = [
   "alloc",
 ] }
 dash-types = { version = "0.0.0", path = "../types", default-features = false }
+rstest = "0.25"
 serde = { version = "1", default-features = false, features = [
   "derive",
   "alloc",

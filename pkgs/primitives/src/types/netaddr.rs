@@ -8,50 +8,25 @@
 
 use crate::hash_impl;
 
-use dash_types::codec::NumCodec;
-use dash_types::{impl_num, TypeId};
+use dash_types::{enum_map, impl_num, TypeId};
 
 use core::fmt;
 
+enum_map! {
 /// Network address type (BIP155).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
-pub enum NetworkType {
+pub enum NetworkType, u8, Unknown {
   /// IPv4.
-  Ipv4,
+  Ipv4 = 1 => "ipv4",
   /// IPv6.
-  Ipv6,
+  Ipv6 = 2 => "ipv6",
   /// Tor v3 hidden service.
-  TorV3,
+  TorV3 = 4 => "torv3",
   /// I2P.
-  I2p,
+  I2p = 5 => "i2p",
   /// CJDNS.
-  Cjdns,
-  /// Unknown network type.
-  Unknown(u8),
+  Cjdns = 6 => "cjdns",
 }
-
-impl NumCodec<u8> for NetworkType {
-  fn from_base(val: u8) -> Self {
-    match val {
-      1 => Self::Ipv4,
-      2 => Self::Ipv6,
-      4 => Self::TorV3,
-      5 => Self::I2p,
-      6 => Self::Cjdns,
-      other => Self::Unknown(other),
-    }
-  }
-
-  fn to_base(&self) -> u8 {
-    match self {
-      Self::Ipv4 => 1,
-      Self::Ipv6 => 2,
-      Self::TorV3 => 4,
-      Self::I2p => 5,
-      Self::Cjdns => 6,
-      Self::Unknown(v) => *v,
-    }
-  }
 }
 
 impl_num!(NetworkType, u8);
@@ -69,19 +44,6 @@ impl NetworkType {
       Self::I2p => Some(32),
       Self::Cjdns => Some(16),
       Self::Unknown(_) => None,
-    }
-  }
-}
-
-impl fmt::Display for NetworkType {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Ipv4 => f.write_str("ipv4"),
-      Self::Ipv6 => f.write_str("ipv6"),
-      Self::TorV3 => f.write_str("torv3"),
-      Self::I2p => f.write_str("i2p"),
-      Self::Cjdns => f.write_str("cjdns"),
-      Self::Unknown(v) => write!(f, "unknown({v})"),
     }
   }
 }

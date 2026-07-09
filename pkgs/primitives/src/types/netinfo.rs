@@ -12,7 +12,7 @@ use crate::hash_impl;
 use crate::prelude::*;
 
 use dash_types::codec::{self, BaseCodec, Checkable, DecodeError, EncodeBuf, NumCodec};
-use dash_types::{impl_num, impl_type, TypeId, Unencodable};
+use dash_types::{enum_map, impl_num, impl_type, TypeId, Unencodable};
 
 use core::fmt;
 
@@ -49,96 +49,37 @@ const TLDS_BAD: &[&str] = &[
 /// Privacy-network TLDs that must be rejected.
 const TLDS_PRIVACY: &[&str] = &[".i2p", ".onion"];
 
+enum_map! {
 /// Purpose tag for an extended network info entry.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
-pub enum NIPurpose {
+pub enum NIPurpose, u8, Unknown {
   /// Core P2P port.
-  CoreP2p,
+  CoreP2p = 0 => "core_p2p",
   /// Platform P2P port.
-  PlatformP2p,
+  PlatformP2p = 1 => "platform_p2p",
   /// Platform HTTPS port.
-  PlatformHttps,
-  /// Unrecognized purpose code.
-  Unknown(u8),
+  PlatformHttps = 2 => "platform_https",
 }
-
-impl NumCodec<u8> for NIPurpose {
-  fn from_base(val: u8) -> Self {
-    match val {
-      0 => Self::CoreP2p,
-      1 => Self::PlatformP2p,
-      2 => Self::PlatformHttps,
-      other => Self::Unknown(other),
-    }
-  }
-
-  fn to_base(&self) -> u8 {
-    match self {
-      Self::CoreP2p => 0,
-      Self::PlatformP2p => 1,
-      Self::PlatformHttps => 2,
-      Self::Unknown(v) => *v,
-    }
-  }
 }
 
 impl_num!(NIPurpose, u8);
 
 hash_impl!(NIPurpose);
 
-impl fmt::Display for NIPurpose {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::CoreP2p => write!(f, "core_p2p"),
-      Self::PlatformP2p => write!(f, "platform_p2p"),
-      Self::PlatformHttps => write!(f, "platform_https"),
-      Self::Unknown(v) => write!(f, "unknown({v})"),
-    }
-  }
-}
-
+enum_map! {
 /// Type tag for an extended network info entry.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
-pub enum NIEntryCode {
+pub enum NIEntryCode, u8, Unknown {
   /// BIP155 address + port.
-  Service,
+  Service = 0x01 => "service",
   /// Domain name + port.
-  Domain,
-  /// Unrecognized entry type code.
-  Unknown(u8),
+  Domain = 0x02 => "domain",
 }
-
-impl NumCodec<u8> for NIEntryCode {
-  fn from_base(val: u8) -> Self {
-    match val {
-      0x01 => Self::Service,
-      0x02 => Self::Domain,
-      other => Self::Unknown(other),
-    }
-  }
-
-  fn to_base(&self) -> u8 {
-    match self {
-      Self::Service => 0x01,
-      Self::Domain => 0x02,
-      Self::Unknown(v) => *v,
-    }
-  }
 }
 
 impl_num!(NIEntryCode, u8);
 
 hash_impl!(NIEntryCode);
-
-impl fmt::Display for NIEntryCode {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Service => write!(f, "service"),
-      Self::Domain => write!(f, "domain"),
-      Self::Unknown(v) => write!(f, "unknown({v})"),
-    }
-  }
-}
 
 /// Network info validation error.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -219,10 +160,10 @@ impl BaseCodec for NIEntry {
         Ok(Self::Domain { name, port })
       }
       NIEntryCode::Unknown(t) => Err(DecodeError::InvalidValue {
-        expected: vec![
-          NIEntryCode::Service.to_base() as u64,
-          NIEntryCode::Domain.to_base() as u64,
-        ],
+        expected: NIEntryCode::variants()
+          .iter()
+          .map(|v| u64::from(NumCodec::<u8>::to_base(v)))
+          .collect(),
         actual: u64::from(t),
       }),
     }

@@ -6,63 +6,15 @@
 
 //! Script opcodes as defined by the consensus rules.
 
+use dash_types::{codec::NumCodec, enum_map};
+
 use core::fmt;
 
-/// Generates the [`Opcode`] enum, `from_u8`, `to_u8`, and `Display` from a
-/// single table.
-macro_rules! define_opcodes {
-  (
-    $(
-      $(#[$attr:meta])*
-      $variant:ident = $byte:literal => $display:literal
-    ),*
-    $(,)?
-  ) => {
-    /// Script opcode.
-    ///
-    /// Every variant corresponds to exactly one byte value on the wire. Bytes `0x01..=0x4b` are
-    /// direct data pushes (the byte *is* the push length); use [`Opcode::is_direct_push`] to
-    /// test for them.
-    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
-    #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-    #[repr(u8)]
-    pub enum Opcode {
-      $(
-        $(#[$attr])*
-        $variant = $byte,
-      )*
-    }
-
-    impl Opcode {
-      /// Converts a raw byte to the corresponding opcode.
-      ///
-      /// Bytes in the direct-push range `0x01..=0x4b` and any unmapped gaps map to
-      /// [`InvalidOpcode`](Opcode::InvalidOpcode). Use [`is_direct_push`](Opcode::is_direct_push)
-      /// to test for the push range before calling this.
-      pub const fn from_u8(byte: u8) -> Self {
-        match byte {
-          $( $byte => Self::$variant, )*
-          _ => Self::InvalidOpcode,
-        }
-      }
-
-      /// Converts to the raw byte value.
-      pub const fn to_u8(self) -> u8 {
-        self as u8
-      }
-    }
-
-    impl fmt::Display for Opcode {
-      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-          $( Self::$variant => f.write_str($display), )*
-        }
-      }
-    }
-  };
-}
-
-define_opcodes! {
+enum_map! {
+/// Script opcode.
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub enum Opcode, u8, Unknown {
   /// Push empty byte array onto the stack.
   Op0 = 0x00 => "OP_0",
   /// Next byte is the number of bytes to push.
@@ -301,8 +253,7 @@ define_opcodes! {
   /// Invalid opcode (causes immediate script failure).
   InvalidOpcode = 0xff => "OP_INVALIDOPCODE",
 }
-
-// Aliases matching the canonical naming
+}
 
 impl Opcode {
   /// Alias: `OP_FALSE` = [`Op0`](Opcode::Op0).
@@ -323,7 +274,7 @@ impl Opcode {
   }
 
   /// Returns `true` for opcodes counted toward the legacy sigop limit.
-  pub const fn is_count_sigop(self) -> bool {
+  pub const fn is_count_sigop(&self) -> bool {
     matches!(
       self,
       Self::CheckSig | Self::CheckSigVerify | Self::CheckMultiSig | Self::CheckMultiSigVerify
@@ -333,63 +284,65 @@ impl Opcode {
 
 impl fmt::Debug for Opcode {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "Opcode({:#04x})", self.to_u8())
+    write!(f, "Opcode({:#04x})", self.to_base())
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::Opcode;
+  use super::{NumCodec, Opcode};
+  use crate::prelude::*;
 
-  #[test]
-  fn round_trip_named_opcodes() {
-    let cases: &[(u8, Opcode)] = &[
-      (0x00, Opcode::Op0),
-      (0x6a, Opcode::Return),
-      (0x76, Opcode::Dup),
-      (0xa9, Opcode::Hash160),
-      (0xac, Opcode::CheckSig),
-      (0x88, Opcode::EqualVerify),
-      (0x87, Opcode::Equal),
-      (0xb1, Opcode::CheckLockTimeVerify),
-      (0xff, Opcode::InvalidOpcode),
-    ];
-    for &(byte, expected) in cases {
-      assert_eq!(Opcode::from_u8(byte), expected);
-      assert_eq!(expected.to_u8(), byte);
-    }
+  use rstest::*;
+
+  #[rstest]
+  #[case::op0(0x00, Opcode::Op0)]
+  #[case::op_return(0x6a, Opcode::Return)]
+  #[case::dup(0x76, Opcode::Dup)]
+  #[case::hash160(0xa9, Opcode::Hash160)]
+  #[case::checksig(0xac, Opcode::CheckSig)]
+  #[case::equalverify(0x88, Opcode::EqualVerify)]
+  #[case::equal(0x87, Opcode::Equal)]
+  #[case::cltv(0xb1, Opcode::CheckLockTimeVerify)]
+  #[case::invalid(0xff, Opcode::InvalidOpcode)]
+  fn round_trip(#[case] byte: u8, #[case] expected: Opcode) {
+    assert_eq!(Opcode::from_base(byte), expected);
+    assert_eq!(expected.to_base(), byte);
   }
 
-  #[test]
-  fn direct_push_range() {
-    assert!(!Opcode::is_direct_push(0x00));
-    assert!(Opcode::is_direct_push(0x01));
-    assert!(Opcode::is_direct_push(0x4b));
-    assert!(!Opcode::is_direct_push(0x4c));
+  #[rstest]
+  #[case::below_range(0x00, false)]
+  #[case::range_start(0x01, true)]
+  #[case::range_end(0x4b, true)]
+  #[case::above_range(0x4c, false)]
+  fn direct_push_range(#[case] byte: u8, #[case] expected: bool) {
+    assert_eq!(Opcode::is_direct_push(byte), expected);
   }
 
-  #[test]
-  fn aliases() {
-    assert_eq!(Opcode::FALSE, Opcode::Op0);
-    assert_eq!(Opcode::TRUE, Opcode::Op1);
-    assert_eq!(Opcode::NOP2, Opcode::CheckLockTimeVerify);
-    assert_eq!(Opcode::NOP3, Opcode::CheckSequenceVerify);
+  #[rstest]
+  #[case::op_false(Opcode::FALSE, Opcode::Op0)]
+  #[case::op_true(Opcode::TRUE, Opcode::Op1)]
+  #[case::nop2(Opcode::NOP2, Opcode::CheckLockTimeVerify)]
+  #[case::nop3(Opcode::NOP3, Opcode::CheckSequenceVerify)]
+  fn aliases(#[case] alias: Opcode, #[case] canonical: Opcode) {
+    assert_eq!(alias, canonical);
   }
 
-  #[test]
-  fn unmapped_bytes_return_invalid() {
-    // 0x01..=0x4b are direct pushes, not named opcodes
-    assert_eq!(Opcode::from_u8(0x01), Opcode::InvalidOpcode);
-    assert_eq!(Opcode::from_u8(0x4b), Opcode::InvalidOpcode);
-    assert_eq!(Opcode::from_u8(0xcc), Opcode::InvalidOpcode);
+  #[rstest]
+  #[case::direct_push_start(0x01)]
+  #[case::direct_push_end(0x4b)]
+  #[case::unmapped(0xcc)]
+  fn unmapped_bytes_passthrough(#[case] byte: u8) {
+    assert_eq!(Opcode::from_base(byte), Opcode::Unknown(byte));
+    assert_eq!(Opcode::Unknown(byte).to_base(), byte);
   }
 
-  #[test]
-  fn display_formatting() {
-    use crate::prelude::*;
-
-    assert_eq!(Opcode::Dup.to_string(), "OP_DUP");
-    assert_eq!(Opcode::Return.to_string(), "OP_RETURN");
-    assert_eq!(Opcode::CheckLockTimeVerify.to_string(), "OP_CHECKLOCKTIMEVERIFY");
+  #[rstest]
+  #[case::dup(Opcode::Dup, "OP_DUP")]
+  #[case::op_return(Opcode::Return, "OP_RETURN")]
+  #[case::cltv(Opcode::CheckLockTimeVerify, "OP_CHECKLOCKTIMEVERIFY")]
+  #[case::unknown(Opcode::Unknown(0x42), "unknown(66)")]
+  fn display_formatting(#[case] op: Opcode, #[case] expected: &str) {
+    assert_eq!(op.to_string(), expected);
   }
 }

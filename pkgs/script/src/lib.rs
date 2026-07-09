@@ -19,6 +19,7 @@ use crate::opcode::Opcode as Op;
 use crate::prelude::*;
 
 use bitcoin_hashes::{hash160, sha256};
+use dash_types::codec::NumCodec;
 use dash_types::Unencodable;
 
 pub mod opcode;
@@ -83,20 +84,20 @@ pub fn classify(script: &[u8]) -> ScriptKind {
 /// (`OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG`).
 pub fn is_p2pkh(script: &[u8]) -> bool {
   script.len() == P2PKH_SCRIPT_LEN
-    && script[0] == Op::Dup.to_u8()
-    && script[1] == Op::Hash160.to_u8()
+    && script[0] == Op::Dup.to_base()
+    && script[1] == Op::Hash160.to_base()
     && script[2] == HASH160_LEN as u8
-    && script[23] == Op::EqualVerify.to_u8()
-    && script[24] == Op::CheckSig.to_u8()
+    && script[23] == Op::EqualVerify.to_base()
+    && script[24] == Op::CheckSig.to_base()
 }
 
 /// Returns `true` for P2SH scripts
 /// (`OP_HASH160 <20> OP_EQUAL`).
 pub fn is_p2sh(script: &[u8]) -> bool {
   script.len() == P2SH_SCRIPT_LEN
-    && script[0] == Op::Hash160.to_u8()
+    && script[0] == Op::Hash160.to_base()
     && script[1] == HASH160_LEN as u8
-    && script[22] == Op::Equal.to_u8()
+    && script[22] == Op::Equal.to_base()
 }
 
 /// Returns `true` for P2PK scripts (compressed or uncompressed).
@@ -104,15 +105,15 @@ pub fn is_p2pk(script: &[u8]) -> bool {
   let len = script.len();
   (len == P2PK_COMPRESSED_SCRIPT_LEN
     && script[0] == P2PK_COMPRESSED_KEY_LEN as u8
-    && script[P2PK_COMPRESSED_SCRIPT_LEN - 1] == Op::CheckSig.to_u8())
+    && script[P2PK_COMPRESSED_SCRIPT_LEN - 1] == Op::CheckSig.to_base())
     || (len == P2PK_UNCOMPRESSED_SCRIPT_LEN
       && script[0] == P2PK_UNCOMPRESSED_KEY_LEN as u8
-      && script[P2PK_UNCOMPRESSED_SCRIPT_LEN - 1] == Op::CheckSig.to_u8())
+      && script[P2PK_UNCOMPRESSED_SCRIPT_LEN - 1] == Op::CheckSig.to_base())
 }
 
 /// Returns `true` when the script starts with `OP_RETURN`.
 pub fn is_op_return(script: &[u8]) -> bool {
-  script.first() == Some(&Op::Return.to_u8())
+  script.first() == Some(&Op::Return.to_base())
 }
 
 /// Extracts the 20-byte key hash from a P2PKH script.
@@ -192,8 +193,7 @@ pub fn legacy_sigop_count(script: &[u8]) -> usize {
       i += 1 + byte as usize;
       continue;
     }
-    let op = Opcode::from_u8(byte);
-    match op {
+    match Op::from_base(byte) {
       Op::CheckSig | Op::CheckSigVerify => count += 1,
       Op::CheckMultiSig | Op::CheckMultiSigVerify => {
         count += MAX_PUBKEYS;
@@ -346,7 +346,7 @@ mod tests {
 
   #[test]
   fn op_return_bare() {
-    assert!(is_op_return(&[Op::Return.to_u8()]));
+    assert!(is_op_return(&[Op::Return.to_base()]));
   }
 
   #[test]
@@ -423,25 +423,25 @@ mod tests {
 
   #[test]
   fn sigop_single_checksig() {
-    let script = [Op::CheckSig.to_u8()];
+    let script = [Op::CheckSig.to_base()];
     assert_eq!(legacy_sigop_count(&script), 1);
   }
 
   #[test]
   fn sigop_single_checksigverify() {
-    let script = [Op::CheckSigVerify.to_u8()];
+    let script = [Op::CheckSigVerify.to_base()];
     assert_eq!(legacy_sigop_count(&script), 1);
   }
 
   #[test]
   fn sigop_checkmultisig_counts_as_20() {
-    let script = [Op::CheckMultiSig.to_u8()];
+    let script = [Op::CheckMultiSig.to_base()];
     assert_eq!(legacy_sigop_count(&script), 20);
   }
 
   #[test]
   fn sigop_checkmultisigverify_counts_as_20() {
-    let script = [Op::CheckMultiSigVerify.to_u8()];
+    let script = [Op::CheckMultiSigVerify.to_base()];
     assert_eq!(legacy_sigop_count(&script), 20);
   }
 

@@ -10,78 +10,34 @@ use crate::codec::codec_p2p;
 
 use dash_num::Hash256;
 use dash_primitives::hash_impl;
-use dash_types::codec::NumCodec;
-use dash_types::{impl_num, TypeId};
+use dash_types::{enum_map, impl_num, TypeId};
 
 use core::fmt;
 
+enum_map! {
 /// Inventory object type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
-pub enum InvType {
+pub enum InvType, u32, Unknown {
   /// Error / not used.
-  Error,
+  Error = 0 => "error",
   /// Transaction.
-  Tx,
+  Tx = 1 => "tx",
   /// Block.
-  Block,
+  Block = 2 => "block",
   /// Filtered block (BIP37).
-  FilteredBlock,
+  FilteredBlock = 3 => "filtered_block",
   /// Compact block (BIP152).
-  CompactBlock,
+  CompactBlock = 4 => "compact_block",
   /// Governance object.
-  GovernanceObject,
+  GovernanceObject = 17 => "governance_object",
   /// Governance object vote.
-  GovernanceObjectVote,
-  /// Unknown or unhandled type.
-  Unknown(u32),
+  GovernanceObjectVote = 18 => "governance_object_vote",
 }
-
-impl NumCodec<u32> for InvType {
-  fn from_base(v: u32) -> Self {
-    match v {
-      0 => Self::Error,
-      1 => Self::Tx,
-      2 => Self::Block,
-      3 => Self::FilteredBlock,
-      4 => Self::CompactBlock,
-      17 => Self::GovernanceObject,
-      18 => Self::GovernanceObjectVote,
-      other => Self::Unknown(other),
-    }
-  }
-
-  fn to_base(&self) -> u32 {
-    match self {
-      Self::Error => 0,
-      Self::Tx => 1,
-      Self::Block => 2,
-      Self::FilteredBlock => 3,
-      Self::CompactBlock => 4,
-      Self::GovernanceObject => 17,
-      Self::GovernanceObjectVote => 18,
-      Self::Unknown(v) => *v,
-    }
-  }
 }
 
 impl_num!(InvType, u32);
 
 hash_impl!(InvType);
-
-impl fmt::Display for InvType {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Error => f.write_str("error"),
-      Self::Tx => f.write_str("tx"),
-      Self::Block => f.write_str("block"),
-      Self::FilteredBlock => f.write_str("filtered_block"),
-      Self::CompactBlock => f.write_str("compact_block"),
-      Self::GovernanceObject => f.write_str("governance_object"),
-      Self::GovernanceObjectVote => f.write_str("governance_object_vote"),
-      Self::Unknown(v) => write!(f, "unknown({v})"),
-    }
-  }
-}
 
 /// An inventory vector: a typed 32-byte hash.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
