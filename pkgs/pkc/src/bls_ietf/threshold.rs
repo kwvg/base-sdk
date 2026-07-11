@@ -10,11 +10,11 @@ use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
-use crate::bls::blst_ffi;
+use crate::bls::blst_ffi::{self, Fr};
 use crate::common::bls::threshold as math;
 use crate::prelude::*;
 
-use blst::{blst_fr, blst_p1, blst_p2};
+use blst::{blst_p1, blst_p2};
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 
@@ -154,7 +154,7 @@ pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
     }
   }
 
-  let ids: Vec<blst_fr> = shares.iter().map(|s| math::fr_from_hash(&s.id)).collect();
+  let ids: Vec<Fr> = shares.iter().map(|s| math::fr_from_hash(&s.id)).collect();
 
   // Convert min_pk::Signature -> compressed bytes ->
   // blst_p2_affine -> blst_p2.

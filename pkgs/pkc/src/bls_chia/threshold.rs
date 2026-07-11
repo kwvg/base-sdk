@@ -10,11 +10,11 @@ use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
-use crate::bls::blst_ffi;
+use crate::bls::blst_ffi::{self, Fr};
 use crate::common::bls::threshold as math;
 use crate::prelude::*;
 
-use blst::{blst_fr, blst_p1, blst_p2};
+use blst::{blst_p1, blst_p2};
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 
@@ -153,12 +153,11 @@ pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
     }
   }
 
-  let ids: Vec<blst_fr> = shares.iter().map(|s| math::fr_from_hash(&s.id)).collect();
+  let ids: Vec<Fr> = shares.iter().map(|s| math::fr_from_hash(&s.id)).collect();
   let points: Vec<blst_p2> = shares.iter().map(|s| blst_ffi::p2_from_affine(&s.sig.0)).collect();
 
   let recovered = math::interpolate_g2(&ids, &points);
-  let aff = blst_ffi::p2_to_affine(&recovered);
-  Ok(Signature::from_inner(aff))
+  Ok(Signature::from_inner(blst_ffi::p2_to_affine(&recovered)))
 }
 
 /// Derive a public key share by evaluating the master public
@@ -172,6 +171,5 @@ pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<Public
   let x = math::fr_from_hash(id);
   let result = math::eval_poly_g1(&coeffs_g1, &x);
 
-  let aff = blst_ffi::p1_to_affine(&result);
-  Ok(PublicKey::from_inner(aff))
+  Ok(PublicKey::from_inner(blst_ffi::p1_to_affine(&result)))
 }
