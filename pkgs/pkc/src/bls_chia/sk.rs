@@ -7,10 +7,10 @@
 //! Legacy BLS secret key.
 
 use super::error::Error;
-use super::hash;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use crate::bls::blst_ffi;
+use crate::bls::chia_h2c;
 
 use zeroize::Zeroize;
 
@@ -53,7 +53,7 @@ impl SecretKey {
   /// Sign a 32-byte message hash using the legacy scheme (no DST, Shallue-van
   /// de Woestijne hash-to-G2).
   pub fn sign(&self, msg: &[u8; 32]) -> Signature {
-    let h = hash::hash_to_g2(msg);
+    let h = chia_h2c::hash_to_g2(msg);
     // blst_sign_pk_in_g1 applies IETF transformations, do manually instead.
     let sig = blst_ffi::p2_mult(&h, &self.0.b, blst_ffi::FR_BITS);
     let aff = blst_ffi::p2_to_affine(&sig);

@@ -6,7 +6,7 @@
 
 //! Shallue-van de Woestijne hash-to-G2 for legacy BLS.
 
-use crate::bls::blst_ffi;
+use super::blst_ffi;
 
 use blst::{blst_fp, blst_fp2, blst_p2, blst_p2_affine};
 use hex_literal::hex;
@@ -74,7 +74,7 @@ fn curve_b() -> blst_fp2 {
 }
 
 /// Hash a 32-byte message to a G2 point using the legacy Dash algorithm.
-pub(super) fn hash_to_g2(msg: &[u8; 32]) -> blst_p2 {
+pub(crate) fn hash_to_g2(msg: &[u8; 32]) -> blst_p2 {
   // Step 1: derive four field elements via SHA-256 with domain prefixes.
   let t00 = hash_to_fp(msg, b"G2_0_c0");
   let t01 = hash_to_fp(msg, b"G2_0_c1");

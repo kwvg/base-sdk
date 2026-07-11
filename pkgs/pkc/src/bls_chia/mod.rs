@@ -8,7 +8,6 @@
 
 mod agg;
 mod error;
-mod hash;
 mod pk;
 mod ser;
 mod sig;
