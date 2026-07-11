@@ -13,7 +13,7 @@ use crate::script::Script;
 use crate::types::{NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
 use crate::{hash_impl, TxHash};
 
-use dash_pkc::BlsSignatureBytes;
+use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
 use dash_types::codec::{BaseCodec, Checkable, DecodeError, EncodeBuf, NumCodec};
 use dash_types::TypeId;
 
@@ -49,7 +49,7 @@ pub struct ProUpServTx {
   #[cfg_attr(feature = "serde", serde(rename = "platformHTTPPort"))]
   pub platform_http_port: Option<u16>,
   /// Operator BLS signature.
-  pub sig: BlsSignatureBytes,
+  pub sig: BlsSigBytes<BlsScIetf>,
 }
 
 impl_payload!(ProUpServTx);
@@ -93,7 +93,7 @@ impl BaseCodec for ProUpServTx {
       platform_node_id,
       platform_p2p_port,
       platform_http_port,
-      sig: BlsSignatureBytes::decode(data)?,
+      sig: BlsSigBytes::<BlsScIetf>::decode(data)?,
     })
   }
 

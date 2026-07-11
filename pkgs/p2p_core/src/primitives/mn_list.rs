@@ -9,8 +9,7 @@
 use crate::codec::{codec_p2p, impl_p2p};
 use crate::prelude::*;
 
-use dash_pkc::bls::{BlsPkBytes, BlsScIetf};
-use dash_pkc::BlsSignatureBytes;
+use dash_pkc::bls::{BlsPkBytes, BlsScIetf, BlsSigBytes};
 use dash_primitives::{
   hash_impl, BlockHash, Commitment, KeyId, LlmqType, MnType, PlatformNodeId, ServiceV1, Transaction, TxHash,
 };
@@ -135,7 +134,7 @@ codec_p2p!(DeletedQuorum { llmq_type, hash });
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct QuorumClSig {
   /// BLS signature.
-  pub sig: BlsSignatureBytes,
+  pub sig: BlsSigBytes<BlsScIetf>,
   /// Indices into the `new_quorums` vector.
   pub index_set: Vec<u16>,
 }
