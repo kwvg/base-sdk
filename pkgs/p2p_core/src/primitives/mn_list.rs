@@ -9,7 +9,8 @@
 use crate::codec::{codec_p2p, impl_p2p};
 use crate::prelude::*;
 
-use dash_pkc::{BlsPublicKeyBytes, BlsSignatureBytes};
+use dash_pkc::bls::{BlsPkBytes, BlsScIetf};
+use dash_pkc::BlsSignatureBytes;
 use dash_primitives::{
   hash_impl, BlockHash, Commitment, KeyId, LlmqType, MnType, PlatformNodeId, ServiceV1, Transaction, TxHash,
 };
@@ -32,7 +33,7 @@ pub struct SimplifiedMnListEntry {
   /// Network service address.
   pub service: ServiceV1,
   /// BLS operator public key.
-  pub operator_key: BlsPublicKeyBytes,
+  pub operator_key: BlsPkBytes<BlsScIetf>,
   /// Voting key hash (HASH160).
   pub voting_key_id: KeyId,
   /// Whether this masternode is currently valid.
@@ -54,7 +55,7 @@ impl BaseCodec for SimplifiedMnListEntry {
     let pro_reg_tx_hash = TxHash::decode(data)?;
     let confirmed_hash = BlockHash::decode(data)?;
     let service = ServiceV1::decode(data)?;
-    let operator_key = BlsPublicKeyBytes::decode(data)?;
+    let operator_key = BlsPkBytes::<BlsScIetf>::decode(data)?;
     let voting_key_id = KeyId::decode(data)?;
     let is_valid = bool::decode(data)?;
 

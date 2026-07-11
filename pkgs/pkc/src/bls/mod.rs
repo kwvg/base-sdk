@@ -7,8 +7,12 @@
 //! Unified BLS cryptography module.
 
 mod error;
+mod public_bytes;
+mod schemes;
 
 pub use error::BlsError;
+pub use public_bytes::{BlsPkBytes, BLS_PK_LEN};
+pub use schemes::{BlsScChia, BlsScIetf, BlsSchemeId};
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "bls")] {
@@ -19,14 +23,12 @@ cfg_if::cfg_if! {
 
     mod scheme_chia;
     mod scheme_ietf;
-    mod schemes;
     mod sig_ops;
     #[cfg(test)]
     #[allow(dead_code, reason = "temporary refactor artifact")]
     #[expect(clippy::unwrap_used, clippy::panic, reason = "test code")]
     mod tests;
 
-    pub use schemes::{BlsScChia, BlsScIetf, BlsSchemeId};
     pub use sig_ops::BlsSigId;
   }
 }

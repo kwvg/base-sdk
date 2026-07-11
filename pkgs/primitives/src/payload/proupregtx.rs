@@ -12,7 +12,7 @@ use crate::prelude::*;
 use crate::script::{KeyId, Script};
 use crate::TxHash;
 
-use dash_pkc::BlsPublicKeyBytes;
+use dash_pkc::bls::{BlsPkBytes, BlsScIetf};
 use dash_types::codec::Checkable;
 use dash_types::TypeId;
 
@@ -33,7 +33,7 @@ pub struct ProUpRegTx {
   /// Reserved, always 0.
   pub mode: u16,
   /// Operator BLS public key (48 bytes).
-  pub pub_key_operator: BlsPublicKeyBytes,
+  pub pub_key_operator: BlsPkBytes<BlsScIetf>,
   /// Voting key id (20 bytes).
   pub key_id_voting: KeyId,
   /// Payout script.
