@@ -7,8 +7,7 @@
 //! Thresholds for IETF scheme (m-of-n secret sharing and signature recovery).
 
 use super::sig::Signature;
-use super::sk::SecretKey;
-use super::PublicKey;
+use super::{PublicKey, SecretKey};
 use crate::bls::scheme_ops::{self, BlsScheme};
 use crate::bls::{BlsError, BlsScIetf};
 use crate::prelude::*;
