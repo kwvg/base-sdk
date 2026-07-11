@@ -8,6 +8,7 @@
 
 use super::error::BlsError;
 use super::scheme_ops::BlsScheme;
+use super::secret_ops::BlsSecretKey;
 use super::BlsSchemeId;
 
 use core::fmt;
@@ -26,6 +27,11 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
   /// Serialize to 48 bytes.
   pub fn to_bytes(&self) -> [u8; 48] {
     S::pk_to_bytes(&self.0)
+  }
+
+  /// Compute a DH shared key: `sk * peer_pk`.
+  pub fn dh_exchange(sk: &BlsSecretKey<S>, peer_pk: &Self) -> Result<Self, BlsError> {
+    S::dh_exchange(&sk.0, &peer_pk.0).map(Self)
   }
 
   pub(crate) fn from_inner(inner: S::InnerPk) -> Self {
@@ -92,8 +98,8 @@ impl<S: BlsSchemeId + BlsScheme> TryFrom<crate::bls::BlsPkBytes<S>> for BlsPubli
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::bls::tests::{self, decode_hex, VectorFile};
-  use crate::bls::{BlsScChia, BlsScIetf};
+  use crate::bls::tests::{self, decode_hex, VectorFile, SEED_0, SEED_1};
+  use crate::bls::{BlsScChia, BlsScIetf, BlsSecretKey};
 
   use alloc::{string::String, vec::Vec};
   use hex_conservative::DisplayHex;
@@ -103,6 +109,20 @@ mod tests {
   struct SerInternalVector {
     pk_legacy: String,
     pk_ietf: String,
+  }
+
+  fn assert_dh_roundtrip<S: BlsSchemeId + BlsScheme>() {
+    let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let sk1 = BlsSecretKey::<S>::generate(&SEED_1).unwrap();
+    let shared0 = BlsPublicKey::dh_exchange(&sk0, &sk1.public_key()).unwrap();
+    let shared1 = BlsPublicKey::dh_exchange(&sk1, &sk0.public_key()).unwrap();
+    assert_eq!(shared0, shared1);
+  }
+
+  #[test]
+  fn dh_exchange_roundtrip() {
+    assert_dh_roundtrip::<BlsScChia>();
+    assert_dh_roundtrip::<BlsScIetf>();
   }
 
   #[test]

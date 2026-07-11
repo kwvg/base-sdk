@@ -8,7 +8,6 @@
 
 mod agg;
 mod sig;
-mod sk;
 
 pub mod threshold;
 
@@ -17,18 +16,17 @@ pub use agg::{
   aggregate_pk, aggregate_sig, aggregate_sk, fast_verify_aggregates, secure_verify_aggregates, verify_aggregates,
 };
 pub use sig::Signature;
-pub use sk::SecretKey;
 
 use crate::bls::scheme_ops::BlsScheme;
 
+pub type SecretKey = crate::bls::BlsSecretKey<crate::bls::BlsScChia>;
 pub type PublicKey = crate::bls::BlsPublicKey<crate::bls::BlsScChia>;
 
-impl PublicKey {
-  /// Compute a DH shared key: `sk * peer_pk`.
-  pub fn dh_exchange(sk: &SecretKey, peer_pk: &PublicKey) -> Result<Self, BlsError> {
-    crate::bls::BlsScChia::dh_exchange(&sk.0, &peer_pk.0)
-      .map(Self::from_inner)
-      .map_err(Into::into)
+impl SecretKey {
+  /// Sign a 32-byte message hash using the legacy scheme (no DST, Shallue-van
+  /// de Woestijne hash-to-G2).
+  pub fn sign(&self, msg: &[u8; 32]) -> Signature {
+    Signature::from_inner(crate::bls::BlsScChia::sign(&self.0, msg))
   }
 }
 
@@ -54,19 +52,6 @@ const _: () = {
     }
     fn sign(&self, msg: &[u8; 32]) -> Signature {
       self.sign(msg)
-    }
-  }
-  impl BlsPublicKey for PublicKey {
-    type Error = BlsError;
-    type SecretKey = SecretKey;
-    fn from_bytes(b: &[u8; 48]) -> Result<Self, BlsError> {
-      PublicKey::from_bytes(b)
-    }
-    fn to_bytes(&self) -> [u8; 48] {
-      self.to_bytes()
-    }
-    fn dh_exchange(sk: &SecretKey, pk: &Self) -> Result<Self, BlsError> {
-      PublicKey::dh_exchange(sk, pk)
     }
   }
   impl BlsSignature for Signature {
