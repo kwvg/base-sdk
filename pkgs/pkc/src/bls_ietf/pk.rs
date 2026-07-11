@@ -19,7 +19,10 @@ use blst::min_pk;
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[cfg_attr(
   feature = "serde",
-  serde(into = "crate::BlsPublicKeyBytes", try_from = "crate::BlsPublicKeyBytes",)
+  serde(
+    into = "crate::bls::BlsPkBytes<crate::bls::BlsScIetf>",
+    try_from = "crate::bls::BlsPkBytes<crate::bls::BlsScIetf>",
+  )
 )]
 pub struct PublicKey(pub(super) min_pk::PublicKey);
 
@@ -51,16 +54,16 @@ impl PublicKey {
 
 crate::common::bls::impl_hash_via_bytes!(PublicKey);
 
-impl From<PublicKey> for crate::BlsPublicKeyBytes {
+impl From<PublicKey> for crate::bls::BlsPkBytes<crate::bls::BlsScIetf> {
   fn from(pk: PublicKey) -> Self {
-    Self(pk.to_bytes())
+    Self::from_bytes(pk.to_bytes())
   }
 }
 
-impl TryFrom<crate::BlsPublicKeyBytes> for PublicKey {
+impl TryFrom<crate::bls::BlsPkBytes<crate::bls::BlsScIetf>> for PublicKey {
   type Error = crate::bls::BlsError;
 
-  fn try_from(bytes: crate::BlsPublicKeyBytes) -> Result<Self, Self::Error> {
-    Self::from_bytes(&bytes.0)
+  fn try_from(bytes: crate::bls::BlsPkBytes<crate::bls::BlsScIetf>) -> Result<Self, Self::Error> {
+    Self::from_bytes(bytes.as_bytes())
   }
 }

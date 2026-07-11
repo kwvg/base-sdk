@@ -33,11 +33,6 @@ cfg_if::cfg_if! {
 }
 
 dash_types::make_bytes! {
-  /// Raw BLS public key bytes (48 bytes, unvalidated).
-  BlsPublicKeyBytes, 48
-}
-
-dash_types::make_bytes! {
   /// Raw BLS signature bytes (96 bytes, unvalidated).
   BlsSignatureBytes, 96
 }
