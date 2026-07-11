@@ -6,10 +6,10 @@
 
 //! IETF BLS signature (96-byte compressed G2 point).
 
-use super::error::Error;
 use super::pk::PublicKey;
 use super::sk::Scheme;
 use super::{DST, DST_POP};
+use crate::bls::BlsError;
 
 use blst::min_pk;
 use blst::BLST_ERROR;
@@ -29,10 +29,10 @@ impl Signature {
   }
 
   /// Deserialize from 96 compressed bytes.
-  pub fn from_bytes(bytes: &[u8; 96]) -> Result<Self, Error> {
+  pub fn from_bytes(bytes: &[u8; 96]) -> Result<Self, BlsError> {
     min_pk::Signature::from_bytes(bytes)
       .map(Self)
-      .map_err(|_| Error::InvalidSignature)
+      .map_err(|_| BlsError::InvalidSignature)
   }
 
   /// Serialize to 96 compressed bytes.
@@ -41,12 +41,12 @@ impl Signature {
   }
 
   /// Verify with the Basic scheme.
-  pub fn verify(&self, msg: &[u8], pk: &PublicKey) -> Result<(), Error> {
+  pub fn verify(&self, msg: &[u8], pk: &PublicKey) -> Result<(), BlsError> {
     self.verify_raw(msg, pk, DST)
   }
 
   /// Verify with a specific scheme.
-  pub fn verify_with(&self, msg: &[u8], pk: &PublicKey, scheme: Scheme) -> Result<(), Error> {
+  pub fn verify_with(&self, msg: &[u8], pk: &PublicKey, scheme: Scheme) -> Result<(), BlsError> {
     let dst = match scheme {
       Scheme::Basic => DST,
       Scheme::ProofOfPossession => DST_POP,
@@ -54,12 +54,12 @@ impl Signature {
     self.verify_raw(msg, pk, dst)
   }
 
-  fn verify_raw(&self, msg: &[u8], pk: &PublicKey, dst: &[u8]) -> Result<(), Error> {
+  fn verify_raw(&self, msg: &[u8], pk: &PublicKey, dst: &[u8]) -> Result<(), BlsError> {
     let result = self.0.verify(true, msg, dst, &[], &pk.0, true);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {
-      Err(Error::VerifyFailed)
+      Err(BlsError::VerifyFailed)
     }
   }
 }
@@ -73,7 +73,7 @@ impl From<Signature> for crate::BlsSignatureBytes {
 }
 
 impl TryFrom<crate::BlsSignatureBytes> for Signature {
-  type Error = super::error::Error;
+  type Error = crate::bls::BlsError;
 
   fn try_from(bytes: crate::BlsSignatureBytes) -> Result<Self, Self::Error> {
     Self::from_bytes(&bytes.0)

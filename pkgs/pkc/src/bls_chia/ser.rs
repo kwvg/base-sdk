@@ -9,8 +9,8 @@
 //! G1 (48 bytes): sign bit at byte[0] & 0x80, no compression indicator.
 //! G2 (96 bytes): legacy component order (c0||c1), sign bit at byte[0] & 0x80.
 
-use super::error::Error;
 use crate::bls::blst_ffi::{self, Fp};
+use crate::bls::BlsError;
 
 use blst::blst_p1_affine;
 use blst::blst_p2_affine;
@@ -36,9 +36,9 @@ pub(super) fn ser_g1(p: &blst_p1_affine) -> [u8; 48] {
 }
 
 /// Deserialize 48 legacy bytes to a G1 affine point.
-pub(super) fn deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, Error> {
+pub(super) fn deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, BlsError> {
   if bytes[0] & 0xc0 == 0xc0 {
-    return blst_ffi::p1_uncompress(bytes).map_err(|_| Error::InvalidPublicKey);
+    return blst_ffi::p1_uncompress(bytes).map_err(|_| BlsError::InvalidPublicKey);
   }
 
   let sign = (bytes[0] >> 7) & 1;
@@ -49,7 +49,7 @@ pub(super) fn deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, Error> {
     ietf[0] |= 0x20; // sign
   }
 
-  blst_ffi::p1_uncompress(&ietf).map_err(|_| Error::InvalidPublicKey)
+  blst_ffi::p1_uncompress(&ietf).map_err(|_| BlsError::InvalidPublicKey)
 }
 
 /// Serialize a G2 affine point to 96 legacy bytes.
@@ -84,11 +84,11 @@ pub(super) fn ser_g2(p: &blst_p2_affine) -> [u8; 96] {
 }
 
 /// Deserialize 96 legacy bytes to a G2 affine point.
-pub(super) fn deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, Error> {
+pub(super) fn deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, BlsError> {
   if bytes[0] & 0xc0 == 0xc0 {
     let mut ietf = [0u8; 96];
     ietf[0] = 0xc0;
-    return blst_ffi::p2_uncompress(&ietf).map_err(|_| Error::InvalidSignature);
+    return blst_ffi::p2_uncompress(&ietf).map_err(|_| BlsError::InvalidSignature);
   }
 
   let sign = (bytes[0] >> 7) & 1;
@@ -105,7 +105,7 @@ pub(super) fn deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, Error> {
   ietf[0] |= 0x80; // compression
 
   // Decompress with sign=0, then negate y if needed.
-  let mut out = blst_ffi::p2_uncompress(&ietf).map_err(|_| Error::InvalidSignature)?;
+  let mut out = blst_ffi::p2_uncompress(&ietf).map_err(|_| BlsError::InvalidSignature)?;
 
   let y_c1_bytes = Fp::from_raw(out.y.fp[1]).to_bendian();
   let decompressed_sign = y_c1_is_larger(&y_c1_bytes);

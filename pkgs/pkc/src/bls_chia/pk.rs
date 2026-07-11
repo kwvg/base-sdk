@@ -6,10 +6,10 @@
 
 //! Legacy BLS public key (48-byte G1 point, legacy serialization).
 
-use super::error::Error;
 use super::ser;
 use super::sk::SecretKey;
 use crate::bls::blst_ffi;
+use crate::bls::BlsError;
 
 use blst::blst_p1_affine;
 
@@ -28,7 +28,7 @@ impl PublicKey {
   }
 
   /// Deserialize from 48 legacy-format bytes.
-  pub fn from_bytes(bytes: &[u8; 48]) -> Result<Self, Error> {
+  pub fn from_bytes(bytes: &[u8; 48]) -> Result<Self, BlsError> {
     ser::deser_g1(bytes).map(Self)
   }
 
@@ -38,7 +38,7 @@ impl PublicKey {
   }
 
   /// Compute a DH shared key: `sk * peer_pk`.
-  pub fn dh_exchange(sk: &SecretKey, peer_pk: &PublicKey) -> Result<Self, Error> {
+  pub fn dh_exchange(sk: &SecretKey, peer_pk: &PublicKey) -> Result<Self, BlsError> {
     use zeroize::Zeroize;
     let mut sk_bytes = sk.to_bytes();
     let mut sk_scalar = blst_ffi::scalar_from_bendian(&sk_bytes);
@@ -58,7 +58,7 @@ impl From<PublicKey> for crate::BlsPublicKeyBytes {
 }
 
 impl TryFrom<crate::BlsPublicKeyBytes> for PublicKey {
-  type Error = super::error::Error;
+  type Error = crate::bls::BlsError;
 
   fn try_from(bytes: crate::BlsPublicKeyBytes) -> Result<Self, Self::Error> {
     Self::from_bytes(&bytes.0)

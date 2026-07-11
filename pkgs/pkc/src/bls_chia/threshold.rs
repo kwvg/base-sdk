@@ -6,11 +6,11 @@
 
 //! Thresholds for legacy scheme (m-of-n secret sharing and signature recovery).
 
-use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use crate::bls::blst_ffi::{self, Fr};
+use crate::bls::BlsError;
 use crate::common::bls::threshold as math;
 use crate::prelude::*;
 
@@ -100,15 +100,15 @@ pub fn split_sk(
   threshold: usize,
   ids: &[Hash256],
   rng: &mut impl CryptoRngCore,
-) -> Result<Vec<SecretKeyShare>, Error> {
+) -> Result<Vec<SecretKeyShare>, BlsError> {
   if threshold == 0 || ids.is_empty() || threshold > ids.len() {
-    return Err(Error::ThresholdTooLarge);
+    return Err(BlsError::ThresholdTooLarge);
   }
 
   // Reject zero IDs.
   for id in ids {
     if id.is_null() {
-      return Err(Error::ThresholdTooLarge);
+      return Err(BlsError::ThresholdTooLarge);
     }
   }
 
@@ -116,18 +116,18 @@ pub fn split_sk(
   for i in 0..ids.len() {
     for j in (i + 1)..ids.len() {
       if ids[i] == ids[j] {
-        return Err(Error::DuplicateShareId);
+        return Err(BlsError::DuplicateShareId);
       }
     }
   }
 
-  let raw =
-    crate::common::bls::generate_shares(&sk.to_bytes(), threshold, ids, rng).map_err(|()| Error::InvalidSecretKey)?;
+  let raw = crate::common::bls::generate_shares(&sk.to_bytes(), threshold, ids, rng)
+    .map_err(|()| BlsError::InvalidSecretKey)?;
 
   raw
     .into_iter()
     .map(|(id, bytes)| {
-      let share_sk = SecretKey::from_bytes(&bytes).map_err(|_| Error::InvalidSecretKey)?;
+      let share_sk = SecretKey::from_bytes(&bytes).map_err(|_| BlsError::InvalidSecretKey)?;
       Ok(SecretKeyShare { id, sk: share_sk })
     })
     .collect()
@@ -139,16 +139,16 @@ pub fn split_sk(
 /// # Errors
 ///
 /// Returns `InsufficientShares` if fewer than 2 shares.
-pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
+pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, BlsError> {
   if shares.len() < 2 {
-    return Err(Error::InsufficientShares);
+    return Err(BlsError::InsufficientShares);
   }
 
   // Check for duplicate IDs
   for i in 0..shares.len() {
     for j in (i + 1)..shares.len() {
       if shares[i].id == shares[j].id {
-        return Err(Error::DuplicateShareId);
+        return Err(BlsError::DuplicateShareId);
       }
     }
   }
@@ -162,9 +162,9 @@ pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
 
 /// Derive a public key share by evaluating the master public
 /// key polynomial at the given participant id.
-pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<PublicKey, Error> {
+pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<PublicKey, BlsError> {
   if master_pks.is_empty() {
-    return Err(Error::EmptyAggregation);
+    return Err(BlsError::EmptyAggregation);
   }
   let coeffs_g1: Vec<blst_p1> = master_pks.iter().map(|pk| blst_ffi::p1_from_affine(&pk.0)).collect();
 

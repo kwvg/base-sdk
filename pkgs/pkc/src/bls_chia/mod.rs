@@ -7,7 +7,6 @@
 //! Legacy BLS signatures (non-standard hash-to-G2, min-pubkey-size).
 
 mod agg;
-mod error;
 mod pk;
 mod ser;
 mod sig;
@@ -15,10 +14,10 @@ mod sk;
 
 pub mod threshold;
 
+pub use crate::bls::BlsError;
 pub use agg::{
   aggregate_pk, aggregate_sig, aggregate_sk, fast_verify_aggregates, secure_verify_aggregates, verify_aggregates,
 };
-pub use error::Error;
 pub use pk::PublicKey;
 pub use sig::Signature;
 pub use sk::SecretKey;
@@ -27,14 +26,14 @@ pub use sk::SecretKey;
 const _: () = {
   use crate::common::bls::contract::*;
   impl BlsSecretKey for SecretKey {
-    type Error = Error;
+    type Error = BlsError;
     type PublicKey = PublicKey;
     type Signature = Signature;
     type Msg = [u8; 32];
-    fn generate(ikm: &[u8]) -> Result<Self, Error> {
+    fn generate(ikm: &[u8]) -> Result<Self, BlsError> {
       SecretKey::generate(ikm)
     }
-    fn from_bytes(b: &[u8; 32]) -> Result<Self, Error> {
+    fn from_bytes(b: &[u8; 32]) -> Result<Self, BlsError> {
       SecretKey::from_bytes(b)
     }
     fn to_bytes(&self) -> [u8; 32] {
@@ -48,29 +47,29 @@ const _: () = {
     }
   }
   impl BlsPublicKey for PublicKey {
-    type Error = Error;
+    type Error = BlsError;
     type SecretKey = SecretKey;
-    fn from_bytes(b: &[u8; 48]) -> Result<Self, Error> {
+    fn from_bytes(b: &[u8; 48]) -> Result<Self, BlsError> {
       PublicKey::from_bytes(b)
     }
     fn to_bytes(&self) -> [u8; 48] {
       self.to_bytes()
     }
-    fn dh_exchange(sk: &SecretKey, pk: &Self) -> Result<Self, Error> {
+    fn dh_exchange(sk: &SecretKey, pk: &Self) -> Result<Self, BlsError> {
       PublicKey::dh_exchange(sk, pk)
     }
   }
   impl BlsSignature for Signature {
-    type Error = Error;
+    type Error = BlsError;
     type PublicKey = PublicKey;
     type Msg = [u8; 32];
-    fn from_bytes(b: &[u8; 96]) -> Result<Self, Error> {
+    fn from_bytes(b: &[u8; 96]) -> Result<Self, BlsError> {
       Signature::from_bytes(b)
     }
     fn to_bytes(&self) -> [u8; 96] {
       self.to_bytes()
     }
-    fn verify(&self, msg: &[u8; 32], pk: &PublicKey) -> Result<(), Error> {
+    fn verify(&self, msg: &[u8; 32], pk: &PublicKey) -> Result<(), BlsError> {
       self.verify(msg, pk)
     }
   }

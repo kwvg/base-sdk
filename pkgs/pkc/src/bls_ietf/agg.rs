@@ -6,12 +6,12 @@
 
 //! Aggregation and batch verification for IETF BLS.
 
-use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use super::DST;
 use crate::bls::blst_ffi;
+use crate::bls::BlsError;
 use crate::prelude::*;
 
 use blst::min_pk;
@@ -19,54 +19,54 @@ use blst::{blst_p1, BLST_ERROR};
 use sha2::{Digest, Sha256};
 
 /// Aggregate multiple public keys into one.
-pub fn aggregate_pk(keys: &[&PublicKey]) -> Result<PublicKey, Error> {
+pub fn aggregate_pk(keys: &[&PublicKey]) -> Result<PublicKey, BlsError> {
   if keys.is_empty() {
-    return Err(Error::EmptyAggregation);
+    return Err(BlsError::EmptyAggregation);
   }
   // Not repr(transparent), so collect inner refs.
   let inner_refs: &[&min_pk::PublicKey] = &keys.iter().map(|k| &k.0).collect::<Vec<_>>();
-  let agg = min_pk::AggregatePublicKey::aggregate(inner_refs, true).map_err(|_| Error::InvalidPublicKey)?;
+  let agg = min_pk::AggregatePublicKey::aggregate(inner_refs, true).map_err(|_| BlsError::InvalidPublicKey)?;
   Ok(PublicKey::from_inner(agg.to_public_key()))
 }
 
 /// Aggregate multiple signatures into one.
-pub fn aggregate_sig(sigs: &[&Signature]) -> Result<Signature, Error> {
+pub fn aggregate_sig(sigs: &[&Signature]) -> Result<Signature, BlsError> {
   if sigs.is_empty() {
-    return Err(Error::EmptyAggregation);
+    return Err(BlsError::EmptyAggregation);
   }
   let inner_refs: Vec<&min_pk::Signature> = sigs.iter().map(|s| &s.0).collect();
-  let agg = min_pk::AggregateSignature::aggregate(&inner_refs, true).map_err(|_| Error::InvalidSignature)?;
+  let agg = min_pk::AggregateSignature::aggregate(&inner_refs, true).map_err(|_| BlsError::InvalidSignature)?;
   Ok(Signature::from_inner(agg.to_signature()))
 }
 
 /// Verify an aggregated signature where every signer signed the same message.
-pub fn fast_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey]) -> Result<(), Error> {
+pub fn fast_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey]) -> Result<(), BlsError> {
   if pks.is_empty() {
-    return Err(Error::EmptyAggregation);
+    return Err(BlsError::EmptyAggregation);
   }
   let inner_pks: Vec<&min_pk::PublicKey> = pks.iter().map(|k| &k.0).collect();
   let result = sig.0.fast_aggregate_verify(true, msg, DST, &inner_pks);
   if result == BLST_ERROR::BLST_SUCCESS {
     Ok(())
   } else {
-    Err(Error::VerifyFailed)
+    Err(BlsError::VerifyFailed)
   }
 }
 
 /// Verify an aggregated signature where each signer signed a distinct message.
-pub fn verify_aggregates(sig: &Signature, msgs: &[&[u8]], pks: &[&PublicKey]) -> Result<(), Error> {
+pub fn verify_aggregates(sig: &Signature, msgs: &[&[u8]], pks: &[&PublicKey]) -> Result<(), BlsError> {
   if pks.len() != msgs.len() {
-    return Err(Error::CountMismatch);
+    return Err(BlsError::CountMismatch);
   }
   if pks.is_empty() {
-    return Err(Error::EmptyAggregation);
+    return Err(BlsError::EmptyAggregation);
   }
   let inner_pks: Vec<&min_pk::PublicKey> = pks.iter().map(|k| &k.0).collect();
   let result = sig.0.aggregate_verify(true, msgs, DST, &inner_pks, true);
   if result == BLST_ERROR::BLST_SUCCESS {
     Ok(())
   } else {
-    Err(Error::VerifyFailed)
+    Err(BlsError::VerifyFailed)
   }
 }
 
@@ -79,9 +79,9 @@ pub fn verify_aggregates(sig: &Signature, msgs: &[&[u8]], pks: &[&PublicKey]) ->
 ///    pk_hash) mod order`
 /// 4. Compute weighted public key: `agg_pk = sum(weight_i * pk_i)`
 /// 5. Verify the aggregate signature against `agg_pk` and the message
-pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey]) -> Result<(), Error> {
+pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey]) -> Result<(), BlsError> {
   if pks.is_empty() {
-    return Err(Error::EmptyAggregation);
+    return Err(BlsError::EmptyAggregation);
   }
 
   let mut sorted: Vec<[u8; 48]> = pks.iter().map(|pk| pk.to_bytes()).collect();
@@ -106,7 +106,7 @@ pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey])
     // blst_p1_mult reduces internally.
     let weight = blst_ffi::scalar_from_bendian(&weight_hash);
 
-    let pk_aff = blst_ffi::p1_uncompress(pk_bytes).map_err(|_| Error::InvalidPublicKey)?;
+    let pk_aff = blst_ffi::p1_uncompress(pk_bytes).map_err(|_| BlsError::InvalidPublicKey)?;
     let weighted = blst_ffi::p1_mult(&pk_aff, &weight.b, 256);
     let weighted = blst_ffi::p1_from_affine(&weighted);
     acc = blst_ffi::p1_add_or_double(&acc, &weighted);
@@ -114,20 +114,20 @@ pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey])
 
   let agg_pk_aff = blst_ffi::p1_to_affine(&acc);
   let agg_pk_bytes = blst_ffi::p1_affine_compress(&agg_pk_aff);
-  let agg_pk = PublicKey::from_bytes(&agg_pk_bytes).map_err(|_| Error::InvalidPublicKey)?;
+  let agg_pk = PublicKey::from_bytes(&agg_pk_bytes).map_err(|_| BlsError::InvalidPublicKey)?;
 
   sig.verify(msg, &agg_pk)
 }
 
 /// Sum multiple secret keys (mod group order).
-pub fn aggregate_sk(keys: &[&SecretKey]) -> Result<SecretKey, Error> {
+pub fn aggregate_sk(keys: &[&SecretKey]) -> Result<SecretKey, BlsError> {
   use zeroize::Zeroize;
   if keys.is_empty() {
-    return Err(Error::EmptyAggregation);
+    return Err(BlsError::EmptyAggregation);
   }
   let byte_vecs = zeroize::Zeroizing::new(keys.iter().map(|k| k.to_bytes()).collect::<Vec<[u8; 32]>>());
-  let mut out_bytes = crate::common::bls::sum_sk_scalars(&byte_vecs).map_err(|()| Error::InvalidSecretKey)?;
-  let result = SecretKey::from_bytes(&out_bytes).map_err(|_| Error::InvalidSecretKey);
+  let mut out_bytes = crate::common::bls::sum_sk_scalars(&byte_vecs).map_err(|()| BlsError::InvalidSecretKey)?;
+  let result = SecretKey::from_bytes(&out_bytes).map_err(|_| BlsError::InvalidSecretKey);
   out_bytes.zeroize();
   result
 }

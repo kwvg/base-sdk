@@ -4,13 +4,13 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Error types for IETF BLS operations.
+//! Error type for BLS operations.
 
 use core::fmt;
 
-/// Errors produced by IETF BLS operations.
+/// Errors produced by BLS operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Error {
+pub enum BlsError {
   /// input keying material is too short (need >= 32 bytes)
   InvalidKeyMaterial,
   /// secret key bytes are not a valid scalar
@@ -33,7 +33,7 @@ pub enum Error {
   DuplicateShareId,
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for BlsError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::InvalidKeyMaterial => write!(f, "input keying material too short"),
@@ -51,4 +51,4 @@ impl fmt::Display for Error {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for Error {}
+impl std::error::Error for BlsError {}

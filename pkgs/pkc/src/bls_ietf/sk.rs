@@ -6,10 +6,10 @@
 
 //! IETF BLS secret key.
 
-use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::{DST, DST_POP, DST_POP_PROVE};
+use crate::bls::BlsError;
 
 use blst::min_pk;
 
@@ -37,17 +37,17 @@ impl SecretKey {
   /// # Errors
   ///
   /// Returns `InvalidKeyMaterial` when `ikm` is shorter than 32 bytes.
-  pub fn generate(ikm: &[u8]) -> Result<Self, Error> {
+  pub fn generate(ikm: &[u8]) -> Result<Self, BlsError> {
     min_pk::SecretKey::key_gen(ikm, &[])
       .map(Self)
-      .map_err(|_| Error::InvalidKeyMaterial)
+      .map_err(|_| BlsError::InvalidKeyMaterial)
   }
 
   /// Parse from a 32-byte big-endian scalar.
-  pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, Error> {
+  pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, BlsError> {
     min_pk::SecretKey::from_bytes(bytes)
       .map(Self)
-      .map_err(|_| Error::InvalidSecretKey)
+      .map_err(|_| BlsError::InvalidSecretKey)
   }
 
   /// Serialize to 32 bytes.
