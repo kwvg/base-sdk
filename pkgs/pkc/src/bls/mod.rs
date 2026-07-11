@@ -9,6 +9,7 @@
 use cfg_if::cfg_if;
 
 mod error;
+mod ies_bytes;
 mod public_bytes;
 mod schemes;
 mod secret_bytes;
@@ -19,6 +20,7 @@ mod sig_bytes;
 mod tests;
 
 pub use error::BlsError;
+pub use ies_bytes::{BlsIesBytes, BlsIesMultiBytes, BLS_IES_IV_LEN};
 pub use public_bytes::{BlsPkBytes, BLS_PK_LEN};
 pub use schemes::{BlsScChia, BlsScIetf, BlsSchemeId};
 pub use secret_bytes::{BlsSkBytes, BLS_SK_LEN};
@@ -30,6 +32,7 @@ cfg_if! {
     #[expect(unsafe_code, reason = "blst C FFI")]
     mod blst_ffi;
     mod chia_h2c;
+    mod ies_ops;
     mod public_ops;
     mod scheme_chia;
     mod scheme_ietf;
