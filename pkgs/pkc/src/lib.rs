@@ -32,8 +32,3 @@ cfg_if::cfg_if! {
     pub mod worker;
   }
 }
-
-dash_types::make_bytes! {
-  /// Raw BLS signature bytes (96 bytes, unvalidated).
-  BlsSignatureBytes, 96
-}

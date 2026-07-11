@@ -18,7 +18,10 @@ use blst::min_pk;
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[cfg_attr(
   feature = "serde",
-  serde(into = "crate::BlsSignatureBytes", try_from = "crate::BlsSignatureBytes",)
+  serde(
+    into = "crate::bls::BlsSigBytes<crate::bls::BlsScIetf>",
+    try_from = "crate::bls::BlsSigBytes<crate::bls::BlsScIetf>",
+  )
 )]
 pub struct Signature(pub(super) min_pk::Signature);
 
@@ -50,16 +53,16 @@ impl Signature {
 
 crate::common::bls::impl_hash_via_bytes!(Signature);
 
-impl From<Signature> for crate::BlsSignatureBytes {
+impl From<Signature> for crate::bls::BlsSigBytes<crate::bls::BlsScIetf> {
   fn from(sig: Signature) -> Self {
-    Self(sig.to_bytes())
+    Self::from_bytes(sig.to_bytes())
   }
 }
 
-impl TryFrom<crate::BlsSignatureBytes> for Signature {
+impl TryFrom<crate::bls::BlsSigBytes<crate::bls::BlsScIetf>> for Signature {
   type Error = crate::bls::BlsError;
 
-  fn try_from(bytes: crate::BlsSignatureBytes) -> Result<Self, Self::Error> {
-    Self::from_bytes(&bytes.0)
+  fn try_from(bytes: crate::bls::BlsSigBytes<crate::bls::BlsScIetf>) -> Result<Self, Self::Error> {
+    Self::from_bytes(bytes.as_bytes())
   }
 }

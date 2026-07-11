@@ -9,7 +9,7 @@
 use super::QuorumHash;
 use crate::codec::codec_payload;
 
-use dash_pkc::BlsSignatureBytes;
+use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
 use dash_types::codec::Checkable;
 use dash_types::{TypeId, Unencodable};
 
@@ -31,7 +31,7 @@ pub struct AssetUnlock {
   /// Quorum hash.
   pub quorum_hash: QuorumHash,
   /// Quorum BLS authorization signature.
-  pub quorum_sig: BlsSignatureBytes,
+  pub quorum_sig: BlsSigBytes<BlsScIetf>,
 }
 
 codec_payload!(AssetUnlock {

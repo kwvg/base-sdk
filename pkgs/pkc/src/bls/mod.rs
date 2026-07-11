@@ -11,12 +11,14 @@ mod public_bytes;
 mod schemes;
 mod secret_bytes;
 mod share_bytes;
+mod sig_bytes;
 
 pub use error::BlsError;
 pub use public_bytes::{BlsPkBytes, BLS_PK_LEN};
 pub use schemes::{BlsScChia, BlsScIetf, BlsSchemeId};
 pub use secret_bytes::{BlsSkBytes, BLS_SK_LEN};
 pub use share_bytes::{BlsSigShareBytes, BlsSkShareBytes};
+pub use sig_bytes::{BlsSigBytes, BLS_SIG_LEN};
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "bls")] {
