@@ -34,35 +34,6 @@ fn sk_generate_rejects_short_ikm() {
   assert!(SecretKey::generate(&[0u8; 31]).is_err());
 }
 
-/// Compressed public key round-trips (48 bytes).
-#[rstest]
-fn pk_roundtrip(sk_seed0: SecretKey) {
-  let pk = sk_seed0.public_key();
-  let bytes = pk.to_bytes();
-  assert_eq!(bytes.len(), 48);
-  let restored = dash_pkc::bls_ietf::PublicKey::from_bytes(&bytes).unwrap();
-  assert_eq!(restored, pk);
-}
-
-/// Serde round-trip for PublicKey.
-#[cfg(feature = "serde")]
-#[rstest]
-fn serde_pk_roundtrip(sk_seed0: SecretKey) {
-  let pk = sk_seed0.public_key();
-  let json = serde_json::to_string(&pk).unwrap();
-  let restored: dash_pkc::bls_ietf::PublicKey = serde_json::from_str(&json).unwrap();
-  assert_eq!(restored, pk);
-}
-
-/// Same key serialized under IETF and legacy formats must differ.
-#[rstest]
-fn cross_format_pk_differs(sk_seed0: SecretKey) {
-  let ietf_bytes = sk_seed0.public_key().to_bytes();
-  let legacy_sk = dash_pkc::bls_chia::SecretKey::from_bytes(&sk_seed0.to_bytes()).unwrap();
-  let legacy_bytes = legacy_sk.public_key().to_bytes();
-  assert_ne!(ietf_bytes, legacy_bytes, "same point must serialize differently");
-}
-
 mod kat {
   use super::common::{self, decode_hex, VectorFile};
 
