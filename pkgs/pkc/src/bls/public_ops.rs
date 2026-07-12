@@ -88,3 +88,56 @@ impl<S: BlsSchemeId + BlsScheme> TryFrom<crate::bls::BlsPkBytes<S>> for BlsPubli
     Self::from_bytes(bytes.as_bytes())
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::bls::tests::{self, decode_hex, VectorFile};
+  use crate::bls::{BlsScChia, BlsScIetf};
+
+  use alloc::{string::String, vec::Vec};
+  use hex_conservative::DisplayHex;
+  use serde::Deserialize;
+
+  #[derive(Deserialize)]
+  struct SerInternalVector {
+    pk_legacy: String,
+    pk_ietf: String,
+  }
+
+  #[test]
+  fn serialization_formats_match_vectors() {
+    let f: VectorFile = tests::load("bls_chia_ser_internals");
+    let vecs: Vec<SerInternalVector> = tests::parse_sub(&f, "pk_serialization");
+
+    for v in &vecs {
+      let legacy_bytes: [u8; 48] = decode_hex(&v.pk_legacy).try_into().unwrap();
+      let legacy = BlsPublicKey::<BlsScChia>::from_bytes(&legacy_bytes).unwrap();
+      assert_eq!(legacy.to_bytes().to_lower_hex_string(), v.pk_legacy);
+
+      let ietf_bytes: [u8; 48] = decode_hex(&v.pk_ietf).try_into().unwrap();
+      let ietf = BlsPublicKey::<BlsScIetf>::from_bytes(&ietf_bytes).unwrap();
+      assert_eq!(ietf.to_bytes().to_lower_hex_string(), v.pk_ietf);
+
+      assert_ne!(v.pk_legacy, v.pk_ietf);
+    }
+  }
+
+  #[cfg(feature = "serde")]
+  #[test]
+  fn serde_roundtrip() {
+    let f: VectorFile = tests::load("bls_chia_ser_internals");
+    let v: SerInternalVector = tests::parse_sub::<SerInternalVector>(&f, "pk_serialization")
+      .into_iter()
+      .next()
+      .unwrap();
+
+    let chia = BlsPublicKey::<BlsScChia>::from_bytes(&decode_hex(&v.pk_legacy).try_into().unwrap()).unwrap();
+    let json = serde_json::to_string(&chia).unwrap();
+    assert_eq!(serde_json::from_str::<BlsPublicKey<BlsScChia>>(&json).unwrap(), chia);
+
+    let ietf = BlsPublicKey::<BlsScIetf>::from_bytes(&decode_hex(&v.pk_ietf).try_into().unwrap()).unwrap();
+    let json = serde_json::to_string(&ietf).unwrap();
+    assert_eq!(serde_json::from_str::<BlsPublicKey<BlsScIetf>>(&json).unwrap(), ietf);
+  }
+}
