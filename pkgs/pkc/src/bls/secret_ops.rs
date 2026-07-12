@@ -66,3 +66,62 @@ impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsSecretKey<S> {
     write!(f, "BlsSecretKey<{}>(..)", S::LABEL)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::bls::tests::{self, decode_hex, VectorFile, SEED_0};
+  use crate::bls::{BlsScChia, BlsScIetf};
+
+  use alloc::{string::String, vec::Vec};
+  use hex_conservative::DisplayHex;
+  use serde::Deserialize;
+
+  #[derive(Deserialize)]
+  struct KeygenVector {
+    sk: String,
+    pk: String,
+  }
+
+  fn assert_roundtrip<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let restored = BlsSecretKey::<S>::from_bytes(&sk.to_bytes()).unwrap();
+    assert_eq!(restored.public_key(), sk.public_key());
+  }
+
+  fn assert_derive_pk<S: BlsSchemeId + BlsScheme>(corpus: &str) {
+    let f: VectorFile = tests::load(corpus);
+    let vecs: Vec<KeygenVector> = tests::parse_sub(&f, "derive_pk");
+
+    for v in &vecs {
+      let sk_bytes: [u8; 32] = decode_hex(&v.sk).try_into().unwrap();
+      let sk = BlsSecretKey::<S>::from_bytes(&sk_bytes).unwrap();
+      assert_eq!(sk.public_key().to_bytes().to_lower_hex_string(), v.pk);
+    }
+  }
+
+  #[test]
+  fn derive_public_key_matches_vectors() {
+    assert_derive_pk::<BlsScChia>("bls_chia_keygen");
+    assert_derive_pk::<BlsScIetf>("bls_ietf_keygen");
+  }
+
+  #[test]
+  fn generate_rejects_short_ikm() {
+    assert!(BlsSecretKey::<BlsScChia>::generate(&[0u8; 31]).is_err());
+    assert!(BlsSecretKey::<BlsScIetf>::generate(&[0u8; 31]).is_err());
+  }
+
+  #[test]
+  fn public_key_formats_differ() {
+    let chia = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
+    let ietf = BlsSecretKey::<BlsScIetf>::from_bytes(&chia.to_bytes()).unwrap();
+    assert_ne!(chia.public_key().to_bytes(), ietf.public_key().to_bytes());
+  }
+
+  #[test]
+  fn serialization_roundtrip() {
+    assert_roundtrip::<BlsScChia>();
+    assert_roundtrip::<BlsScIetf>();
+  }
+}
