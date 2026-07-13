@@ -9,6 +9,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 #[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
 mod prelude;
@@ -22,22 +24,9 @@ cfg_if::cfg_if! {
   }
 }
 
+#[cfg(feature = "bls")]
+#[expect(private_bounds, reason = "BlsScheme is crate-private")]
+pub mod bls;
 pub mod ecdsa;
-
-cfg_if::cfg_if! {
-  if #[cfg(feature = "bls")] {
-    #[expect(private_bounds, reason = "BlsScheme is crate-private")]
-    pub mod bls;
-    pub mod bls_chia;
-    pub mod bls_ietf;
-    mod common;
-  }
-}
-
-cfg_if::cfg_if! {
-  if #[cfg(feature = "std")] {
-    extern crate std;
-
-    pub mod worker;
-  }
-}
+#[cfg(feature = "std")]
+pub mod worker;
