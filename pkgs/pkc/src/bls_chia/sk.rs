@@ -6,8 +6,8 @@
 
 //! Legacy BLS secret key.
 
-use super::pk::PublicKey;
 use super::sig::Signature;
+use super::PublicKey;
 use crate::bls::scheme_ops::BlsScheme;
 use crate::bls::BlsError;
 use crate::bls::BlsScChia;

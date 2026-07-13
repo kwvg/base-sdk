@@ -7,7 +7,6 @@
 //! Legacy BLS signatures (non-standard hash-to-G2, min-pubkey-size).
 
 mod agg;
-mod pk;
 mod sig;
 mod sk;
 
@@ -17,9 +16,21 @@ pub use crate::bls::BlsError;
 pub use agg::{
   aggregate_pk, aggregate_sig, aggregate_sk, fast_verify_aggregates, secure_verify_aggregates, verify_aggregates,
 };
-pub use pk::PublicKey;
 pub use sig::Signature;
 pub use sk::SecretKey;
+
+use crate::bls::scheme_ops::BlsScheme;
+
+pub type PublicKey = crate::bls::BlsPublicKey<crate::bls::BlsScChia>;
+
+impl PublicKey {
+  /// Compute a DH shared key: `sk * peer_pk`.
+  pub fn dh_exchange(sk: &SecretKey, peer_pk: &PublicKey) -> Result<Self, BlsError> {
+    crate::bls::BlsScChia::dh_exchange(&sk.0, &peer_pk.0)
+      .map(Self::from_inner)
+      .map_err(Into::into)
+  }
+}
 
 // Compile-time contract: must match bls_ietf's shared API surface.
 const _: () = {

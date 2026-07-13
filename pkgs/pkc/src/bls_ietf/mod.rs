@@ -7,7 +7,6 @@
 //! IETF BLS12-381 signatures (basic scheme, min-pubkey-size).
 
 mod agg;
-mod pk;
 mod sig;
 mod sk;
 
@@ -17,9 +16,26 @@ pub use crate::bls::BlsError;
 pub use agg::{
   aggregate_pk, aggregate_sig, aggregate_sk, fast_verify_aggregates, secure_verify_aggregates, verify_aggregates,
 };
-pub use pk::PublicKey;
 pub use sig::Signature;
 pub use sk::SecretKey;
+
+use crate::bls::scheme_ops::BlsScheme;
+
+pub type PublicKey = crate::bls::BlsPublicKey<crate::bls::BlsScIetf>;
+
+impl PublicKey {
+  /// Compute a DH shared key: `sk * peer_pk`.
+  pub fn dh_exchange(sk: &SecretKey, peer_pk: &PublicKey) -> Result<Self, BlsError> {
+    crate::bls::BlsScIetf::dh_exchange(&sk.0, &peer_pk.0)
+      .map(Self::from_inner)
+      .map_err(Into::into)
+  }
+
+  /// Verify a proof of possession against this key.
+  pub fn verify_possession(&self, pop: &Signature) -> Result<(), BlsError> {
+    crate::bls::BlsScIetf::verify_possession(&self.0, &pop.0).map_err(Into::into)
+  }
+}
 
 // Compile-time contract: if any of these methods are
 // removed or their signatures change, this block fails.
