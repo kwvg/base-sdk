@@ -7,17 +7,14 @@
 //! Unvalidated byte bags for BLS threshold shares.
 
 use crate::bls::secret_bytes::BlsSkBytes;
+use crate::bls::sig_bytes::BlsSigBytes;
 use crate::bls::BlsSchemeId;
 
 use dash_num::Hash256;
-use subtle::ConstantTimeEq;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use core::fmt::{self, Debug, Display, Formatter};
 use core::hash;
 use core::marker::PhantomData;
-
-const BLS_SIG_SHARE_LEN: usize = 96;
 
 /// Unvalidated secret-key share bytes.
 pub struct BlsSkShareBytes<S: BlsSchemeId> {
@@ -74,13 +71,13 @@ impl<S: BlsSchemeId> Eq for BlsSkShareBytes<S> {}
 /// Unvalidated signature share bytes.
 pub struct BlsSigShareBytes<S: BlsSchemeId> {
   id: Hash256,
-  sig: [u8; BLS_SIG_SHARE_LEN],
+  sig: BlsSigBytes<S>,
   _scheme: PhantomData<S>,
 }
 
 impl<S: BlsSchemeId> BlsSigShareBytes<S> {
   /// Construct from an id and signature bytes.
-  pub fn new(id: Hash256, sig: [u8; BLS_SIG_SHARE_LEN]) -> Self {
+  pub fn new(id: Hash256, sig: BlsSigBytes<S>) -> Self {
     Self {
       id,
       sig,
@@ -94,39 +91,18 @@ impl<S: BlsSchemeId> BlsSigShareBytes<S> {
   }
 
   /// The inner signature bytes.
-  pub fn sig(&self) -> &[u8; BLS_SIG_SHARE_LEN] {
+  pub fn sig(&self) -> &BlsSigBytes<S> {
     &self.sig
-  }
-
-  /// Copies out the signature bytes in a zeroizing wrapper.
-  pub fn to_sig_bytes(&self) -> Zeroizing<[u8; BLS_SIG_SHARE_LEN]> {
-    Zeroizing::new(self.sig)
   }
 }
 
 impl<S: BlsSchemeId> Clone for BlsSigShareBytes<S> {
   fn clone(&self) -> Self {
-    Self {
-      id: self.id,
-      sig: self.sig,
-      _scheme: PhantomData,
-    }
+    *self
   }
 }
 
-impl<S: BlsSchemeId> Zeroize for BlsSigShareBytes<S> {
-  fn zeroize(&mut self) {
-    self.sig.zeroize();
-  }
-}
-
-impl<S: BlsSchemeId> Drop for BlsSigShareBytes<S> {
-  fn drop(&mut self) {
-    self.zeroize();
-  }
-}
-
-impl<S: BlsSchemeId> ZeroizeOnDrop for BlsSigShareBytes<S> {}
+impl<S: BlsSchemeId> Copy for BlsSigShareBytes<S> {}
 
 impl<S: BlsSchemeId> Debug for BlsSigShareBytes<S> {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -142,7 +118,7 @@ impl<S: BlsSchemeId> Display for BlsSigShareBytes<S> {
 
 impl<S: BlsSchemeId> PartialEq for BlsSigShareBytes<S> {
   fn eq(&self, other: &Self) -> bool {
-    self.id == other.id && bool::from(self.sig.ct_eq(&other.sig))
+    self.id == other.id && self.sig == other.sig
   }
 }
 
@@ -151,6 +127,6 @@ impl<S: BlsSchemeId> Eq for BlsSigShareBytes<S> {}
 impl<S: BlsSchemeId> hash::Hash for BlsSigShareBytes<S> {
   fn hash<H: hash::Hasher>(&self, state: &mut H) {
     self.id.hash(state);
-    self.sig.hash(state);
+    self.sig.as_bytes().hash(state);
   }
 }

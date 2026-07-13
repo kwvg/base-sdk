@@ -9,7 +9,8 @@
 use super::error::BlsError;
 use super::public_ops::BlsPublicKey;
 use super::scheme_ops::BlsScheme;
-use super::BlsSchemeId;
+use super::sig_basic::BlsSignature;
+use super::{BlsSchemeId, BlsSigId};
 
 use core::fmt;
 
@@ -48,6 +49,21 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
   /// Derive the corresponding public key.
   pub fn public_key(&self) -> BlsPublicKey<S> {
     BlsPublicKey(S::derive_pk(&self.0))
+  }
+
+  /// Sign a message using the default scheme.
+  pub fn sign(&self, msg: &[u8]) -> BlsSignature<S> {
+    BlsSignature(S::sign(&self.0, msg))
+  }
+
+  /// Sign with a specific scheme variant.
+  ///
+  /// # Errors
+  ///
+  /// Returns `UnsupportedScheme` for Chia (which has no DST
+  /// mechanism).
+  pub fn sign_with(&self, msg: &[u8], scheme: BlsSigId) -> Result<BlsSignature<S>, BlsError> {
+    S::sign_with(&self.0, msg, scheme).map(BlsSignature)
   }
 
   /// Sum multiple secret keys (mod group order).

@@ -6,7 +6,11 @@
 
 //! Benchmarks for the legacy BLS module.
 
-use dash_pkc::bls_chia::{aggregate_pk, aggregate_sig, verify_aggregates, PublicKey, SecretKey, Signature};
+use dash_pkc::bls::{BlsPublicKey, BlsScChia, BlsSecretKey, BlsSignature};
+
+type SecretKey = BlsSecretKey<BlsScChia>;
+type PublicKey = BlsPublicKey<BlsScChia>;
+type Signature = BlsSignature<BlsScChia>;
 
 /// Single signature creation (legacy hash-to-G2).
 #[divan::bench]
@@ -42,7 +46,7 @@ fn aggregate_pk_n(bencher: divan::Bencher, n: usize) {
   let pk_refs: Vec<_> = pks.iter().collect();
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| aggregate_pk(&pk_refs));
+    .bench(|| PublicKey::aggregate(&pk_refs));
 }
 
 /// Signature aggregation at various batch sizes.
@@ -59,7 +63,7 @@ fn aggregate_sig_n(bencher: divan::Bencher, n: usize) {
   let sig_refs: Vec<&Signature> = sigs.iter().collect();
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| aggregate_sig(&sig_refs));
+    .bench(|| Signature::aggregate(&sig_refs));
 }
 
 /// N individual verifications in a loop.
@@ -88,11 +92,11 @@ fn verify_aggregated_block(bencher: divan::Bencher, n: usize) {
   let pks: Vec<_> = keys.iter().map(|k| k.public_key()).collect();
   let sigs: Vec<_> = keys.iter().map(|k| k.sign(&msg)).collect();
   let sig_refs: Vec<&Signature> = sigs.iter().collect();
-  let agg_sig = aggregate_sig(&sig_refs).unwrap();
+  let agg_sig = Signature::aggregate(&sig_refs).unwrap();
   let pk_refs: Vec<_> = pks.iter().collect();
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| verify_aggregates(&agg_sig, &msg, &pk_refs));
+    .bench(|| agg_sig.fast_verify_aggregates(&msg, &pk_refs));
 }
 
 /// Public key serialization (legacy format).
@@ -134,35 +138,38 @@ fn deser_sig(bencher: divan::Bencher) {
 /// Threshold secret key splitting at various quorum sizes.
 #[divan::bench(args = [5, 10, 50])]
 fn split_threshold(bencher: divan::Bencher, n: usize) {
-  use dash_pkc::bls_chia::threshold;
   let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
   let t = n.div_ceil(2);
   let ids = super::common::sequential_ids(n);
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| threshold::split_sk(&sk, t, &ids, &mut rand_core::OsRng));
+    .bench(|| sk.split(t, &ids, &mut rand_core::OsRng));
 }
 
 /// Threshold signature recovery via Lagrange interpolation.
 #[divan::bench(args = [3, 5, 10])]
 fn recover_threshold(bencher: divan::Bencher, t: usize) {
-  use dash_pkc::bls_chia::threshold;
+  use dash_pkc::bls::BlsSigShare;
   let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
   let n = t * 2;
   let ids = super::common::sequential_ids(n);
-  let shares = threshold::split_sk(&sk, t, &ids, &mut rand_core::OsRng).unwrap();
+  let shares = sk.split(t, &ids, &mut rand_core::OsRng).unwrap();
   let msg = super::common::test_msg(42);
   let sig_shares: Vec<_> = shares.iter().map(|s| s.sign(&msg)).collect();
-  let subset: Vec<&threshold::SignatureShare> = sig_shares.iter().take(t).collect();
+  let subset: Vec<&BlsSigShare<BlsScChia>> = sig_shares.iter().take(t).collect();
   bencher
     .counter(divan::counter::ItemsCount::new(t))
-    .bench(|| threshold::recover_sig(&subset));
+    .bench(|| Signature::recover(&subset));
 }
 
 #[cfg(feature = "std")]
 mod worker_benches {
-  use dash_pkc::bls_chia::{aggregate_pk, PublicKey, SecretKey, Signature};
+  use dash_pkc::bls::{BlsPublicKey, BlsScChia, BlsSecretKey, BlsSignature};
   use dash_pkc::worker;
+
+  type SecretKey = BlsSecretKey<BlsScChia>;
+  type PublicKey = BlsPublicKey<BlsScChia>;
+  type Signature = BlsSignature<BlsScChia>;
 
   fn setup_sigs(n: usize) -> Vec<(Signature, PublicKey, [u8; 32])> {
     (0..n)
@@ -195,6 +202,6 @@ mod worker_benches {
       .collect();
     bencher
       .counter(divan::counter::ItemsCount::new(n))
-      .bench(|| worker::par_reduce(pks.clone(), |a, b| aggregate_pk(&[&a, &b]).unwrap()));
+      .bench(|| worker::par_reduce(pks.clone(), |a, b| PublicKey::aggregate(&[&a, &b]).unwrap()));
   }
 }

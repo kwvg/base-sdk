@@ -6,9 +6,11 @@
 
 //! Benchmarks for the IETF BLS module.
 
-use dash_pkc::bls_ietf::{
-  aggregate_pk, aggregate_sig, fast_verify_aggregates, verify_aggregates, PublicKey, SecretKey, Signature,
-};
+use dash_pkc::bls::{BlsPublicKey, BlsScIetf, BlsSecretKey, BlsSignature};
+
+type SecretKey = BlsSecretKey<BlsScIetf>;
+type PublicKey = BlsPublicKey<BlsScIetf>;
+type Signature = BlsSignature<BlsScIetf>;
 
 /// Single signature creation.
 #[divan::bench]
@@ -44,7 +46,7 @@ fn aggregate_pk_n(bencher: divan::Bencher, n: usize) {
   let pk_refs: Vec<_> = pks.iter().collect();
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| aggregate_pk(&pk_refs));
+    .bench(|| PublicKey::aggregate(&pk_refs));
 }
 
 /// Signature aggregation at various batch sizes.
@@ -61,7 +63,7 @@ fn aggregate_sig_n(bencher: divan::Bencher, n: usize) {
   let sig_refs: Vec<&Signature> = sigs.iter().collect();
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| aggregate_sig(&sig_refs));
+    .bench(|| Signature::aggregate(&sig_refs));
 }
 
 /// N individual verifications in a loop.
@@ -90,12 +92,12 @@ fn verify_aggregated_block(bencher: divan::Bencher, n: usize) {
   let pks: Vec<_> = keys.iter().map(|k| k.public_key()).collect();
   let sigs: Vec<_> = keys.iter().zip(msgs.iter()).map(|(k, m)| k.sign(m)).collect();
   let sig_refs: Vec<&Signature> = sigs.iter().collect();
-  let agg_sig = aggregate_sig(&sig_refs).unwrap();
+  let agg_sig = Signature::aggregate(&sig_refs).unwrap();
   let pk_refs: Vec<_> = pks.iter().collect();
   let msg_slices: Vec<&[u8]> = msgs.iter().map(|m| m.as_slice()).collect();
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| verify_aggregates(&agg_sig, &msg_slices, &pk_refs));
+    .bench(|| agg_sig.verify_aggregates(&msg_slices, &pk_refs));
 }
 
 /// Fast aggregate verify (same message, N signers).
@@ -108,11 +110,11 @@ fn fast_verify_n(bencher: divan::Bencher, n: usize) {
   let pks: Vec<_> = keys.iter().map(|k| k.public_key()).collect();
   let sigs: Vec<_> = keys.iter().map(|k| k.sign(&msg)).collect();
   let sig_refs: Vec<&Signature> = sigs.iter().collect();
-  let agg_sig = aggregate_sig(&sig_refs).unwrap();
+  let agg_sig = Signature::aggregate(&sig_refs).unwrap();
   let pk_refs: Vec<_> = pks.iter().collect();
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| fast_verify_aggregates(&agg_sig, &msg, &pk_refs));
+    .bench(|| agg_sig.fast_verify_aggregates(&msg, &pk_refs));
 }
 
 /// Public key serialization (compress).
@@ -154,42 +156,45 @@ fn deser_sig(bencher: divan::Bencher) {
 /// Threshold secret key splitting at various quorum sizes.
 #[divan::bench(args = [5, 10, 50])]
 fn split_threshold(bencher: divan::Bencher, n: usize) {
-  use dash_pkc::bls_ietf::threshold;
   let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
   let t = n.div_ceil(2);
   let ids = super::common::sequential_ids(n);
   bencher
     .counter(divan::counter::ItemsCount::new(n))
-    .bench(|| threshold::split_sk(&sk, t, &ids, &mut rand_core::OsRng));
+    .bench(|| sk.split(t, &ids, &mut rand_core::OsRng));
 }
 
 /// Threshold signature recovery via Lagrange interpolation.
 #[divan::bench(args = [3, 5, 10])]
 fn recover_threshold(bencher: divan::Bencher, t: usize) {
-  use dash_pkc::bls_ietf::threshold;
+  use dash_pkc::bls::BlsSigShare;
   let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
   let n = t * 2;
   let ids = super::common::sequential_ids(n);
-  let shares = threshold::split_sk(&sk, t, &ids, &mut rand_core::OsRng).unwrap();
+  let shares = sk.split(t, &ids, &mut rand_core::OsRng).unwrap();
   let msg = super::common::test_msg(42);
   let sig_shares: Vec<_> = shares.iter().map(|s| s.sign(&msg)).collect();
-  let subset: Vec<&threshold::SignatureShare> = sig_shares.iter().take(t).collect();
+  let subset: Vec<&BlsSigShare<BlsScIetf>> = sig_shares.iter().take(t).collect();
   bencher
     .counter(divan::counter::ItemsCount::new(t))
-    .bench(|| threshold::recover_sig(&subset));
+    .bench(|| Signature::recover(&subset));
 }
 
 /// Proof of possession creation.
 #[divan::bench]
 fn prove_pop(bencher: divan::Bencher) {
-  let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
+  use dash_pkc::bls_ietf::SecretKey as LegacySecretKey;
+
+  let sk = LegacySecretKey::generate(&super::common::test_ikm(1)).unwrap();
   bencher.bench(|| sk.prove_possession());
 }
 
 /// Proof of possession verification.
 #[divan::bench]
 fn verify_pop(bencher: divan::Bencher) {
-  let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
+  use dash_pkc::bls_ietf::SecretKey as LegacySecretKey;
+
+  let sk = LegacySecretKey::generate(&super::common::test_ikm(1)).unwrap();
   let pop = sk.prove_possession();
   let pk = sk.public_key();
   bencher.bench(|| pk.verify_possession(&pop));
@@ -197,8 +202,12 @@ fn verify_pop(bencher: divan::Bencher) {
 
 #[cfg(feature = "std")]
 mod worker_benches {
-  use dash_pkc::bls_ietf::{aggregate_pk, PublicKey, SecretKey, Signature};
+  use dash_pkc::bls::{BlsPublicKey, BlsScIetf, BlsSecretKey, BlsSignature};
   use dash_pkc::worker;
+
+  type SecretKey = BlsSecretKey<BlsScIetf>;
+  type PublicKey = BlsPublicKey<BlsScIetf>;
+  type Signature = BlsSignature<BlsScIetf>;
 
   fn setup_sigs(n: usize) -> Vec<(Signature, PublicKey, Vec<u8>)> {
     (0..n)
@@ -231,6 +240,6 @@ mod worker_benches {
       .collect();
     bencher
       .counter(divan::counter::ItemsCount::new(n))
-      .bench(|| worker::par_reduce(pks.clone(), |a, b| aggregate_pk(&[&a, &b]).unwrap()));
+      .bench(|| worker::par_reduce(pks.clone(), |a, b| PublicKey::aggregate(&[&a, &b]).unwrap()));
   }
 }
