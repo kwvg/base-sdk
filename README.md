@@ -87,8 +87,7 @@ Specific crates define additional features:
 | Feature | Description | Crates |
 |---------|-------------|--------|
 | `k256` | Enable secp256k1 support | [pkc](./pkgs/pkc) |
-| `bls_ietf` | Enable standard (IETF) BLS support | [pkc](./pkgs/pkc) |
-| `bls_chia` | Enable legacy (Chia) BLS support | [pkc](./pkgs/pkc) |
+| `bls` | Enable standard and legacy BLS support | [pkc](./pkgs/pkc) |
 | `aes_hw` | Enable hardware-accelerated AES on supported platforms | [pow](./pkgs/pow) |
 | `simd` | Use SIMD backends (requires nightly) | [pow](./pkgs/pow) |
 

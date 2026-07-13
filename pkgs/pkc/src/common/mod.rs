@@ -6,5 +6,5 @@
 
 //! Shared internals used by multiple BLS modules.
 
-#[cfg(any(feature = "bls_ietf", feature = "bls_chia"))]
+#[cfg(feature = "bls")]
 pub(crate) mod bls;

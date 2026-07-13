@@ -58,11 +58,10 @@ std = [
   "hex-conservative/std",
   "rand_core/getrandom",
 ]
-bls_chia = ["dep:blst", "dep:sha2"]
-bls_ietf = ["dep:blst", "dep:sha2"]
+bls = ["dep:blst", "dep:sha2"]
 k256 = ["dep:k256"]
 serde = ["dep:serde", "dash-types/serde"]
-full = ["k256", "bls_ietf", "bls_chia", "serde", "std"]
+full = ["k256", "bls", "serde", "std"]
 _internal = []
 
 [lints]
