@@ -11,9 +11,8 @@ mod agg;
 pub mod threshold;
 
 pub use crate::bls::BlsError;
-pub use agg::{
-  aggregate_pk, aggregate_sig, aggregate_sk, fast_verify_aggregates, secure_verify_aggregates, verify_aggregates,
-};
+pub use agg::{aggregate_pk, aggregate_sig, aggregate_sk, fast_verify_aggregates};
+
 pub type SecretKey = crate::bls::BlsSecretKey<crate::bls::BlsScIetf>;
 pub type PublicKey = crate::bls::BlsPublicKey<crate::bls::BlsScIetf>;
 pub type Signature = crate::bls::BlsSignature<crate::bls::BlsScIetf>;

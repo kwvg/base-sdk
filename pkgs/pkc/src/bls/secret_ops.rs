@@ -66,6 +66,12 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
     S::sign_with(&self.0, msg, scheme).map(BlsSignature)
   }
 
+  /// Sum multiple secret keys (mod group order).
+  pub fn aggregate(keys: &[&Self]) -> Result<Self, BlsError> {
+    let inner_refs: crate::prelude::Vec<&S::InnerSk> = keys.iter().map(|k| &k.0).collect();
+    S::aggregate_sk(&inner_refs).map(Self::from_inner)
+  }
+
   pub(crate) fn from_inner(inner: S::InnerSk) -> Self {
     Self(inner)
   }

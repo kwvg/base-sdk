@@ -31,6 +31,7 @@ cfg_if::cfg_if! {
     mod scheme_chia;
     mod scheme_ietf;
     mod secret_ops;
+    mod sig_aggregate;
     mod sig_basic;
     mod sig_ops;
     mod sig_pop;

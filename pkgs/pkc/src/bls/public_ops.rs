@@ -34,6 +34,12 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
     S::dh_exchange(&sk.0, &peer_pk.0).map(Self)
   }
 
+  /// Aggregate multiple public keys into one.
+  pub fn aggregate(keys: &[&Self]) -> Result<Self, BlsError> {
+    let inner_refs: crate::prelude::Vec<&S::InnerPk> = keys.iter().map(|k| &k.0).collect();
+    S::aggregate_pk(&inner_refs).map(Self::from_inner)
+  }
+
   pub(crate) fn from_inner(inner: S::InnerPk) -> Self {
     Self(inner)
   }
