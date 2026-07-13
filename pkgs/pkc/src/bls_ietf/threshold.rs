@@ -9,12 +9,10 @@
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
-use crate::bls::blst_ffi::{self, Fr};
-use crate::bls::BlsError;
-use crate::common::bls::threshold as math;
+use crate::bls::scheme_ops::{self, BlsScheme};
+use crate::bls::{BlsError, BlsScIetf};
 use crate::prelude::*;
 
-use blst::{blst_p1, blst_p2};
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 
@@ -121,8 +119,8 @@ pub fn split_sk(
     }
   }
 
-  let raw = crate::common::bls::generate_shares(&sk.to_bytes(), threshold, ids, rng)
-    .map_err(|()| BlsError::InvalidSecretKey)?;
+  let raw =
+    scheme_ops::generate_shares(&sk.to_bytes(), threshold, ids, rng).map_err(|()| BlsError::InvalidSecretKey)?;
 
   raw
     .into_iter()
@@ -141,61 +139,14 @@ pub fn split_sk(
 /// Returns `InsufficientShares` if fewer than 2 shares are provided, or
 /// `DuplicateShareId` if any ids repeat.
 pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, BlsError> {
-  if shares.len() < 2 {
-    return Err(BlsError::InsufficientShares);
-  }
-
-  // Check for duplicate IDs
-  for i in 0..shares.len() {
-    for j in (i + 1)..shares.len() {
-      if shares[i].id == shares[j].id {
-        return Err(BlsError::DuplicateShareId);
-      }
-    }
-  }
-
-  let ids: Vec<Fr> = shares.iter().map(|s| math::fr_from_hash(&s.id)).collect();
-
-  // Convert min_pk::Signature -> compressed bytes ->
-  // blst_p2_affine -> blst_p2.
-  let points: Vec<blst_p2> = shares
-    .iter()
-    .map(|s| {
-      let bytes = s.sig.to_bytes();
-      let aff = blst_ffi::p2_uncompress(&bytes).expect("signature was already validated");
-      blst_ffi::p2_from_affine(&aff)
-    })
-    .collect();
-
-  let recovered = math::interpolate_g2(&ids, &points);
-
-  // Convert back: blst_p2 -> blst_p2_affine -> compressed bytes ->
-  // min_pk::Signature.
-  let aff = blst_ffi::p2_to_affine(&recovered);
-  let bytes = blst_ffi::p2_affine_compress(&aff);
-  Signature::from_bytes(&bytes).map_err(|_| BlsError::InvalidSignature)
+  let ids: Vec<_> = shares.iter().map(|share| &share.id).collect();
+  let sigs: Vec<_> = shares.iter().map(|share| &share.sig.0).collect();
+  BlsScIetf::recover_sig_shares(&ids, &sigs).map(Signature::from_inner)
 }
 
 /// Derive a public key share by evaluating the master public
 /// key polynomial at the given participant id.
 pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<PublicKey, BlsError> {
-  if master_pks.is_empty() {
-    return Err(BlsError::EmptyAggregation);
-  }
-  // Convert each min_pk::PublicKey to blst_p1.
-  let coeffs_g1: Vec<blst_p1> = master_pks
-    .iter()
-    .map(|pk| {
-      let bytes = pk.0.compress();
-      let aff = blst_ffi::p1_uncompress(&bytes).expect("public key was already validated");
-      blst_ffi::p1_from_affine(&aff)
-    })
-    .collect();
-
-  let x = math::fr_from_hash(id);
-  let result = math::eval_poly_g1(&coeffs_g1, &x);
-
-  let aff = blst_ffi::p1_to_affine(&result);
-  let bytes = blst_ffi::p1_affine_compress(&aff);
-  PublicKey::from_bytes(&bytes)
+  let pks: Vec<_> = master_pks.iter().map(|pk| &pk.0).collect();
+  BlsScIetf::derive_pk_share(&pks, id).map(PublicKey::from_inner)
 }

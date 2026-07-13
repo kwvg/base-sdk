@@ -8,62 +8,49 @@
 
 use super::pk::PublicKey;
 use super::sig::Signature;
-use crate::bls::blst_ffi;
-use crate::bls::chia_h2c;
+use crate::bls::scheme_ops::BlsScheme;
 use crate::bls::BlsError;
-
-use zeroize::Zeroize;
+use crate::bls::BlsScChia;
 
 use core::fmt;
 
 /// A legacy BLS secret key (32-byte scalar).
 #[derive(Clone)]
-pub struct SecretKey(blst::blst_scalar);
+pub struct SecretKey(pub(super) blst::blst_scalar);
 
 impl SecretKey {
   /// Derive a secret key from input keying material (>= 32 bytes). Uses the
   /// same IETF key generation as standard BLS, only the signing scheme
   /// differs.
   pub fn generate(ikm: &[u8]) -> Result<Self, BlsError> {
-    let sk = blst::min_pk::SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidSecretKey)?;
-    let bytes = sk.to_bytes();
-    Self::from_bytes(&bytes)
+    BlsScChia::generate(ikm).map(Self).map_err(Into::into)
   }
 
   /// Parse from 32-byte big-endian scalar.
   pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, BlsError> {
-    let scalar = blst_ffi::scalar_from_bendian(bytes);
-    if blst_ffi::sk_check(&scalar) {
-      Ok(Self(scalar))
-    } else {
-      Err(BlsError::InvalidSecretKey)
-    }
+    BlsScChia::sk_from_bytes(bytes).map(Self).map_err(Into::into)
   }
 
   /// Serialize to 32 bytes.
   pub fn to_bytes(&self) -> [u8; 32] {
-    blst_ffi::bendian_from_scalar(&self.0)
+    BlsScChia::sk_to_bytes(&self.0)
   }
 
   /// Derive the corresponding public key (G1 point).
   pub fn public_key(&self) -> PublicKey {
-    PublicKey::from_inner(blst_ffi::sk_to_pk2_in_g1(&self.0))
+    PublicKey::from_inner(BlsScChia::derive_pk(&self.0))
   }
 
   /// Sign a 32-byte message hash using the legacy scheme (no DST, Shallue-van
   /// de Woestijne hash-to-G2).
   pub fn sign(&self, msg: &[u8; 32]) -> Signature {
-    let h = chia_h2c::hash_to_g2(msg);
-    // blst_sign_pk_in_g1 applies IETF transformations, do manually instead.
-    let sig = blst_ffi::p2_mult(&h, &self.0.b, blst_ffi::FR_BITS);
-    let aff = blst_ffi::p2_to_affine(&sig);
-    Signature::from_inner(aff)
+    Signature::from_inner(BlsScChia::sign(&self.0, msg))
   }
 }
 
 impl Drop for SecretKey {
   fn drop(&mut self) {
-    self.0.b.zeroize();
+    BlsScChia::zeroize_sk(&mut self.0);
   }
 }
 

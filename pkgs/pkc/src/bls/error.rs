@@ -31,6 +31,8 @@ pub enum BlsError {
   InsufficientShares,
   /// duplicate share id in recovery set
   DuplicateShareId,
+  /// operation not supported for this scheme
+  UnsupportedScheme,
 }
 
 impl fmt::Display for BlsError {
@@ -46,6 +48,7 @@ impl fmt::Display for BlsError {
       Self::ThresholdTooLarge => write!(f, "threshold exceeds total or is zero"),
       Self::InsufficientShares => write!(f, "not enough shares to recover"),
       Self::DuplicateShareId => write!(f, "duplicate share id in recovery set"),
+      Self::UnsupportedScheme => write!(f, "operation not supported for this scheme"),
     }
   }
 }

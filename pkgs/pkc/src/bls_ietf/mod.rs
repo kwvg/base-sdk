@@ -19,13 +19,7 @@ pub use agg::{
 };
 pub use pk::PublicKey;
 pub use sig::Signature;
-pub use sk::{Scheme, SecretKey};
-
-const DST_BASIC: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
-const DST_POP: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
-const DST_POP_PROVE: &[u8] = b"BLS_POP_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
-
-const DST: &[u8] = DST_BASIC;
+pub use sk::SecretKey;
 
 // Compile-time contract: if any of these methods are
 // removed or their signatures change, this block fails.
