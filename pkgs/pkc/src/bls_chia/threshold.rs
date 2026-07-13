@@ -8,7 +8,7 @@
 
 use super::sig::Signature;
 use super::{PublicKey, SecretKey};
-use crate::bls::scheme_ops::{self, BlsScheme};
+use crate::bls::scheme_ops::BlsScheme;
 use crate::bls::{BlsError, BlsScChia};
 use crate::prelude::*;
 
@@ -98,36 +98,12 @@ pub fn split_sk(
   ids: &[Hash256],
   rng: &mut impl CryptoRngCore,
 ) -> Result<Vec<SecretKeyShare>, BlsError> {
-  if threshold == 0 || ids.is_empty() || threshold > ids.len() {
-    return Err(BlsError::ThresholdTooLarge);
-  }
-
-  // Reject zero IDs.
-  for id in ids {
-    if id.is_null() {
-      return Err(BlsError::ThresholdTooLarge);
-    }
-  }
-
-  // Reject duplicate IDs.
-  for i in 0..ids.len() {
-    for j in (i + 1)..ids.len() {
-      if ids[i] == ids[j] {
-        return Err(BlsError::DuplicateShareId);
-      }
-    }
-  }
-
-  let raw =
-    scheme_ops::generate_shares(&sk.to_bytes(), threshold, ids, rng).map_err(|()| BlsError::InvalidSecretKey)?;
-
-  raw
-    .into_iter()
-    .map(|(id, bytes)| {
-      let share_sk = SecretKey::from_bytes(&bytes).map_err(|_| BlsError::InvalidSecretKey)?;
-      Ok(SecretKeyShare { id, sk: share_sk })
-    })
-    .collect()
+  sk.split(threshold, ids, rng).map(|shares| {
+    shares
+      .into_iter()
+      .map(|share| SecretKeyShare::new(*share.id(), share.secret_key().clone()))
+      .collect()
+  })
 }
 
 /// Recover a full signature from threshold signature shares via Lagrange
@@ -145,6 +121,5 @@ pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, BlsError> {
 /// Derive a public key share by evaluating the master public
 /// key polynomial at the given participant id.
 pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<PublicKey, BlsError> {
-  let pks: Vec<_> = master_pks.iter().map(|pk| &pk.0).collect();
-  BlsScChia::derive_pk_share(&pks, id).map(PublicKey::from_inner)
+  PublicKey::derive_share(master_pks, id)
 }

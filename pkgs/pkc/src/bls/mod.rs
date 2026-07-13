@@ -29,9 +29,12 @@ cfg_if::cfg_if! {
     mod scheme_chia;
     mod scheme_ietf;
     mod secret_ops;
+    mod share_ops;
     #[cfg(test)]
     mod sig_aggregate;
     mod sig_ops;
+    #[cfg(test)]
+    mod sig_threshold;
     #[cfg(test)]
     #[allow(dead_code, reason = "temporary refactor artifact")]
     #[expect(clippy::unwrap_used, clippy::panic, reason = "test code")]
@@ -39,6 +42,7 @@ cfg_if::cfg_if! {
 
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
+    pub use share_ops::BlsSkShare;
     pub use sig_ops::BlsSigId;
   }
 }
