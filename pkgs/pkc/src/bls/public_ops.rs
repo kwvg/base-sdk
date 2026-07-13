@@ -13,6 +13,8 @@ use super::{BlsPkBytes, BlsSchemeId};
 use crate::prelude::*;
 
 use cfg_if::cfg_if;
+use dash_num::Hash160;
+use dash_types::{dlgt_codec, type_cvrt};
 
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::hash::{Hash, Hasher};
@@ -92,19 +94,15 @@ cfg_if! {
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> From<BlsPublicKey<S>> for BlsPkBytes<S> {
-  fn from(pk: BlsPublicKey<S>) -> Self {
-    Self::from_bytes(pk.to_bytes())
-  }
-}
+dlgt_codec!(for[S: BlsSchemeId + BlsScheme] BlsPublicKey<S> => BlsPkBytes<S>, Hash160, BlsError);
 
-impl<S: BlsSchemeId + BlsScheme> TryFrom<BlsPkBytes<S>> for BlsPublicKey<S> {
-  type Error = BlsError;
+type_cvrt!(for[S: BlsSchemeId + BlsScheme] From<BlsPublicKey<S>> for BlsPkBytes<S>, |pk| {
+  Self::from_bytes(pk.to_bytes())
+});
 
-  fn try_from(bytes: BlsPkBytes<S>) -> Result<Self, Self::Error> {
-    Self::from_bytes(bytes.as_bytes())
-  }
-}
+type_cvrt!(for[S: BlsSchemeId + BlsScheme] TryFrom<BlsPkBytes<S>> for BlsPublicKey<S>, BlsError, |bytes| {
+  Self::from_bytes(bytes.as_bytes())
+});
 
 #[cfg(test)]
 mod tests {

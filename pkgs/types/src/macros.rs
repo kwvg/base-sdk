@@ -236,39 +236,72 @@ macro_rules! enum_map {
 /// body receives `&$src`; the owned impl delegates.
 #[macro_export]
 macro_rules! type_cvrt {
-  (From<$src:ty> for $dst:ty, |$v:ident| $body:expr) => {
-    impl core::convert::From<&$src> for $dst {
+  (@parse [$($impl_generics:tt)*] From<$src:ty> for $dst:ty, |$v:ident| $body:expr) => {
+    impl $($impl_generics)* core::convert::From<&$src> for $dst {
       fn from($v: &$src) -> Self {
         $body
       }
     }
-    impl core::convert::From<$src> for $dst {
+    impl $($impl_generics)* core::convert::From<$src> for $dst {
       fn from(v: $src) -> Self {
         Self::from(&v)
       }
     }
   };
-  (TryFrom<$src:ty> for $dst:ty, $err:ty, |$v:ident| $body:expr) => {
-    impl core::convert::TryFrom<&$src> for $dst {
+  (@parse [$($impl_generics:tt)*] TryFrom<$src:ty> for $dst:ty, $err:ty, |$v:ident| $body:expr) => {
+    impl $($impl_generics)* core::convert::TryFrom<&$src> for $dst {
       type Error = $err;
       fn try_from($v: &$src) -> Result<Self, Self::Error> {
         $body
       }
     }
-    impl core::convert::TryFrom<$src> for $dst {
+    impl $($impl_generics)* core::convert::TryFrom<$src> for $dst {
       type Error = $err;
       fn try_from(v: $src) -> Result<Self, Self::Error> {
         Self::try_from(&v)
       }
     }
   };
+  (for[$($generic:tt)*] $($args:tt)*) => {
+    $crate::type_cvrt!(@parse [<$($generic)*>] $($args)*);
+  };
+  ($($args:tt)*) => {
+    $crate::type_cvrt!(@parse [] $($args)*);
+  };
 }
 
 /// Delegates `BaseCodec`, `Hashable`, and `impl_type!` through another type.
 #[macro_export]
 macro_rules! dlgt_codec {
-  ($ops:ty => $bytes:ty, $hash:ty) => {
-    impl $crate::codec::BaseCodec for $ops {
+  (@parse [$($impl_generics:tt)*] $ops:ty => $bytes:ty, $hash:ty, $err:ty) => {
+    impl $($impl_generics)* $crate::codec::BaseCodec<$err> for $ops {
+      fn decode(data: &mut &[u8]) -> Result<Self, $crate::codec::DecodeError<$err>> {
+        let inner = <$bytes as $crate::codec::BaseCodec>::decode(data).map_err(|e| e.lift())?;
+        Self::try_from(inner).map_err($crate::codec::DecodeError::DecError)
+      }
+
+      fn encode(&self, buf: &mut impl $crate::codec::EncodeBuf) {
+        if let Ok(bytes) = <$bytes as core::convert::TryFrom<Self>>::try_from(self.clone()) {
+          bytes.encode(buf);
+        }
+      }
+    }
+
+    impl $($impl_generics)* $crate::codec::Hashable for $ops {
+      type Hash = $hash;
+
+      fn hash(&self) -> $hash {
+        match <$bytes as core::convert::TryFrom<Self>>::try_from(self.clone()) {
+          Ok(bytes) => $crate::codec::Hashable::hash(&bytes),
+          Err(_) => <$hash as Default>::default(),
+        }
+      }
+    }
+
+    $crate::impl_type!(@parse [$($impl_generics)*] $ops, $crate::MAX_SER_SIZE, $err);
+  };
+  (@parse [$($impl_generics:tt)*] $ops:ty => $bytes:ty, $hash:ty) => {
+    impl $($impl_generics)* $crate::codec::BaseCodec for $ops {
       fn decode(data: &mut &[u8]) -> Result<Self, $crate::codec::DecodeError> {
         let inner = <$bytes as $crate::codec::BaseCodec>::decode(data)?;
         Self::try_from(inner).map_err(|_| $crate::codec::DecodeError::InvalidValue {
@@ -282,7 +315,7 @@ macro_rules! dlgt_codec {
       }
     }
 
-    impl $crate::codec::Hashable for $ops {
+    impl $($impl_generics)* $crate::codec::Hashable for $ops {
       type Hash = $hash;
 
       fn hash(&self) -> $hash {
@@ -290,33 +323,12 @@ macro_rules! dlgt_codec {
       }
     }
 
-    $crate::impl_type!($ops);
+    $crate::impl_type!(@parse [$($impl_generics)*] $ops, $crate::MAX_SER_SIZE, ::core::convert::Infallible);
   };
-  ($ops:ty => $bytes:ty, $hash:ty, $err:ty) => {
-    impl $crate::codec::BaseCodec<$err> for $ops {
-      fn decode(data: &mut &[u8]) -> Result<Self, $crate::codec::DecodeError<$err>> {
-        let inner = <$bytes as $crate::codec::BaseCodec>::decode(data).map_err(|e| e.lift())?;
-        Self::try_from(inner).map_err($crate::codec::DecodeError::DecError)
-      }
-
-      fn encode(&self, buf: &mut impl $crate::codec::EncodeBuf) {
-        if let Ok(bytes) = <$bytes as core::convert::TryFrom<Self>>::try_from(self.clone()) {
-          bytes.encode(buf);
-        }
-      }
-    }
-
-    impl $crate::codec::Hashable for $ops {
-      type Hash = $hash;
-
-      fn hash(&self) -> $hash {
-        match <$bytes as core::convert::TryFrom<Self>>::try_from(self.clone()) {
-          Ok(bytes) => $crate::codec::Hashable::hash(&bytes),
-          Err(_) => <$hash as Default>::default(),
-        }
-      }
-    }
-
-    $crate::impl_type!($ops, $crate::MAX_SER_SIZE, $err);
+  (for[$($generic:tt)*] $($args:tt)*) => {
+    $crate::dlgt_codec!(@parse [<$($generic)*>] $($args)*);
+  };
+  ($($args:tt)*) => {
+    $crate::dlgt_codec!(@parse [] $($args)*);
   };
 }

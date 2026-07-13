@@ -127,14 +127,8 @@ impl Encoder for VecEncoder {
 /// Generates `Encodable` + `Decodable` for a `BaseCodec` implementor.
 #[macro_export]
 macro_rules! impl_type {
-  ($ty:ty) => {
-    $crate::impl_type!($ty, $crate::MAX_SER_SIZE, ::core::convert::Infallible);
-  };
-  ($ty:ty, $max:expr) => {
-    $crate::impl_type!($ty, $max, ::core::convert::Infallible);
-  };
-  ($ty:ty, $max:expr, $err:ty) => {
-    impl $crate::__private::bitcoin_consensus_encoding::Encodable for $ty {
+  (@parse [$($impl_generics:tt)*] $ty:ty, $max:expr, $err:ty) => {
+    impl $($impl_generics)* $crate::__private::bitcoin_consensus_encoding::Encodable for $ty {
       type Encoder<'e> = $crate::VecEncoder;
       fn encoder(&self) -> Self::Encoder<'_> {
         let mut buf = ::alloc::vec::Vec::new();
@@ -143,11 +137,27 @@ macro_rules! impl_type {
       }
     }
 
-    impl $crate::__private::bitcoin_consensus_encoding::Decodable for $ty {
+    impl $($impl_generics)* $crate::__private::bitcoin_consensus_encoding::Decodable for $ty {
       type Decoder = $crate::BufferDecoder<$ty, $err>;
       fn decoder() -> Self::Decoder {
         $crate::BufferDecoder::new(<$ty as $crate::codec::BaseCodec<$err>>::decode, $max)
       }
     }
+  };
+  (@parse [$($impl_generics:tt)*] $ty:ty, $max:expr) => {
+    $crate::impl_type!(
+      @parse [$($impl_generics)*] $ty,
+      $max,
+      ::core::convert::Infallible
+    );
+  };
+  (@parse [$($impl_generics:tt)*] $ty:ty) => {
+    $crate::impl_type!(@parse [$($impl_generics)*] $ty, $crate::MAX_SER_SIZE);
+  };
+  (for[$($generic:tt)*] $($args:tt)*) => {
+    $crate::impl_type!(@parse [<$($generic)*>] $($args)*);
+  };
+  ($($args:tt)*) => {
+    $crate::impl_type!(@parse [] $($args)*);
   };
 }

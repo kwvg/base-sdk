@@ -9,7 +9,10 @@
 use super::error::BlsError;
 use super::public_ops::BlsPublicKey;
 use super::scheme_ops::BlsScheme;
-use super::{BlsSchemeId, BlsSigId};
+use super::{BlsSchemeId, BlsSigBytes, BlsSigId};
+
+use dash_num::Hash256;
+use dash_types::{dlgt_codec, type_cvrt};
 
 use core::fmt;
 use core::hash;
@@ -90,19 +93,15 @@ impl<'de, S: BlsSchemeId + BlsScheme> serde::Deserialize<'de> for BlsSignature<S
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> From<BlsSignature<S>> for crate::bls::BlsSigBytes<S> {
-  fn from(sig: BlsSignature<S>) -> Self {
-    Self::from_bytes(sig.to_bytes())
-  }
-}
+dlgt_codec!(for[S: BlsSchemeId + BlsScheme] BlsSignature<S> => BlsSigBytes<S>, Hash256, BlsError);
 
-impl<S: BlsSchemeId + BlsScheme> TryFrom<crate::bls::BlsSigBytes<S>> for BlsSignature<S> {
-  type Error = BlsError;
+type_cvrt!(for[S: BlsSchemeId + BlsScheme] From<BlsSignature<S>> for BlsSigBytes<S>, |sig| {
+  Self::from_bytes(sig.to_bytes())
+});
 
-  fn try_from(bytes: crate::bls::BlsSigBytes<S>) -> Result<Self, Self::Error> {
-    Self::from_bytes(bytes.as_bytes())
-  }
-}
+type_cvrt!(for[S: BlsSchemeId + BlsScheme] TryFrom<BlsSigBytes<S>> for BlsSignature<S>, BlsError, |bytes| {
+  Self::from_bytes(bytes.as_bytes())
+});
 
 #[cfg(test)]
 mod tests {
