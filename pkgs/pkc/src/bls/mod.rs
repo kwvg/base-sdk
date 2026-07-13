@@ -29,6 +29,8 @@ cfg_if::cfg_if! {
     mod scheme_chia;
     mod scheme_ietf;
     mod secret_ops;
+    #[cfg(test)]
+    mod sig_aggregate;
     mod sig_ops;
     #[cfg(test)]
     #[allow(dead_code, reason = "temporary refactor artifact")]

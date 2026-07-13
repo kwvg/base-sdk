@@ -14,8 +14,7 @@ use crate::prelude::*;
 
 /// Aggregate multiple legacy BLS public keys (simple point addition in G1).
 pub fn aggregate_pk(keys: &[&PublicKey]) -> Result<PublicKey, BlsError> {
-  let inner: Vec<_> = keys.iter().map(|key| &key.0).collect();
-  BlsScChia::aggregate_pk(&inner).map(PublicKey::from_inner)
+  PublicKey::aggregate(keys)
 }
 
 /// Aggregate multiple legacy BLS signatures (simple point addition in G2).
@@ -54,6 +53,5 @@ pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8; 32], pks: &[&PublicK
 
 /// Sum multiple secret keys (mod group order).
 pub fn aggregate_sk(keys: &[&SecretKey]) -> Result<SecretKey, BlsError> {
-  let inner: Vec<_> = keys.iter().map(|key| &key.0).collect();
-  BlsScChia::aggregate_sk(&inner).map(SecretKey::from_inner)
+  SecretKey::aggregate(keys)
 }

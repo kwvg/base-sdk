@@ -50,6 +50,12 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
     BlsPublicKey(S::derive_pk(&self.0))
   }
 
+  /// Sum multiple secret keys (mod group order).
+  pub fn aggregate(keys: &[&Self]) -> Result<Self, BlsError> {
+    let inner_refs: crate::prelude::Vec<&S::InnerSk> = keys.iter().map(|k| &k.0).collect();
+    S::aggregate_sk(&inner_refs).map(Self::from_inner)
+  }
+
   pub(crate) fn from_inner(inner: S::InnerSk) -> Self {
     Self(inner)
   }

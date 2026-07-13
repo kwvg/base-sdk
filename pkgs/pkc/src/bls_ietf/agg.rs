@@ -14,8 +14,7 @@ use crate::prelude::*;
 
 /// Aggregate multiple public keys into one.
 pub fn aggregate_pk(keys: &[&PublicKey]) -> Result<PublicKey, BlsError> {
-  let inner: Vec<_> = keys.iter().map(|key| &key.0).collect();
-  BlsScIetf::aggregate_pk(&inner).map(PublicKey::from_inner)
+  PublicKey::aggregate(keys)
 }
 
 /// Aggregate multiple signatures into one.
@@ -52,6 +51,5 @@ pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey])
 
 /// Sum multiple secret keys (mod group order).
 pub fn aggregate_sk(keys: &[&SecretKey]) -> Result<SecretKey, BlsError> {
-  let inner: Vec<_> = keys.iter().map(|key| &key.0).collect();
-  BlsScIetf::aggregate_sk(&inner).map(SecretKey::from_inner)
+  SecretKey::aggregate(keys)
 }
