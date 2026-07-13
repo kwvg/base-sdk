@@ -103,3 +103,80 @@ impl<S: BlsSchemeId + BlsScheme> TryFrom<crate::bls::BlsSigBytes<S>> for BlsSign
     Self::from_bytes(bytes.as_bytes())
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::bls::secret_ops::BlsSecretKey;
+  use crate::bls::tests::{self, decode_hex, VectorFile, MSG_DEADBEEF, SEED_0, SEED_1};
+  use crate::bls::{BlsScChia, BlsScIetf};
+
+  use alloc::{string::String, vec::Vec};
+  use hex_conservative::DisplayHex;
+  use serde::Deserialize;
+
+  #[derive(Deserialize)]
+  struct SerInternalVector {
+    sig_legacy: String,
+    sig_ietf: String,
+  }
+
+  fn assert_signing<S: BlsSchemeId + BlsScheme>() {
+    let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let sk1 = BlsSecretKey::<S>::generate(&SEED_1).unwrap();
+    let sig = sk0.sign(&MSG_DEADBEEF);
+
+    assert!(sig.verify(&MSG_DEADBEEF, &sk0.public_key()).is_ok());
+
+    let mut wrong_msg = MSG_DEADBEEF;
+    wrong_msg[0] ^= 0xff;
+    assert!(sig.verify(&wrong_msg, &sk0.public_key()).is_err());
+    assert!(sig.verify(&MSG_DEADBEEF, &sk1.public_key()).is_err());
+
+    assert_eq!(sk0.sign(&MSG_DEADBEEF), sig);
+    assert_eq!(BlsSignature::<S>::from_bytes(&sig.to_bytes()).unwrap(), sig);
+  }
+
+  #[test]
+  fn serialization_formats_match_vectors() {
+    let f: VectorFile = tests::load("bls_chia_ser_internals");
+    let vecs: Vec<SerInternalVector> = tests::parse_sub(&f, "sig_serialization");
+
+    for v in &vecs {
+      let chia = BlsSignature::<BlsScChia>::from_bytes(&decode_hex(&v.sig_legacy).try_into().unwrap()).unwrap();
+      assert_eq!(chia.to_bytes().to_lower_hex_string(), v.sig_legacy);
+
+      let ietf = BlsSignature::<BlsScIetf>::from_bytes(&decode_hex(&v.sig_ietf).try_into().unwrap()).unwrap();
+      assert_eq!(ietf.to_bytes().to_lower_hex_string(), v.sig_ietf);
+
+      assert_ne!(v.sig_legacy, v.sig_ietf);
+    }
+  }
+
+  #[cfg(feature = "serde")]
+  #[test]
+  fn serde_roundtrip() {
+    let chia_sk = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
+    let chia = chia_sk.sign(&MSG_DEADBEEF);
+    let json = serde_json::to_string(&chia).unwrap();
+    assert_eq!(serde_json::from_str::<BlsSignature<BlsScChia>>(&json).unwrap(), chia);
+
+    let ietf_sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
+    let ietf = ietf_sk.sign(&MSG_DEADBEEF);
+    let json = serde_json::to_string(&ietf).unwrap();
+    assert_eq!(serde_json::from_str::<BlsSignature<BlsScIetf>>(&json).unwrap(), ietf);
+  }
+
+  #[test]
+  fn signatures_differ_across_schemes() {
+    let chia = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
+    let ietf = BlsSecretKey::<BlsScIetf>::from_bytes(&chia.to_bytes()).unwrap();
+    assert_ne!(chia.sign(&MSG_DEADBEEF).to_bytes(), ietf.sign(&MSG_DEADBEEF).to_bytes());
+  }
+
+  #[test]
+  fn signing_roundtrip_and_rejections() {
+    assert_signing::<BlsScChia>();
+    assert_signing::<BlsScIetf>();
+  }
+}

@@ -36,3 +36,25 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
     S::verify_possession(&self.0, &pop.0)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::bls::tests::{SEED_0, SEED_1};
+  use crate::bls::BlsScIetf;
+
+  #[test]
+  fn proof_of_possession_roundtrip() {
+    let sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
+    let proof = sk.prove_possession().unwrap();
+    assert!(sk.public_key().verify_possession(&proof).is_ok());
+  }
+
+  #[test]
+  fn proof_of_possession_rejects_wrong_key() {
+    let sk0 = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
+    let sk1 = BlsSecretKey::<BlsScIetf>::generate(&SEED_1).unwrap();
+    let proof = sk0.prove_possession().unwrap();
+    assert!(sk1.public_key().verify_possession(&proof).is_err());
+  }
+}
