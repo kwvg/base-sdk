@@ -6,9 +6,9 @@
 
 //! Thresholds for legacy scheme (m-of-n secret sharing and signature recovery).
 
-use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
+use super::PublicKey;
 use crate::bls::scheme_ops::{self, BlsScheme};
 use crate::bls::{BlsError, BlsScChia};
 use crate::prelude::*;

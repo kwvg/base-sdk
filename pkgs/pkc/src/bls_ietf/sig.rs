@@ -6,7 +6,7 @@
 
 //! IETF BLS signature (96-byte compressed G2 point).
 
-use super::pk::PublicKey;
+use super::PublicKey;
 use crate::bls::scheme_ops::BlsScheme;
 use crate::bls::BlsError;
 use crate::bls::{BlsScIetf, BlsSigId};

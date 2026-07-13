@@ -21,6 +21,7 @@ cfg_if::cfg_if! {
     pub(crate) mod chia_h2c;
     pub(crate) mod scheme_ops;
 
+    mod public_ops;
     mod scheme_chia;
     mod scheme_ietf;
     mod sig_ops;
@@ -29,6 +30,7 @@ cfg_if::cfg_if! {
     #[expect(clippy::unwrap_used, clippy::panic, reason = "test code")]
     mod tests;
 
+    pub use public_ops::BlsPublicKey;
     pub use sig_ops::BlsSigId;
   }
 }
