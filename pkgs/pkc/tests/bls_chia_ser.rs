@@ -23,12 +23,6 @@ mod kat {
     pk_ietf: String,
   }
 
-  #[derive(Deserialize)]
-  struct SigSerInternalVector {
-    sig_legacy: String,
-    sig_ietf: String,
-  }
-
   /// Validate that the same G1 point serializes differently
   /// under legacy vs IETF formats.
   #[test]
@@ -49,25 +43,6 @@ mod kat {
 
       // The two formats must differ for the same point.
       assert_ne!(v.pk_legacy, v.pk_ietf, "legacy and ietf should differ");
-    }
-  }
-
-  /// Validate legacy G2 serialization roundtrip.
-  #[test]
-  fn kat_ser_sig_formats() {
-    let f: VectorFile = common::load("bls_chia_ser_internals");
-    let vecs: Vec<SigSerInternalVector> = common::parse_sub(&f, "sig_serialization");
-
-    for v in &vecs {
-      let legacy_bytes: [u8; 96] = decode_hex(&v.sig_legacy).try_into().unwrap();
-      let sig = dash_pkc::bls_chia::Signature::from_bytes(&legacy_bytes).unwrap();
-      assert_eq!(
-        sig.to_bytes().to_lower_hex_string(),
-        v.sig_legacy,
-        "legacy sig roundtrip mismatch"
-      );
-
-      assert_ne!(v.sig_legacy, v.sig_ietf, "legacy and ietf should differ");
     }
   }
 }

@@ -36,32 +36,3 @@ fn dh_exchange_roundtrip(sk_seed0: SecretKey, sk_seed1: SecretKey) {
   let shared_b = PublicKey::dh_exchange(&sk_seed1, &pk0).unwrap();
   assert_eq!(shared_a.to_bytes(), shared_b.to_bytes());
 }
-
-mod kat {
-  use super::common::{self, decode_hex, VectorFile};
-
-  use hex_conservative::DisplayHex;
-  use serde::Deserialize;
-
-  #[derive(Deserialize)]
-  struct DhVector {
-    sk: String,
-    peer_pk: String,
-    shared: String,
-  }
-
-  #[test]
-  fn kat_dh() {
-    let f: VectorFile = common::load("bls_ietf_dh");
-    let vecs: Vec<DhVector> = common::parse_sub(&f, "dh_exchange");
-
-    for v in &vecs {
-      let sk_bytes: [u8; 32] = decode_hex(&v.sk).try_into().unwrap();
-      let pk_bytes: [u8; 48] = decode_hex(&v.peer_pk).try_into().unwrap();
-      let sk = dash_pkc::bls_ietf::SecretKey::from_bytes(&sk_bytes).unwrap();
-      let peer_pk = dash_pkc::bls_ietf::PublicKey::from_bytes(&pk_bytes).unwrap();
-      let shared = dash_pkc::bls_ietf::PublicKey::dh_exchange(&sk, &peer_pk).unwrap();
-      assert_eq!(shared.to_bytes().to_lower_hex_string(), v.shared);
-    }
-  }
-}

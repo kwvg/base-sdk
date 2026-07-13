@@ -27,31 +27,6 @@ fn sk_seed1() -> SecretKey {
   SecretKey::generate(&common::SEED_1).unwrap()
 }
 
-/// PyECC reference vector: known sk -> known sig bytes.
-#[rstest]
-fn pyecc_sign_verify() {
-  let sk = SecretKey::from_bytes(&hex!(
-    "0101010101010101010101010101010101"
-    "010101010101010101010101010101"
-  ))
-  .unwrap();
-  let msg = hex!("030104010509");
-  let sig = sk.sign(&msg);
-
-  let expected_sig = hex!(
-    "96ba34fac33c7f129d602a0bc8a3d43f"
-    "9abc014eceaab7359146b4b150e57b80"
-    "8645738f35671e9e10e0d862a30cab70"
-    "074eb5831d13e6a5b162d01eebe687d0"
-    "164adbd0a864370a7c222a2768d7704d"
-    "a254f1bf1823665bc2361f9dd8c00e99"
-  );
-  assert_eq!(sig.to_bytes(), expected_sig);
-
-  let pk = sk.public_key();
-  assert!(sig.verify(&msg, &pk).is_ok());
-}
-
 /// Sign then verify with a generated key succeeds and is
 /// deterministic.
 #[rstest]
@@ -125,38 +100,4 @@ fn cross_format_sig_differs(sk_seed0: SecretKey) {
   let legacy_sk = dash_pkc::bls_chia::SecretKey::from_bytes(&sk_seed0.to_bytes()).unwrap();
   let legacy_sig = legacy_sk.sign(&msg32).to_bytes();
   assert_ne!(ietf_sig, legacy_sig, "same key must produce different sigs");
-}
-
-mod kat {
-  use super::common::{self, decode_hex, VectorFile};
-
-  use hex_conservative::DisplayHex;
-  use serde::Deserialize;
-
-  #[derive(Deserialize)]
-  struct SignVector {
-    sk: String,
-    msg: String,
-    sig: String,
-  }
-
-  #[test]
-  fn kat_sign() {
-    let f: VectorFile = common::load("bls_ietf_sign");
-    let vecs: Vec<SignVector> = common::parse_sub(&f, "sign");
-
-    for v in &vecs {
-      let sk_bytes: [u8; 32] = decode_hex(&v.sk).try_into().unwrap();
-      let msg = decode_hex(&v.msg);
-      let sk = dash_pkc::bls_ietf::SecretKey::from_bytes(&sk_bytes).unwrap();
-      let sig = sk.sign(&msg);
-      assert_eq!(
-        sig.to_bytes().to_lower_hex_string(),
-        v.sig,
-        "sig mismatch for sk={} msg={}",
-        v.sk,
-        v.msg
-      );
-    }
-  }
 }

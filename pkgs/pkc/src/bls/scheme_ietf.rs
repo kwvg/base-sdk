@@ -213,3 +213,100 @@ impl BlsScheme for BlsScIetf {
     // blst::min_pk::SecretKey handles zeroization internally.
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::bls::tests::{self, decode_hex, VectorFile, MSG_DEADBEEF, SEED_0, SEED_1};
+
+  use alloc::{string::String, vec::Vec};
+  use hex_conservative::DisplayHex;
+  use hex_literal::hex;
+  use serde::Deserialize;
+
+  #[derive(Deserialize)]
+  struct DhVector {
+    sk: String,
+    peer_pk: String,
+    shared: String,
+  }
+
+  #[derive(Deserialize)]
+  struct SignVector {
+    sk: String,
+    msg: String,
+    sig: String,
+  }
+
+  #[test]
+  fn dh_exchange_matches_vectors() {
+    let f: VectorFile = tests::load("bls_ietf_dh");
+    let vecs: Vec<DhVector> = tests::parse_sub(&f, "dh_exchange");
+
+    for v in &vecs {
+      let sk = BlsScIetf::sk_from_bytes(&decode_hex(&v.sk).try_into().unwrap()).unwrap();
+      let peer = BlsScIetf::pk_from_bytes(&decode_hex(&v.peer_pk).try_into().unwrap()).unwrap();
+      let shared = BlsScIetf::dh_exchange(&sk, &peer).unwrap();
+      assert_eq!(BlsScIetf::pk_to_bytes(&shared).to_lower_hex_string(), v.shared);
+    }
+  }
+
+  #[test]
+  fn proof_of_possession_verifies_and_rejects_wrong_key() {
+    let sk0 = BlsScIetf::generate(&SEED_0).unwrap();
+    let sk1 = BlsScIetf::generate(&SEED_1).unwrap();
+    let pk0 = BlsScIetf::derive_pk(&sk0);
+    let pk1 = BlsScIetf::derive_pk(&sk1);
+    let proof = BlsScIetf::prove_possession(&sk0, &pk0).unwrap();
+
+    assert!(BlsScIetf::verify_possession(&pk0, &proof).is_ok());
+    assert!(BlsScIetf::verify_possession(&pk1, &proof).is_err());
+  }
+
+  #[test]
+  fn pyecc_signature_matches() {
+    let sk = BlsScIetf::sk_from_bytes(&hex!(
+      "0101010101010101010101010101010101"
+      "010101010101010101010101010101"
+    ))
+    .unwrap();
+    let msg = hex!("030104010509");
+    let expected = hex!(
+      "96ba34fac33c7f129d602a0bc8a3d43f"
+      "9abc014eceaab7359146b4b150e57b80"
+      "8645738f35671e9e10e0d862a30cab70"
+      "074eb5831d13e6a5b162d01eebe687d0"
+      "164adbd0a864370a7c222a2768d7704d"
+      "a254f1bf1823665bc2361f9dd8c00e99"
+    );
+    let sig = BlsScIetf::sign(&sk, &msg);
+    assert_eq!(BlsScIetf::sig_to_bytes(&sig), expected);
+    assert!(BlsScIetf::verify(&sig, &msg, &BlsScIetf::derive_pk(&sk)).is_ok());
+  }
+
+  #[test]
+  fn signing_matches_vectors() {
+    let f: VectorFile = tests::load("bls_ietf_sign");
+    let vecs: Vec<SignVector> = tests::parse_sub(&f, "sign");
+
+    for v in &vecs {
+      let sk = BlsScIetf::sk_from_bytes(&decode_hex(&v.sk).try_into().unwrap()).unwrap();
+      let sig = BlsScIetf::sign(&sk, &decode_hex(&v.msg));
+      assert_eq!(BlsScIetf::sig_to_bytes(&sig).to_lower_hex_string(), v.sig);
+    }
+  }
+
+  #[test]
+  fn signing_verifies_and_rejects_mismatches() {
+    let sk0 = BlsScIetf::generate(&SEED_0).unwrap();
+    let sk1 = BlsScIetf::generate(&SEED_1).unwrap();
+    let pk0 = BlsScIetf::derive_pk(&sk0);
+    let pk1 = BlsScIetf::derive_pk(&sk1);
+    let sig = BlsScIetf::sign(&sk0, &MSG_DEADBEEF);
+
+    assert!(BlsScIetf::verify(&sig, &MSG_DEADBEEF, &pk0).is_ok());
+    assert!(BlsScIetf::verify(&sig, b"wrong", &pk0).is_err());
+    assert!(BlsScIetf::verify(&sig, &MSG_DEADBEEF, &pk1).is_err());
+    assert_eq!(BlsScIetf::sign(&sk0, &MSG_DEADBEEF), sig);
+  }
+}

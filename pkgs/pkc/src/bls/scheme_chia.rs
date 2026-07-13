@@ -283,3 +283,82 @@ fn y_c1_is_larger(y_c1: &[u8]) -> bool {
 fn fp2_neg(a: &blst::blst_fp2) -> blst::blst_fp2 {
   blst_ffi::fp2_cneg(a, true)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::bls::tests::{self, decode_hex, VectorFile, MSG_DEADBEEF, SEED_0, SEED_1};
+
+  use alloc::{string::String, vec::Vec};
+  use hex_conservative::DisplayHex;
+  use serde::Deserialize;
+
+  #[derive(Deserialize)]
+  struct DhVector {
+    sk: String,
+    peer_pk: String,
+    shared: String,
+  }
+
+  #[derive(Deserialize)]
+  struct SerVector {
+    sig_legacy: String,
+  }
+
+  #[derive(Deserialize)]
+  struct SignVector {
+    sk: String,
+    msg: String,
+    sig: String,
+  }
+
+  #[test]
+  fn dh_exchange_matches_vectors() {
+    let f: VectorFile = tests::load("bls_chia_dh");
+    let vecs: Vec<DhVector> = tests::parse_sub(&f, "dh_exchange");
+
+    for v in &vecs {
+      let sk = BlsScChia::sk_from_bytes(&decode_hex(&v.sk).try_into().unwrap()).unwrap();
+      let peer = BlsScChia::pk_from_bytes(&decode_hex(&v.peer_pk).try_into().unwrap()).unwrap();
+      let shared = BlsScChia::dh_exchange(&sk, &peer).unwrap();
+      assert_eq!(BlsScChia::pk_to_bytes(&shared).to_lower_hex_string(), v.shared);
+    }
+  }
+
+  #[test]
+  fn signature_serialization_matches_vectors() {
+    let f: VectorFile = tests::load("bls_chia_ser_internals");
+    let vecs: Vec<SerVector> = tests::parse_sub(&f, "sig_serialization");
+
+    for v in &vecs {
+      let sig = BlsScChia::sig_from_bytes(&decode_hex(&v.sig_legacy).try_into().unwrap()).unwrap();
+      assert_eq!(BlsScChia::sig_to_bytes(&sig).to_lower_hex_string(), v.sig_legacy);
+    }
+  }
+
+  #[test]
+  fn signing_matches_vectors() {
+    let f: VectorFile = tests::load("bls_chia_sign");
+    let vecs: Vec<SignVector> = tests::parse_sub(&f, "sign");
+
+    for v in &vecs {
+      let sk = BlsScChia::sk_from_bytes(&decode_hex(&v.sk).try_into().unwrap()).unwrap();
+      let sig = BlsScChia::sign(&sk, &decode_hex(&v.msg));
+      assert_eq!(BlsScChia::sig_to_bytes(&sig).to_lower_hex_string(), v.sig);
+    }
+  }
+
+  #[test]
+  fn signing_verifies_and_rejects_mismatches() {
+    let sk0 = BlsScChia::generate(&SEED_0).unwrap();
+    let sk1 = BlsScChia::generate(&SEED_1).unwrap();
+    let pk0 = BlsScChia::derive_pk(&sk0);
+    let pk1 = BlsScChia::derive_pk(&sk1);
+    let sig = BlsScChia::sign(&sk0, &MSG_DEADBEEF);
+
+    assert!(BlsScChia::verify(&sig, &MSG_DEADBEEF, &pk0).is_ok());
+    assert!(BlsScChia::verify(&sig, &[0x42; 32], &pk0).is_err());
+    assert!(BlsScChia::verify(&sig, &MSG_DEADBEEF, &pk1).is_err());
+    assert_eq!(BlsScChia::sign(&sk0, &MSG_DEADBEEF), sig);
+  }
+}
