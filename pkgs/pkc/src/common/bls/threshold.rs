@@ -7,14 +7,14 @@
 //! Lagrange interpolation and polynomial evaluation over the BLS12-381 scalar
 //! field, used by threshold BLS in both bls_ietf and bls_chia.
 
+use crate::bls::blst_ffi;
 use crate::prelude::*;
 
-use blst::*;
+use blst::{blst_fr, blst_p1, blst_p2};
 use dash_num::Hash256;
 
 /// Evaluate a polynomial at `x`. Coefficients are in ascending order:
 /// `coeffs[0] + coeffs[1]*x + ...`.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub(crate) fn poly_eval(coeffs: &[blst_fr], x: &blst_fr) -> blst_fr {
   // Horner's method: result = c[n-1], then for each
   // i from n-2..=0: result = result*x + c[i].
@@ -24,9 +24,8 @@ pub(crate) fn poly_eval(coeffs: &[blst_fr], x: &blst_fr) -> blst_fr {
   }
   let mut result = coeffs[n - 1];
   for i in (0..n - 1).rev() {
-    let mut tmp = blst_fr::default();
-    unsafe { blst_fr_mul(&mut tmp, &result, x) };
-    unsafe { blst_fr_add(&mut result, &tmp, &coeffs[i]) };
+    let tmp = blst_ffi::fr_mul(&result, x);
+    result = blst_ffi::fr_add(&tmp, &coeffs[i]);
   }
   result
 }
@@ -35,7 +34,6 @@ pub(crate) fn poly_eval(coeffs: &[blst_fr], x: &blst_fr) -> blst_fr {
 ///
 /// `ids` and `points` must have the same length >= 1.
 /// Each id must be non-zero and unique.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub(crate) fn interpolate_g2(ids: &[blst_fr], points: &[blst_p2]) -> blst_p2 {
   let n = ids.len();
 
@@ -47,18 +45,14 @@ pub(crate) fn interpolate_g2(ids: &[blst_fr], points: &[blst_p2]) -> blst_p2 {
   for i in 0..n {
     // Convert Fr coefficient to scalar for point
     // multiplication.
-    let mut scalar = blst_scalar::default();
-    unsafe { blst_scalar_from_fr(&mut scalar, &coeffs[i]) };
-
-    let mut term = blst_p2::default();
-    unsafe { blst_p2_mult(&mut term, &points[i], scalar.b.as_ptr(), 255) };
-    unsafe { blst_p2_add_or_double(&mut result, &result, &term) };
+    let scalar = blst_ffi::scalar_from_fr(&coeffs[i]);
+    let term = blst_ffi::p2_mult(&points[i], &scalar.b, 255);
+    result = blst_ffi::p2_add_or_double(&result, &term);
   }
   result
 }
 
 /// Lagrange coefficients at x=0 for the given evaluation points (ids).
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn compute_lagrange_coeffs(ids: &[blst_fr]) -> Vec<blst_fr> {
   let n = ids.len();
   let mut coeffs = Vec::with_capacity(n);
@@ -73,64 +67,47 @@ fn compute_lagrange_coeffs(ids: &[blst_fr]) -> Vec<blst_fr> {
         continue;
       }
       // num *= ids[j]
-      let mut tmp = blst_fr::default();
-      unsafe { blst_fr_mul(&mut tmp, &num, &ids[j]) };
-      num = tmp;
+      num = blst_ffi::fr_mul(&num, &ids[j]);
 
       // den *= (ids[j] - ids[i])
-      let mut diff = blst_fr::default();
-      unsafe { blst_fr_sub(&mut diff, &ids[j], &ids[i]) };
-      let mut tmp2 = blst_fr::default();
-      unsafe { blst_fr_mul(&mut tmp2, &den, &diff) };
-      den = tmp2;
+      let diff = blst_ffi::fr_sub(&ids[j], &ids[i]);
+      den = blst_ffi::fr_mul(&den, &diff);
     }
 
-    let mut den_inv = blst_fr::default();
-    unsafe { blst_fr_inverse(&mut den_inv, &den) };
-
-    let mut coeff = blst_fr::default();
-    unsafe { blst_fr_mul(&mut coeff, &num, &den_inv) };
+    let den_inv = blst_ffi::fr_inverse(&den);
+    let coeff = blst_ffi::fr_mul(&num, &den_inv);
     coeffs.push(coeff);
   }
   coeffs
 }
 
 /// The Fr element 1.
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn fr_one() -> blst_fr {
-  let mut fr = blst_fr::default();
   let one = [1u64, 0, 0, 0];
-  unsafe { blst_fr_from_uint64(&mut fr, one.as_ptr()) };
-  fr
+  blst_ffi::fr_from_uint64(&one)
 }
 
 /// Evaluate a polynomial of G1 points at scalar `x`.
 ///
 /// `coeffs_g1[0] + coeffs_g1[1]*x + coeffs_g1[2]*x^2 + ...`
 /// Uses Horner's method.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub(crate) fn eval_poly_g1(coeffs_g1: &[blst_p1], x: &blst_fr) -> blst_p1 {
   let n = coeffs_g1.len();
   if n == 0 {
     return blst_p1::default();
   }
-  let mut x_scalar = blst_scalar::default();
-  unsafe { blst_scalar_from_fr(&mut x_scalar, x) };
+  let x_scalar = blst_ffi::scalar_from_fr(x);
   let mut result = coeffs_g1[n - 1];
   for i in (0..n - 1).rev() {
-    let mut tmp = blst_p1::default();
-    unsafe { blst_p1_mult(&mut tmp, &result, x_scalar.b.as_ptr(), 255) };
-    unsafe { blst_p1_add_or_double(&mut result, &tmp, &coeffs_g1[i]) };
+    let tmp = blst_ffi::p1_mult(&blst_ffi::p1_to_affine(&result), &x_scalar.b, 255);
+    let tmp = blst_ffi::p1_from_affine(&tmp);
+    result = blst_ffi::p1_add_or_double(&tmp, &coeffs_g1[i]);
   }
   result
 }
 
 /// Convert a 32-byte participant ID to a scalar.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub(crate) fn fr_from_hash(id: &Hash256) -> blst_fr {
-  let mut scalar = blst_scalar::default();
-  unsafe { blst_scalar_from_bendian(&mut scalar, id.as_bytes().as_ptr()) };
-  let mut fr = blst_fr::default();
-  unsafe { blst_fr_from_scalar(&mut fr, &scalar) };
-  fr
+  let scalar = blst_ffi::scalar_from_bendian(id.as_bytes());
+  blst_ffi::fr_from_scalar(&scalar)
 }

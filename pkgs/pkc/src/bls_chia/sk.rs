@@ -10,15 +10,15 @@ use super::error::Error;
 use super::hash;
 use super::pk::PublicKey;
 use super::sig::Signature;
+use crate::bls::blst_ffi;
 
-use blst::*;
 use zeroize::Zeroize;
 
 use core::fmt;
 
 /// A legacy BLS secret key (32-byte scalar).
 #[derive(Clone)]
-pub struct SecretKey(blst_scalar);
+pub struct SecretKey(blst::blst_scalar);
 
 impl SecretKey {
   /// Derive a secret key from input keying material (>= 32 bytes). Uses the
@@ -31,11 +31,9 @@ impl SecretKey {
   }
 
   /// Parse from 32-byte big-endian scalar.
-  #[expect(unsafe_code, reason = "blst C FFI")]
   pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, Error> {
-    let mut scalar = blst_scalar::default();
-    unsafe { blst_scalar_from_bendian(&mut scalar, bytes.as_ptr()) };
-    if unsafe { blst_sk_check(&scalar) } {
+    let scalar = blst_ffi::scalar_from_bendian(bytes);
+    if blst_ffi::sk_check(&scalar) {
       Ok(Self(scalar))
     } else {
       Err(Error::InvalidSecretKey)
@@ -43,33 +41,22 @@ impl SecretKey {
   }
 
   /// Serialize to 32 bytes.
-  #[expect(unsafe_code, reason = "blst C FFI")]
   pub fn to_bytes(&self) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    unsafe { blst_bendian_from_scalar(out.as_mut_ptr(), &self.0) };
-    out
+    blst_ffi::bendian_from_scalar(&self.0)
   }
 
   /// Derive the corresponding public key (G1 point).
-  #[expect(unsafe_code, reason = "blst C FFI")]
   pub fn public_key(&self) -> PublicKey {
-    let mut pk = blst_p1::default();
-    unsafe { blst_sk_to_pk_in_g1(&mut pk, &self.0) };
-    let mut aff = blst_p1_affine::default();
-    unsafe { blst_p1_to_affine(&mut aff, &pk) };
-    PublicKey::from_inner(aff)
+    PublicKey::from_inner(blst_ffi::sk_to_pk2_in_g1(&self.0))
   }
 
   /// Sign a 32-byte message hash using the legacy scheme (no DST, Shallue-van
   /// de Woestijne hash-to-G2).
-  #[expect(unsafe_code, reason = "blst C FFI")]
   pub fn sign(&self, msg: &[u8; 32]) -> Signature {
     let h = hash::hash_to_g2(msg);
     // blst_sign_pk_in_g1 applies IETF transformations, do manually instead.
-    let mut sig = blst_p2::default();
-    unsafe { blst_p2_mult(&mut sig, &h, self.0.b.as_ptr(), 255) };
-    let mut aff = blst_p2_affine::default();
-    unsafe { blst_p2_to_affine(&mut aff, &sig) };
+    let sig = blst_ffi::p2_mult(&h, &self.0.b, blst_ffi::FR_BITS);
+    let aff = blst_ffi::p2_to_affine(&sig);
     Signature::from_inner(aff)
   }
 }

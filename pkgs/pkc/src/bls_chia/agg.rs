@@ -10,44 +10,37 @@ use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
+use crate::bls::blst_ffi;
 use crate::prelude::*;
 
-use blst::*;
+use blst::blst_p1;
 use sha2::{Digest, Sha256};
 
 /// Aggregate multiple legacy BLS public keys (simple point addition in G1).
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn aggregate_pk(keys: &[&PublicKey]) -> Result<PublicKey, Error> {
   if keys.is_empty() {
     return Err(Error::EmptyAggregation);
   }
-  let mut acc = blst_p1::default();
-  unsafe { blst_p1_from_affine(&mut acc, &keys[0].0) };
+  let mut acc = blst_ffi::p1_from_affine(&keys[0].0);
   for k in &keys[1..] {
-    let mut tmp = blst_p1::default();
-    unsafe { blst_p1_from_affine(&mut tmp, &k.0) };
-    unsafe { blst_p1_add_or_double(&mut acc, &acc, &tmp) };
+    let tmp = blst_ffi::p1_from_affine(&k.0);
+    acc = blst_ffi::p1_add_or_double(&acc, &tmp);
   }
-  let mut aff = blst_p1_affine::default();
-  unsafe { blst_p1_to_affine(&mut aff, &acc) };
+  let aff = blst_ffi::p1_to_affine(&acc);
   Ok(PublicKey::from_inner(aff))
 }
 
 /// Aggregate multiple legacy BLS signatures (simple point addition in G2).
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn aggregate_sig(sigs: &[&Signature]) -> Result<Signature, Error> {
   if sigs.is_empty() {
     return Err(Error::EmptyAggregation);
   }
-  let mut acc = blst_p2::default();
-  unsafe { blst_p2_from_affine(&mut acc, &sigs[0].0) };
+  let mut acc = blst_ffi::p2_from_affine(&sigs[0].0);
   for s in &sigs[1..] {
-    let mut tmp = blst_p2::default();
-    unsafe { blst_p2_from_affine(&mut tmp, &s.0) };
-    unsafe { blst_p2_add_or_double(&mut acc, &acc, &tmp) };
+    let tmp = blst_ffi::p2_from_affine(&s.0);
+    acc = blst_ffi::p2_add_or_double(&acc, &tmp);
   }
-  let mut aff = blst_p2_affine::default();
-  unsafe { blst_p2_to_affine(&mut aff, &acc) };
+  let aff = blst_ffi::p2_to_affine(&acc);
   Ok(Signature::from_inner(aff))
 }
 
@@ -76,7 +69,6 @@ pub fn fast_verify_aggregates(sig: &Signature, msg: &[u8; 32], pks: &[&PublicKey
 ///    pk_hash) mod order`
 /// 4. Compute weighted public key: `agg_pk = sum(weight_i * pk_i)`
 /// 5. Verify the aggregate signature against `agg_pk` and the message
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8; 32], pks: &[&PublicKey]) -> Result<(), Error> {
   if pks.is_empty() {
     return Err(Error::EmptyAggregation);
@@ -101,22 +93,16 @@ pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8; 32], pks: &[&PublicK
     weight_hasher.update(pk_hash);
     let weight_hash: [u8; 32] = weight_hasher.finalize().into();
 
-    let mut weight = blst_scalar::default();
     // blst_p1_mult reduces internally.
-    unsafe { blst_scalar_from_bendian(&mut weight, weight_hash.as_ptr()) };
+    let weight = blst_ffi::scalar_from_bendian(&weight_hash);
 
     let pk = PublicKey::from_bytes(pk_bytes).map_err(|_| Error::InvalidPublicKey)?;
-    let mut pk_proj = blst_p1::default();
-    unsafe { blst_p1_from_affine(&mut pk_proj, &pk.0) };
-
-    let mut weighted = blst_p1::default();
-    unsafe { blst_p1_mult(&mut weighted, &pk_proj, weight.b.as_ptr(), 256) };
-
-    unsafe { blst_p1_add_or_double(&mut acc, &acc, &weighted) };
+    let weighted = blst_ffi::p1_mult(&pk.0, &weight.b, 256);
+    let weighted = blst_ffi::p1_from_affine(&weighted);
+    acc = blst_ffi::p1_add_or_double(&acc, &weighted);
   }
 
-  let mut agg_pk_aff = blst_p1_affine::default();
-  unsafe { blst_p1_to_affine(&mut agg_pk_aff, &acc) };
+  let agg_pk_aff = blst_ffi::p1_to_affine(&acc);
   let agg_pk = PublicKey::from_inner(agg_pk_aff);
 
   sig.verify(msg, &agg_pk)

@@ -10,10 +10,11 @@ use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
+use crate::bls::blst_ffi;
 use crate::common::bls::threshold as math;
 use crate::prelude::*;
 
-use blst::*;
+use blst::{blst_fr, blst_p1, blst_p2};
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 
@@ -138,7 +139,6 @@ pub fn split_sk(
 /// # Errors
 ///
 /// Returns `InsufficientShares` if fewer than 2 shares.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
   if shares.len() < 2 {
     return Err(Error::InsufficientShares);
@@ -154,41 +154,24 @@ pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
   }
 
   let ids: Vec<blst_fr> = shares.iter().map(|s| math::fr_from_hash(&s.id)).collect();
-  let points: Vec<blst_p2> = shares
-    .iter()
-    .map(|s| {
-      let mut proj = blst_p2::default();
-      unsafe { blst_p2_from_affine(&mut proj, &s.sig.0) };
-      proj
-    })
-    .collect();
+  let points: Vec<blst_p2> = shares.iter().map(|s| blst_ffi::p2_from_affine(&s.sig.0)).collect();
 
   let recovered = math::interpolate_g2(&ids, &points);
-  let mut aff = blst_p2_affine::default();
-  unsafe { blst_p2_to_affine(&mut aff, &recovered) };
+  let aff = blst_ffi::p2_to_affine(&recovered);
   Ok(Signature::from_inner(aff))
 }
 
 /// Derive a public key share by evaluating the master public
 /// key polynomial at the given participant id.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<PublicKey, Error> {
   if master_pks.is_empty() {
     return Err(Error::EmptyAggregation);
   }
-  let coeffs_g1: Vec<blst_p1> = master_pks
-    .iter()
-    .map(|pk| {
-      let mut proj = blst_p1::default();
-      unsafe { blst_p1_from_affine(&mut proj, &pk.0) };
-      proj
-    })
-    .collect();
+  let coeffs_g1: Vec<blst_p1> = master_pks.iter().map(|pk| blst_ffi::p1_from_affine(&pk.0)).collect();
 
   let x = math::fr_from_hash(id);
   let result = math::eval_poly_g1(&coeffs_g1, &x);
 
-  let mut aff = blst_p1_affine::default();
-  unsafe { blst_p1_to_affine(&mut aff, &result) };
+  let aff = blst_ffi::p1_to_affine(&result);
   Ok(PublicKey::from_inner(aff))
 }

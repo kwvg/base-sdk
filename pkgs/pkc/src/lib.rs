@@ -17,6 +17,7 @@ pub mod ecdsa;
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "bls")] {
+    pub mod bls;
     pub mod bls_chia;
     pub mod bls_ietf;
     mod common;

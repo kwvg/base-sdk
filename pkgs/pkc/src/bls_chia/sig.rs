@@ -10,8 +10,9 @@ use super::error::Error;
 use super::hash;
 use super::pk::PublicKey;
 use super::ser;
+use crate::bls::blst_ffi;
 
-use blst::*;
+use blst::blst_p2_affine;
 
 /// A legacy BLS signature (96-byte G2 point in legacy serialization).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -39,26 +40,9 @@ impl Signature {
 
   /// Verify against a 32-byte message and public key via pairing check:
   /// e(sig, G1) == e(H(msg), pk).
-  #[expect(unsafe_code, reason = "blst C FFI")]
   pub fn verify(&self, msg: &[u8; 32], pk: &PublicKey) -> Result<(), Error> {
     let h_proj = hash::hash_to_g2(msg);
-    let mut h_aff = blst_p2_affine::default();
-    unsafe { blst_p2_to_affine(&mut h_aff, &h_proj) };
-
-    let g1 = unsafe { *blst_p1_generator() };
-    let mut gen_aff = blst_p1_affine::default();
-    unsafe { blst_p1_to_affine(&mut gen_aff, &g1) };
-
-    // e(sig, G1)
-    let mut ml1 = blst_fp12::default();
-    unsafe { blst_miller_loop(&mut ml1, &self.0, &gen_aff) };
-
-    // e(H(msg), pk)
-    let mut ml2 = blst_fp12::default();
-    unsafe { blst_miller_loop(&mut ml2, &h_aff, &pk.0) };
-
-    // e(sig, G1) == e(H(msg), pk)
-    let valid = unsafe { blst_fp12_finalverify(&ml1, &ml2) };
+    let valid = blst_ffi::pairings_equal_with_g1_generator(&self.0, &h_proj, &pk.0);
     if valid {
       Ok(())
     } else {
@@ -81,8 +65,4 @@ impl TryFrom<crate::BlsSignatureBytes> for Signature {
   fn try_from(bytes: crate::BlsSignatureBytes) -> Result<Self, Self::Error> {
     Self::from_bytes(&bytes.0)
   }
-}
-
-extern "C" {
-  fn blst_p1_generator() -> *const blst_p1;
 }

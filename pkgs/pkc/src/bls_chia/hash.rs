@@ -6,7 +6,9 @@
 
 //! Shallue-van de Woestijne hash-to-G2 for legacy BLS.
 
-use blst::*;
+use crate::bls::blst_ffi;
+
+use blst::{blst_fp, blst_fp2, blst_p2, blst_p2_affine};
 use hex_literal::hex;
 use sha2::{Digest, Sha256};
 
@@ -72,7 +74,6 @@ fn curve_b() -> blst_fp2 {
 }
 
 /// Hash a 32-byte message to a G2 point using the legacy Dash algorithm.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub(super) fn hash_to_g2(msg: &[u8; 32]) -> blst_p2 {
   // Step 1: derive four field elements via SHA-256 with domain prefixes.
   let t00 = hash_to_fp(msg, b"G2_0_c0");
@@ -89,8 +90,7 @@ pub(super) fn hash_to_g2(msg: &[u8; 32]) -> blst_p2 {
   let p1 = sw_encode(&t1);
 
   // Step 4: add the two points.
-  let mut sum = blst_p2::default();
-  unsafe { blst_p2_add_or_double(&mut sum, &p0, &p1) };
+  let sum = blst_ffi::p2_add_or_double(&p0, &p1);
 
   // Step 5: clear the cofactor via Budroni-Pintore.
   mul_cof_b12(&sum)
@@ -101,56 +101,38 @@ pub(super) fn hash_to_g2(msg: &[u8; 32]) -> blst_p2 {
 /// Computes `(x^2-x-1)*P + psi((x-1)*P) + psi^2(2*P)`
 /// where `x` is the BLS12-381 curve parameter and `psi`
 /// is the Frobenius endomorphism on the twist.
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn mul_cof_b12(p: &blst_p2) -> blst_p2 {
   // t0 = x·P  (x is negative, so negate after multiplying by |x|)
-  let mut t0 = blst_p2::default();
-  unsafe {
-    blst_p2_mult(&mut t0, p, BLS_X_LE.as_ptr(), BLS_X_BITS);
-  }
-  unsafe { blst_p2_cneg(&mut t0, true) }; // x is negative
+  let mut t0 = blst_ffi::p2_mult(p, &BLS_X_LE, BLS_X_BITS);
+  t0 = blst_ffi::p2_cneg(&t0, true); // x is negative
 
   // t1 = x²·P = x·t0
-  let mut t1 = blst_p2::default();
-  unsafe {
-    blst_p2_mult(&mut t1, &t0, BLS_X_LE.as_ptr(), BLS_X_BITS);
-  }
-  unsafe { blst_p2_cneg(&mut t1, true) }; // x is negative
+  let mut t1 = blst_ffi::p2_mult(&t0, &BLS_X_LE, BLS_X_BITS);
+  t1 = blst_ffi::p2_cneg(&t1, true); // x is negative
 
   // t2 = (x^2 - x - 1)*P = t1 - t0 - P
-  let mut t2 = blst_p2::default();
-  let mut neg_t0 = t0;
-  unsafe { blst_p2_cneg(&mut neg_t0, true) };
-  unsafe { blst_p2_add_or_double(&mut t2, &t1, &neg_t0) }; // t1 - t0
-  let mut neg_p = *p;
-  unsafe { blst_p2_cneg(&mut neg_p, true) };
-  unsafe { blst_p2_add_or_double(&mut t2, &t2, &neg_p) }; // - P
+  let neg_t0 = blst_ffi::p2_cneg(&t0, true);
+  let mut t2 = blst_ffi::p2_add_or_double(&t1, &neg_t0); // t1 - t0
+  let neg_p = blst_ffi::p2_cneg(p, true);
+  t2 = blst_ffi::p2_add_or_double(&t2, &neg_p); // - P
 
   // t3 = psi((x - 1)*P) = psi(t0 - P)
-  let mut t3 = blst_p2::default();
-  unsafe { blst_p2_add_or_double(&mut t3, &t0, &neg_p) }; // t0 - P
-                                                          // Normalize to affine for the psi map, then back.
-  let mut t3_aff = blst_p2_affine::default();
-  unsafe { blst_p2_to_affine(&mut t3_aff, &t3) };
-  let t3_aff = psi(&t3_aff);
-  unsafe { blst_p2_from_affine(&mut t3, &t3_aff) };
+  let mut t3 = blst_ffi::p2_add_or_double(&t0, &neg_p); // t0 - P
+                                                        // Normalize to affine for the psi map, then back.
+  let t3_aff = psi(&blst_ffi::p2_to_affine(&t3));
+  t3 = blst_ffi::p2_from_affine(&t3_aff);
 
   // t2 += t3
-  unsafe { blst_p2_add_or_double(&mut t2, &t2, &t3) };
+  t2 = blst_ffi::p2_add_or_double(&t2, &t3);
 
   // t3 = psi^2(2*P)
-  let mut dbl_p = blst_p2::default();
-  unsafe { blst_p2_double(&mut dbl_p, p) };
-  let mut dbl_aff = blst_p2_affine::default();
-  unsafe { blst_p2_to_affine(&mut dbl_aff, &dbl_p) };
-  let psi1 = psi(&dbl_aff);
+  let dbl_p = blst_ffi::p2_double(p);
+  let psi1 = psi(&blst_ffi::p2_to_affine(&dbl_p));
   let psi2 = psi(&psi1);
-  unsafe { blst_p2_from_affine(&mut t3, &psi2) };
+  t3 = blst_ffi::p2_from_affine(&psi2);
 
   // result = t2 + t3
-  let mut result = blst_p2::default();
-  unsafe { blst_p2_add_or_double(&mut result, &t2, &t3) };
-  result
+  blst_ffi::p2_add_or_double(&t2, &t3)
 }
 
 /// Frobenius endomorphism psi on E'(Fp2).
@@ -158,41 +140,33 @@ fn mul_cof_b12(p: &blst_p2) -> blst_p2 {
 /// `psi(x, y) = (conj(x) * PSI_COEFF_X, conj(y) * PSI_COEFF_Y)`
 ///
 /// where `conj(a + b*u) = a - b*u`.
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn psi(p: &blst_p2_affine) -> blst_p2_affine {
   // Conjugate x and y (negate the c1 component of each).
   let mut x = p.x;
-  unsafe { blst_fp_cneg(&mut x.fp[1], &x.fp[1], true) };
+  x.fp[1] = blst_ffi::fp_cneg(&x.fp[1], true);
   let mut y = p.y;
-  unsafe { blst_fp_cneg(&mut y.fp[1], &y.fp[1], true) };
+  y.fp[1] = blst_ffi::fp_cneg(&y.fp[1], true);
 
   // Multiply by the Frobenius coefficients.
   let psi_x = psi_coeff_x();
   let psi_y = psi_coeff_y();
-  let mut rx = blst_fp2::default();
-  unsafe { blst_fp2_mul(&mut rx, &x, &psi_x) };
-  let mut ry = blst_fp2::default();
-  unsafe { blst_fp2_mul(&mut ry, &y, &psi_y) };
+  let rx = blst_ffi::fp2_mul(&x, &psi_x);
+  let ry = blst_ffi::fp2_mul(&y, &psi_y);
 
   blst_p2_affine { x: rx, y: ry }
 }
 
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn psi_coeff_x() -> blst_fp2 {
   // PSI_COEFF_X = (0, PSI_COEFF_X_C1)
-  let mut c1 = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut c1, PSI_COEFF_X_C1.as_ptr()) };
+  let c1 = blst_ffi::fp_from_bendian(&PSI_COEFF_X_C1);
   blst_fp2 {
     fp: [blst_fp::default(), c1],
   }
 }
 
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn psi_coeff_y() -> blst_fp2 {
-  let mut c0 = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut c0, PSI_COEFF_Y_C0.as_ptr()) };
-  let mut c1 = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut c1, PSI_COEFF_Y_C1.as_ptr()) };
+  let c0 = blst_ffi::fp_from_bendian(&PSI_COEFF_Y_C0);
+  let c1 = blst_ffi::fp_from_bendian(&PSI_COEFF_Y_C1);
   blst_fp2 { fp: [c0, c1] }
 }
 
@@ -220,29 +194,21 @@ fn hash_to_fp(msg: &[u8; 32], tag: &[u8; 7]) -> blst_fp {
 ///
 /// Splits into `hi * 2^384 + lo`, computes `hi * R + lo` where
 /// `R = 2^384 mod p`.
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn reduce_mod_p(wide: &[u8; 64]) -> blst_fp {
-  let mut lo_fp = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut lo_fp, wide[16..].as_ptr()) };
+  let lo_fp = blst_ffi::fp_from_bendian(wide[16..].try_into().expect("48-byte slice"));
 
   let mut hi_bytes = [0u8; 48];
   hi_bytes[32..48].copy_from_slice(&wide[..16]);
-  let mut hi_fp = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut hi_fp, hi_bytes.as_ptr()) };
+  let hi_fp = blst_ffi::fp_from_bendian(&hi_bytes);
 
-  let mut r_fp = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut r_fp, R_MOD_P.as_ptr()) };
+  let r_fp = blst_ffi::fp_from_bendian(&R_MOD_P);
 
   // result = hi * R + lo
-  let mut tmp = blst_fp::default();
-  unsafe { blst_fp_mul(&mut tmp, &hi_fp, &r_fp) };
-  let mut result = blst_fp::default();
-  unsafe { blst_fp_add(&mut result, &tmp, &lo_fp) };
-  result
+  let tmp = blst_ffi::fp_mul(&hi_fp, &r_fp);
+  blst_ffi::fp_add(&tmp, &lo_fp)
 }
 
 /// Shallue-van de Woestijne encoding from Fp2 to G2 (not cofactor-cleared).
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn sw_encode(t: &blst_fp2) -> blst_p2 {
   if fp2_is_zero(t) {
     return blst_p2::default();
@@ -255,17 +221,13 @@ fn sw_encode(t: &blst_fp2) -> blst_p2 {
   let parity = fp2_cmp_c1(t) > fp2_cmp_c1(&nt);
 
   // w = t^2 + b + 1
-  let mut w = blst_fp2::default();
-  unsafe { blst_fp2_sqr(&mut w, t) };
-  unsafe { blst_fp2_add(&mut w, &w, &b) };
-  let mut w_c0 = blst_fp::default();
-  unsafe { blst_fp_add(&mut w_c0, &w.fp[0], &one) };
-  w.fp[0] = w_c0;
+  let mut w = blst_ffi::fp2_add(&blst_ffi::fp2_sqr(t), &b);
+  w.fp[0] = blst_ffi::fp_add(&w.fp[0], &one);
 
   if fp2_is_zero(&w) {
-    let mut g = unsafe { *blst_p2_generator() };
+    let mut g = blst_ffi::p2_generator();
     if parity {
-      unsafe { blst_p2_cneg(&mut g, true) };
+      g = blst_ffi::p2_cneg(&g, true);
     }
     return g;
   }
@@ -274,38 +236,27 @@ fn sw_encode(t: &blst_fp2) -> blst_p2 {
   let s32_fp2 = fp2_from_fp(&fp_from_bytes(&S32));
 
   // w = sqrt(-3) * t / (t^2 + b + 1)
-  unsafe { blst_fp2_inverse(&mut w, &w) };
-  let mut tmp = blst_fp2::default();
-  unsafe { blst_fp2_mul(&mut tmp, &s3_fp2, t) };
-  unsafe { blst_fp2_mul(&mut w, &w, &tmp) };
+  w = blst_ffi::fp2_inverse(&w);
+  let tmp = blst_ffi::fp2_mul(&s3_fp2, t);
+  w = blst_ffi::fp2_mul(&w, &tmp);
 
   // x1 = -w*t + (sqrt(-3) - 1) / 2
-  let mut x1 = blst_fp2::default();
-  unsafe { blst_fp2_mul(&mut x1, &w, t) };
-  x1 = fp2_neg(&x1);
-  unsafe { blst_fp2_add(&mut x1, &x1, &s32_fp2) };
+  let mut x1 = fp2_neg(&blst_ffi::fp2_mul(&w, t));
+  x1 = blst_ffi::fp2_add(&x1, &s32_fp2);
 
   // x2 = -x1 - 1
   let mut x2 = fp2_neg(&x1);
-  let mut x2_c0 = blst_fp::default();
-  unsafe { blst_fp_sub(&mut x2_c0, &x2.fp[0], &one) };
-  x2.fp[0] = x2_c0;
+  x2.fp[0] = blst_ffi::fp_sub(&x2.fp[0], &one);
 
   // x3 = 1/w^2 + 1
-  let mut x3 = blst_fp2::default();
-  unsafe { blst_fp2_sqr(&mut x3, &w) };
-  unsafe { blst_fp2_inverse(&mut x3, &x3) };
-  let mut x3_c0 = blst_fp::default();
-  unsafe { blst_fp_add(&mut x3_c0, &x3.fp[0], &one) };
-  x3.fp[0] = x3_c0;
+  let mut x3 = blst_ffi::fp2_inverse(&blst_ffi::fp2_sqr(&w));
+  x3.fp[0] = blst_ffi::fp_add(&x3.fp[0], &one);
 
   let rhs1 = curve_rhs(&x1);
   let rhs2 = curve_rhs(&x2);
 
-  let mut y1 = blst_fp2::default();
-  let mut y2 = blst_fp2::default();
-  let has_y1 = unsafe { blst_fp2_sqrt(&mut y1, &rhs1) };
-  let has_y2 = unsafe { blst_fp2_sqrt(&mut y2, &rhs2) };
+  let has_y1 = blst_ffi::fp2_sqrt(&rhs1).is_some();
+  let has_y2 = blst_ffi::fp2_sqrt(&rhs2).is_some();
 
   let xx1: i32 = if has_y1 { 1 } else { -1 };
   let xx2: i32 = if has_y2 { 1 } else { -1 };
@@ -313,18 +264,15 @@ fn sw_encode(t: &blst_fp2) -> blst_p2 {
 
   let (x, mut y) = if index == 0 {
     let rhs = curve_rhs(&x1);
-    let mut y = blst_fp2::default();
-    unsafe { blst_fp2_sqrt(&mut y, &rhs) };
+    let y = blst_ffi::fp2_sqrt(&rhs).expect("selected square root");
     (x1, y)
   } else if index == 1 {
     let rhs = curve_rhs(&x2);
-    let mut y = blst_fp2::default();
-    unsafe { blst_fp2_sqrt(&mut y, &rhs) };
+    let y = blst_ffi::fp2_sqrt(&rhs).expect("selected square root");
     (x2, y)
   } else {
     let rhs = curve_rhs(&x3);
-    let mut y = blst_fp2::default();
-    unsafe { blst_fp2_sqrt(&mut y, &rhs) };
+    let y = blst_ffi::fp2_sqrt(&rhs).expect("selected square root");
     (x3, y)
   };
 
@@ -335,25 +283,17 @@ fn sw_encode(t: &blst_fp2) -> blst_p2 {
   }
 
   let aff = blst_p2_affine { x, y };
-  let mut proj = blst_p2::default();
-  unsafe { blst_p2_from_affine(&mut proj, &aff) };
-  proj
+  blst_ffi::p2_from_affine(&aff)
 }
 
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn fp_from_bytes(bytes: &[u8; 48]) -> blst_fp {
-  let mut fp = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut fp, bytes.as_ptr()) };
-  fp
+  blst_ffi::fp_from_bendian(bytes)
 }
 
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn fp_from_u64(v: u64) -> blst_fp {
   let mut buf = [0u8; 48];
   buf[40..48].copy_from_slice(&v.to_be_bytes());
-  let mut fp = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut fp, buf.as_ptr()) };
-  fp
+  blst_ffi::fp_from_bendian(&buf)
 }
 
 fn fp2_from_fp(fp: &blst_fp) -> blst_fp2 {
@@ -366,38 +306,19 @@ fn fp2_is_zero(a: &blst_fp2) -> bool {
   a.fp[0].l == [0u64; 6] && a.fp[1].l == [0u64; 6]
 }
 
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn fp2_neg(a: &blst_fp2) -> blst_fp2 {
-  let mut out = blst_fp2::default();
-  unsafe { blst_fp2_cneg(&mut out, a, true) };
-  out
+  blst_ffi::fp2_cneg(a, true)
 }
 
 /// Imaginary component as big-endian bytes for lexicographic comparison.
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn fp2_cmp_c1(a: &blst_fp2) -> [u8; 48] {
-  let mut bytes = [0u8; 48];
-  unsafe { blst_bendian_from_fp(bytes.as_mut_ptr(), &a.fp[1]) };
-  bytes
+  blst_ffi::bendian_from_fp(&a.fp[1])
 }
 
 /// x^3 + b
-#[expect(unsafe_code, reason = "blst C FFI")]
 fn curve_rhs(x: &blst_fp2) -> blst_fp2 {
   let b = curve_b();
-  let mut x2 = blst_fp2::default();
-  unsafe { blst_fp2_sqr(&mut x2, x) };
-  let mut x3 = blst_fp2::default();
-  unsafe { blst_fp2_mul(&mut x3, &x2, x) };
-  let mut rhs = blst_fp2::default();
-  unsafe { blst_fp2_add(&mut rhs, &x3, &b) };
-  rhs
-}
-
-extern "C" {
-  fn blst_p2_generator() -> *const blst_p2;
-  fn blst_fp_add(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
-  fn blst_fp_sub(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
-  fn blst_fp_mul(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
-  fn blst_bendian_from_fp(out: *mut u8, a: *const blst_fp);
+  let x2 = blst_ffi::fp2_sqr(x);
+  let x3 = blst_ffi::fp2_mul(&x2, x);
+  blst_ffi::fp2_add(&x3, &b)
 }

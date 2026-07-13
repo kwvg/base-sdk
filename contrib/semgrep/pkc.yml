@@ -1,0 +1,12 @@
+rules:
+  - id: pkc-no-expect-unsafe-code
+    message: "#[expect(unsafe_code)] is only permitted for the blst_ffi module"
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include: [/pkgs/pkc/src/**/*.rs]
+    patterns:
+      - pattern-regex: '#\[(?:expect|allow)\(unsafe_code'
+      - pattern-not-inside: |
+          #[expect(unsafe_code, ...)]
+          pub(crate) mod blst_ffi;

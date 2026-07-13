@@ -11,10 +11,11 @@ use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use super::DST;
+use crate::bls::blst_ffi;
 use crate::prelude::*;
 
 use blst::min_pk;
-use blst::*;
+use blst::{blst_p1, BLST_ERROR};
 use sha2::{Digest, Sha256};
 
 /// Aggregate multiple public keys into one.
@@ -78,7 +79,6 @@ pub fn verify_aggregates(sig: &Signature, msgs: &[&[u8]], pks: &[&PublicKey]) ->
 ///    pk_hash) mod order`
 /// 4. Compute weighted public key: `agg_pk = sum(weight_i * pk_i)`
 /// 5. Verify the aggregate signature against `agg_pk` and the message
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey]) -> Result<(), Error> {
   if pks.is_empty() {
     return Err(Error::EmptyAggregation);
@@ -103,29 +103,17 @@ pub fn secure_verify_aggregates(sig: &Signature, msg: &[u8], pks: &[&PublicKey])
     weight_hasher.update(pk_hash);
     let weight_hash: [u8; 32] = weight_hasher.finalize().into();
 
-    let mut weight = blst_scalar::default();
     // blst_p1_mult reduces internally.
-    unsafe { blst_scalar_from_bendian(&mut weight, weight_hash.as_ptr()) };
+    let weight = blst_ffi::scalar_from_bendian(&weight_hash);
 
-    let mut pk_aff = blst_p1_affine::default();
-    let rc = unsafe { blst_p1_uncompress(&mut pk_aff, pk_bytes.as_ptr()) };
-    if rc != BLST_ERROR::BLST_SUCCESS {
-      return Err(Error::InvalidPublicKey);
-    }
-
-    let mut pk_proj = blst_p1::default();
-    unsafe { blst_p1_from_affine(&mut pk_proj, &pk_aff) };
-
-    let mut weighted = blst_p1::default();
-    unsafe { blst_p1_mult(&mut weighted, &pk_proj, weight.b.as_ptr(), 256) };
-
-    unsafe { blst_p1_add_or_double(&mut acc, &acc, &weighted) };
+    let pk_aff = blst_ffi::p1_uncompress(pk_bytes).map_err(|_| Error::InvalidPublicKey)?;
+    let weighted = blst_ffi::p1_mult(&pk_aff, &weight.b, 256);
+    let weighted = blst_ffi::p1_from_affine(&weighted);
+    acc = blst_ffi::p1_add_or_double(&acc, &weighted);
   }
 
-  let mut agg_pk_aff = blst_p1_affine::default();
-  unsafe { blst_p1_to_affine(&mut agg_pk_aff, &acc) };
-  let mut agg_pk_bytes = [0u8; 48];
-  unsafe { blst_p1_affine_compress(agg_pk_bytes.as_mut_ptr(), &agg_pk_aff) };
+  let agg_pk_aff = blst_ffi::p1_to_affine(&acc);
+  let agg_pk_bytes = blst_ffi::p1_affine_compress(&agg_pk_aff);
   let agg_pk = PublicKey::from_bytes(&agg_pk_bytes).map_err(|_| Error::InvalidPublicKey)?;
 
   sig.verify(msg, &agg_pk)

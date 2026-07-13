@@ -10,10 +10,11 @@ use super::error::Error;
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
+use crate::bls::blst_ffi;
 use crate::common::bls::threshold as math;
 use crate::prelude::*;
 
-use blst::*;
+use blst::{blst_fr, blst_p1, blst_p2};
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 
@@ -139,7 +140,6 @@ pub fn split_sk(
 ///
 /// Returns `InsufficientShares` if fewer than 2 shares are provided, or
 /// `DuplicateShareId` if any ids repeat.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
   if shares.len() < 2 {
     return Err(Error::InsufficientShares);
@@ -162,11 +162,8 @@ pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
     .iter()
     .map(|s| {
       let bytes = s.sig.to_bytes();
-      let mut aff = blst_p2_affine::default();
-      unsafe { blst_p2_uncompress(&mut aff, bytes.as_ptr()) };
-      let mut proj = blst_p2::default();
-      unsafe { blst_p2_from_affine(&mut proj, &aff) };
-      proj
+      let aff = blst_ffi::p2_uncompress(&bytes).expect("signature was already validated");
+      blst_ffi::p2_from_affine(&aff)
     })
     .collect();
 
@@ -174,16 +171,13 @@ pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, Error> {
 
   // Convert back: blst_p2 -> blst_p2_affine -> compressed bytes ->
   // min_pk::Signature.
-  let mut aff = blst_p2_affine::default();
-  unsafe { blst_p2_to_affine(&mut aff, &recovered) };
-  let mut bytes = [0u8; 96];
-  unsafe { blst_p2_affine_compress(bytes.as_mut_ptr(), &aff) };
+  let aff = blst_ffi::p2_to_affine(&recovered);
+  let bytes = blst_ffi::p2_affine_compress(&aff);
   Signature::from_bytes(&bytes).map_err(|_| Error::InvalidSignature)
 }
 
 /// Derive a public key share by evaluating the master public
 /// key polynomial at the given participant id.
-#[expect(unsafe_code, reason = "blst C FFI")]
 pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<PublicKey, Error> {
   if master_pks.is_empty() {
     return Err(Error::EmptyAggregation);
@@ -193,20 +187,15 @@ pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<Public
     .iter()
     .map(|pk| {
       let bytes = pk.0.compress();
-      let mut aff = blst_p1_affine::default();
-      unsafe { blst_p1_uncompress(&mut aff, bytes.as_ptr()) };
-      let mut proj = blst_p1::default();
-      unsafe { blst_p1_from_affine(&mut proj, &aff) };
-      proj
+      let aff = blst_ffi::p1_uncompress(&bytes).expect("public key was already validated");
+      blst_ffi::p1_from_affine(&aff)
     })
     .collect();
 
   let x = math::fr_from_hash(id);
   let result = math::eval_poly_g1(&coeffs_g1, &x);
 
-  let mut aff = blst_p1_affine::default();
-  unsafe { blst_p1_to_affine(&mut aff, &result) };
-  let mut bytes = [0u8; 48];
-  unsafe { blst_p1_affine_compress(bytes.as_mut_ptr(), &aff) };
+  let aff = blst_ffi::p1_to_affine(&result);
+  let bytes = blst_ffi::p1_affine_compress(&aff);
   PublicKey::from_bytes(&bytes)
 }

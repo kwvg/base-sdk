@@ -9,6 +9,7 @@
 use super::error::Error;
 use super::ser;
 use super::sk::SecretKey;
+use crate::bls::blst_ffi;
 
 use blst::blst_p1_affine;
 
@@ -37,19 +38,11 @@ impl PublicKey {
   }
 
   /// Compute a DH shared key: `sk * peer_pk`.
-  #[expect(unsafe_code, reason = "blst C FFI")]
   pub fn dh_exchange(sk: &SecretKey, peer_pk: &PublicKey) -> Result<Self, Error> {
-    use blst::*;
     use zeroize::Zeroize;
-    let mut pk_proj = blst_p1::default();
-    unsafe { blst_p1_from_affine(&mut pk_proj, &peer_pk.0) };
     let mut sk_bytes = sk.to_bytes();
-    let mut sk_scalar = blst_scalar::default();
-    unsafe { blst_scalar_from_bendian(&mut sk_scalar, sk_bytes.as_ptr()) };
-    let mut out = blst_p1::default();
-    unsafe { blst_p1_mult(&mut out, &pk_proj, sk_scalar.b.as_ptr(), 255) };
-    let mut out_aff = blst_p1_affine::default();
-    unsafe { blst_p1_to_affine(&mut out_aff, &out) };
+    let mut sk_scalar = blst_ffi::scalar_from_bendian(&sk_bytes);
+    let out_aff = blst_ffi::p1_mult(&peer_pk.0, &sk_scalar.b, blst_ffi::FR_BITS);
     sk_bytes.zeroize();
     sk_scalar.b.zeroize();
     Ok(Self(out_aff))

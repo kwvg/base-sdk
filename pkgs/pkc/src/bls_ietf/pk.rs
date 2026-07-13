@@ -10,6 +10,7 @@ use super::error::Error;
 use super::sig::Signature;
 use super::sk::SecretKey;
 use super::DST_POP_PROVE;
+use crate::bls::blst_ffi;
 
 use blst::min_pk;
 use blst::BLST_ERROR;
@@ -41,27 +42,14 @@ impl PublicKey {
   }
 
   /// Compute a DH shared key: `sk * peer_pk`.
-  #[expect(unsafe_code, reason = "blst C FFI")]
   pub fn dh_exchange(sk: &SecretKey, peer_pk: &PublicKey) -> Result<Self, Error> {
-    use blst::*;
     use zeroize::Zeroize;
     let compressed = peer_pk.0.compress();
-    let mut aff = blst_p1_affine::default();
-    let rc = unsafe { blst_p1_uncompress(&mut aff, compressed.as_ptr()) };
-    if rc != BLST_ERROR::BLST_SUCCESS {
-      return Err(Error::InvalidPublicKey);
-    }
-    let mut proj = blst_p1::default();
-    unsafe { blst_p1_from_affine(&mut proj, &aff) };
+    let aff = blst_ffi::p1_uncompress(&compressed).map_err(|_| Error::InvalidPublicKey)?;
     let mut sk_bytes = sk.to_bytes();
-    let mut sk_scalar = blst_scalar::default();
-    unsafe { blst_scalar_from_bendian(&mut sk_scalar, sk_bytes.as_ptr()) };
-    let mut out = blst_p1::default();
-    unsafe { blst_p1_mult(&mut out, &proj, sk_scalar.b.as_ptr(), 255) };
-    let mut out_aff = blst_p1_affine::default();
-    unsafe { blst_p1_to_affine(&mut out_aff, &out) };
-    let mut out_bytes = [0u8; 48];
-    unsafe { blst_p1_affine_compress(out_bytes.as_mut_ptr(), &out_aff) };
+    let mut sk_scalar = blst_ffi::scalar_from_bendian(&sk_bytes);
+    let out_aff = blst_ffi::p1_mult(&aff, &sk_scalar.b, blst_ffi::FR_BITS);
+    let out_bytes = blst_ffi::p1_affine_compress(&out_aff);
     sk_bytes.zeroize();
     sk_scalar.b.zeroize();
     Self::from_bytes(&out_bytes)
