@@ -15,6 +15,10 @@ pub(crate) const FR_BITS: usize = 255;
 
 extern "C" {
   fn blst_p2_generator() -> *const blst_p2;
+  fn blst_fp_add(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
+  fn blst_fp_sub(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
+  fn blst_fp_mul(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
+  fn blst_bendian_from_fp(out: *mut u8, a: *const blst_fp);
   fn blst_p1_affine_generator() -> *const blst_p1_affine;
   fn blst_scalar_fr_check(a: *const blst_scalar) -> bool;
   fn blst_sk_check(sk: *const blst_scalar) -> bool;
@@ -22,12 +26,6 @@ extern "C" {
 
 fn p1_affine_generator() -> blst_p1_affine {
   unsafe { *blst_p1_affine_generator() }
-}
-
-pub(crate) fn bendian_from_fp(value: &blst_fp) -> [u8; 48] {
-  let mut out = [0u8; 48];
-  unsafe { blst_bendian_from_fp(out.as_mut_ptr(), value) };
-  out
 }
 
 pub(crate) fn bendian_from_scalar(scalar: &blst_scalar) -> [u8; 32] {
@@ -69,36 +67,6 @@ pub(crate) fn fp2_sqr(value: &blst_fp2) -> blst_fp2 {
 pub(crate) fn fp2_sqrt(value: &blst_fp2) -> Option<blst_fp2> {
   let mut out = blst_fp2::default();
   unsafe { blst_fp2_sqrt(&mut out, value) }.then_some(out)
-}
-
-pub(crate) fn fp_add(a: &blst_fp, b: &blst_fp) -> blst_fp {
-  let mut out = blst_fp::default();
-  unsafe { blst_fp_add(&mut out, a, b) };
-  out
-}
-
-pub(crate) fn fp_cneg(value: &blst_fp, flag: bool) -> blst_fp {
-  let mut out = *value;
-  unsafe { blst_fp_cneg(&mut out, value, flag) };
-  out
-}
-
-pub(crate) fn fp_from_bendian(bytes: &[u8; 48]) -> blst_fp {
-  let mut out = blst_fp::default();
-  unsafe { blst_fp_from_bendian(&mut out, bytes.as_ptr()) };
-  out
-}
-
-pub(crate) fn fp_mul(a: &blst_fp, b: &blst_fp) -> blst_fp {
-  let mut out = blst_fp::default();
-  unsafe { blst_fp_mul(&mut out, a, b) };
-  out
-}
-
-pub(crate) fn fp_sub(a: &blst_fp, b: &blst_fp) -> blst_fp {
-  let mut out = blst_fp::default();
-  unsafe { blst_fp_sub(&mut out, a, b) };
-  out
 }
 
 pub(crate) fn p1_add_or_double(a: &blst_p1, b: &blst_p1) -> blst_p1 {
@@ -335,5 +303,84 @@ impl Sub for Fr {
 impl Zeroize for Fr {
   fn zeroize(&mut self) {
     self.0.l.zeroize();
+  }
+}
+
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
+pub(crate) struct Fp(blst_fp);
+
+impl Fp {
+  pub(crate) fn zero() -> Self {
+    Self(blst_fp::default())
+  }
+
+  pub(crate) fn from_raw(raw: blst_fp) -> Self {
+    Self(raw)
+  }
+
+  pub(crate) fn into_raw(self) -> blst_fp {
+    self.0
+  }
+
+  pub(crate) fn from_bendian(bytes: &[u8; 48]) -> Self {
+    let mut out = blst_fp::default();
+    unsafe { blst_fp_from_bendian(&mut out, bytes.as_ptr()) };
+    Self(out)
+  }
+
+  pub(crate) fn from_u64(v: u64) -> Self {
+    let mut bytes = [0u8; 48];
+    bytes[40..48].copy_from_slice(&v.to_be_bytes());
+    Self::from_bendian(&bytes)
+  }
+
+  pub(crate) fn to_bendian(self) -> [u8; 48] {
+    let mut out = [0u8; 48];
+    unsafe { blst_bendian_from_fp(out.as_mut_ptr(), &self.0) };
+    out
+  }
+
+  pub(crate) fn cneg(self, flag: bool) -> Self {
+    let mut out = blst_fp::default();
+    unsafe { blst_fp_cneg(&mut out, &self.0, flag) };
+    Self(out)
+  }
+}
+
+impl Add for Fp {
+  type Output = Self;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    let mut out = blst_fp::default();
+    unsafe { blst_fp_add(&mut out, &self.0, &rhs.0) };
+    Self(out)
+  }
+}
+
+impl Mul for Fp {
+  type Output = Self;
+
+  fn mul(self, rhs: Self) -> Self::Output {
+    let mut out = blst_fp::default();
+    unsafe { blst_fp_mul(&mut out, &self.0, &rhs.0) };
+    Self(out)
+  }
+}
+
+impl Neg for Fp {
+  type Output = Self;
+
+  fn neg(self) -> Self::Output {
+    self.cneg(true)
+  }
+}
+
+impl Sub for Fp {
+  type Output = Self;
+
+  fn sub(self, rhs: Self) -> Self::Output {
+    let mut out = blst_fp::default();
+    unsafe { blst_fp_sub(&mut out, &self.0, &rhs.0) };
+    Self(out)
   }
 }

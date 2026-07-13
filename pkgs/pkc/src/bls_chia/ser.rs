@@ -10,7 +10,7 @@
 //! G2 (96 bytes): legacy component order (c0||c1), sign bit at byte[0] & 0x80.
 
 use super::error::Error;
-use crate::bls::blst_ffi;
+use crate::bls::blst_ffi::{self, Fp};
 
 use blst::blst_p1_affine;
 use blst::blst_p2_affine;
@@ -107,7 +107,7 @@ pub(super) fn deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, Error> {
   // Decompress with sign=0, then negate y if needed.
   let mut out = blst_ffi::p2_uncompress(&ietf).map_err(|_| Error::InvalidSignature)?;
 
-  let y_c1_bytes = blst_ffi::bendian_from_fp(&out.y.fp[1]);
+  let y_c1_bytes = Fp::from_raw(out.y.fp[1]).to_bendian();
   let decompressed_sign = y_c1_is_larger(&y_c1_bytes);
 
   if (sign == 1) != decompressed_sign {
