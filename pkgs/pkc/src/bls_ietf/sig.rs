@@ -7,12 +7,11 @@
 //! IETF BLS signature (96-byte compressed G2 point).
 
 use super::pk::PublicKey;
-use super::sk::Scheme;
-use super::{DST, DST_POP};
+use crate::bls::scheme_ops::BlsScheme;
 use crate::bls::BlsError;
+use crate::bls::{BlsScIetf, BlsSigId};
 
 use blst::min_pk;
-use blst::BLST_ERROR;
 
 /// A BLS signature (96-byte compressed G2 point).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,37 +29,22 @@ impl Signature {
 
   /// Deserialize from 96 compressed bytes.
   pub fn from_bytes(bytes: &[u8; 96]) -> Result<Self, BlsError> {
-    min_pk::Signature::from_bytes(bytes)
-      .map(Self)
-      .map_err(|_| BlsError::InvalidSignature)
+    BlsScIetf::sig_from_bytes(bytes).map(Self).map_err(Into::into)
   }
 
   /// Serialize to 96 compressed bytes.
   pub fn to_bytes(&self) -> [u8; 96] {
-    self.0.compress()
+    BlsScIetf::sig_to_bytes(&self.0)
   }
 
   /// Verify with the Basic scheme.
   pub fn verify(&self, msg: &[u8], pk: &PublicKey) -> Result<(), BlsError> {
-    self.verify_raw(msg, pk, DST)
+    BlsScIetf::verify(&self.0, msg, &pk.0).map_err(Into::into)
   }
 
   /// Verify with a specific scheme.
-  pub fn verify_with(&self, msg: &[u8], pk: &PublicKey, scheme: Scheme) -> Result<(), BlsError> {
-    let dst = match scheme {
-      Scheme::Basic => DST,
-      Scheme::ProofOfPossession => DST_POP,
-    };
-    self.verify_raw(msg, pk, dst)
-  }
-
-  fn verify_raw(&self, msg: &[u8], pk: &PublicKey, dst: &[u8]) -> Result<(), BlsError> {
-    let result = self.0.verify(true, msg, dst, &[], &pk.0, true);
-    if result == BLST_ERROR::BLST_SUCCESS {
-      Ok(())
-    } else {
-      Err(BlsError::VerifyFailed)
-    }
+  pub fn verify_with(&self, msg: &[u8], pk: &PublicKey, scheme: BlsSigId) -> Result<(), BlsError> {
+    BlsScIetf::verify_with(&self.0, msg, &pk.0, scheme).map_err(Into::into)
   }
 }
 

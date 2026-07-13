@@ -15,5 +15,14 @@ cfg_if::cfg_if! {
     #[expect(unsafe_code, reason = "blst C FFI")]
     pub(crate) mod blst_ffi;
     pub(crate) mod chia_h2c;
+    pub(crate) mod scheme_ops;
+
+    mod scheme_chia;
+    mod scheme_ietf;
+    mod schemes;
+    mod sig_ops;
+
+    pub use schemes::{BlsScChia, BlsScIetf, BlsSchemeId};
+    pub use sig_ops::BlsSigId;
   }
 }

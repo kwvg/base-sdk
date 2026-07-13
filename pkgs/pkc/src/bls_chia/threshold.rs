@@ -9,12 +9,10 @@
 use super::pk::PublicKey;
 use super::sig::Signature;
 use super::sk::SecretKey;
-use crate::bls::blst_ffi::{self, Fr};
-use crate::bls::BlsError;
-use crate::common::bls::threshold as math;
+use crate::bls::scheme_ops::{self, BlsScheme};
+use crate::bls::{BlsError, BlsScChia};
 use crate::prelude::*;
 
-use blst::{blst_p1, blst_p2};
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 
@@ -121,8 +119,8 @@ pub fn split_sk(
     }
   }
 
-  let raw = crate::common::bls::generate_shares(&sk.to_bytes(), threshold, ids, rng)
-    .map_err(|()| BlsError::InvalidSecretKey)?;
+  let raw =
+    scheme_ops::generate_shares(&sk.to_bytes(), threshold, ids, rng).map_err(|()| BlsError::InvalidSecretKey)?;
 
   raw
     .into_iter()
@@ -140,36 +138,14 @@ pub fn split_sk(
 ///
 /// Returns `InsufficientShares` if fewer than 2 shares.
 pub fn recover_sig(shares: &[&SignatureShare]) -> Result<Signature, BlsError> {
-  if shares.len() < 2 {
-    return Err(BlsError::InsufficientShares);
-  }
-
-  // Check for duplicate IDs
-  for i in 0..shares.len() {
-    for j in (i + 1)..shares.len() {
-      if shares[i].id == shares[j].id {
-        return Err(BlsError::DuplicateShareId);
-      }
-    }
-  }
-
-  let ids: Vec<Fr> = shares.iter().map(|s| math::fr_from_hash(&s.id)).collect();
-  let points: Vec<blst_p2> = shares.iter().map(|s| blst_ffi::p2_from_affine(&s.sig.0)).collect();
-
-  let recovered = math::interpolate_g2(&ids, &points);
-  Ok(Signature::from_inner(blst_ffi::p2_to_affine(&recovered)))
+  let ids: Vec<_> = shares.iter().map(|share| &share.id).collect();
+  let sigs: Vec<_> = shares.iter().map(|share| &share.sig.0).collect();
+  BlsScChia::recover_sig_shares(&ids, &sigs).map(Signature::from_inner)
 }
 
 /// Derive a public key share by evaluating the master public
 /// key polynomial at the given participant id.
 pub fn derive_pk_share(master_pks: &[&PublicKey], id: &Hash256) -> Result<PublicKey, BlsError> {
-  if master_pks.is_empty() {
-    return Err(BlsError::EmptyAggregation);
-  }
-  let coeffs_g1: Vec<blst_p1> = master_pks.iter().map(|pk| blst_ffi::p1_from_affine(&pk.0)).collect();
-
-  let x = math::fr_from_hash(id);
-  let result = math::eval_poly_g1(&coeffs_g1, &x);
-
-  Ok(PublicKey::from_inner(blst_ffi::p1_to_affine(&result)))
+  let pks: Vec<_> = master_pks.iter().map(|pk| &pk.0).collect();
+  BlsScChia::derive_pk_share(&pks, id).map(PublicKey::from_inner)
 }

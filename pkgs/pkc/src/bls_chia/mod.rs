@@ -8,7 +8,6 @@
 
 mod agg;
 mod pk;
-mod ser;
 mod sig;
 mod sk;
 

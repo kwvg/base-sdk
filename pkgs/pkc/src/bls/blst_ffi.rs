@@ -13,6 +13,9 @@ use zeroize::Zeroize;
 /// Bit-length for scalars known to be reduced mod q (< 2^255).
 pub(crate) const FR_BITS: usize = 255;
 
+/// Bit-length for unreduced 256-bit scalars.
+pub(crate) const SCALAR_BITS: usize = 256;
+
 extern "C" {
   fn blst_p2_generator() -> *const blst_p2;
   fn blst_fp_add(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);

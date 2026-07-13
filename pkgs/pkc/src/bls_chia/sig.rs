@@ -7,10 +7,9 @@
 //! Legacy BLS signature (96-byte G2 point, legacy serialization).
 
 use super::pk::PublicKey;
-use super::ser;
-use crate::bls::blst_ffi;
-use crate::bls::chia_h2c;
+use crate::bls::scheme_ops::BlsScheme;
 use crate::bls::BlsError;
+use crate::bls::BlsScChia;
 
 use blst::blst_p2_affine;
 
@@ -30,24 +29,18 @@ impl Signature {
 
   /// Deserialize from 96 legacy-format bytes.
   pub fn from_bytes(bytes: &[u8; 96]) -> Result<Self, BlsError> {
-    ser::deser_g2(bytes).map(Self)
+    BlsScChia::sig_from_bytes(bytes).map(Self).map_err(Into::into)
   }
 
   /// Serialize to 96 legacy-format bytes.
   pub fn to_bytes(&self) -> [u8; 96] {
-    ser::ser_g2(&self.0)
+    BlsScChia::sig_to_bytes(&self.0)
   }
 
   /// Verify against a 32-byte message and public key via pairing check:
   /// e(sig, G1) == e(H(msg), pk).
   pub fn verify(&self, msg: &[u8; 32], pk: &PublicKey) -> Result<(), BlsError> {
-    let h_proj = chia_h2c::hash_to_g2(msg);
-    let valid = blst_ffi::pairings_equal_with_g1_generator(&self.0, &h_proj, &pk.0);
-    if valid {
-      Ok(())
-    } else {
-      Err(BlsError::VerifyFailed)
-    }
+    BlsScChia::verify(&self.0, msg, &pk.0).map_err(Into::into)
   }
 }
 
