@@ -6,8 +6,7 @@
 
 //! Aggregation and secure verification for legacy BLS.
 
-use super::sig::Signature;
-use super::{PublicKey, SecretKey};
+use super::{PublicKey, SecretKey, Signature};
 use crate::bls::scheme_ops::BlsScheme;
 use crate::bls::{BlsError, BlsScChia};
 use crate::prelude::*;

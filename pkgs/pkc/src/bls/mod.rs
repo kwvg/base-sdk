@@ -31,6 +31,7 @@ cfg_if::cfg_if! {
     mod scheme_chia;
     mod scheme_ietf;
     mod secret_ops;
+    mod sig_basic;
     mod sig_ops;
     #[cfg(test)]
     #[allow(dead_code, reason = "temporary refactor artifact")]
@@ -39,6 +40,7 @@ cfg_if::cfg_if! {
 
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
+    pub use sig_basic::BlsSignature;
     pub use sig_ops::BlsSigId;
   }
 }
