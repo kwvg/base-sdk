@@ -35,6 +35,7 @@ cfg_if::cfg_if! {
     mod sig_aggregate;
     mod sig_basic;
     mod sig_ops;
+    mod sig_pop;
     mod sig_threshold;
     #[cfg(test)]
     #[allow(dead_code, reason = "temporary refactor artifact")]

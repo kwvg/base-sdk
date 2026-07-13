@@ -183,19 +183,15 @@ fn recover_threshold(bencher: divan::Bencher, t: usize) {
 /// Proof of possession creation.
 #[divan::bench]
 fn prove_pop(bencher: divan::Bencher) {
-  use dash_pkc::bls_ietf::SecretKey as LegacySecretKey;
-
-  let sk = LegacySecretKey::generate(&super::common::test_ikm(1)).unwrap();
+  let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
   bencher.bench(|| sk.prove_possession());
 }
 
 /// Proof of possession verification.
 #[divan::bench]
 fn verify_pop(bencher: divan::Bencher) {
-  use dash_pkc::bls_ietf::SecretKey as LegacySecretKey;
-
-  let sk = LegacySecretKey::generate(&super::common::test_ikm(1)).unwrap();
-  let pop = sk.prove_possession();
+  let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
+  let pop = sk.prove_possession().unwrap();
   let pk = sk.public_key();
   bencher.bench(|| pk.verify_possession(&pop));
 }
