@@ -36,9 +36,10 @@ impl<S: BlsSchemeId + BlsScheme> BlsSignature<S> {
 mod tests {
   use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
   use crate::bls::{BlsSigShare, BlsSkShare};
+  use crate::prelude::*;
   use crate::tests::*;
 
-  use alloc::{string::String, string::ToString, vec::Vec};
+  use dash_dev::load_corpus_json;
   use hex_conservative::DisplayHex;
 
   type ChiaSk = BlsSecretKey<BlsScChia>;
@@ -50,7 +51,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_finalize_recover_quorum_sig() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
     let fin = &f["finalize"];
     let commits = f["commit"].as_array().unwrap();
 
@@ -118,7 +119,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_finalize_aggregated_member_sigs() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
     let commits = f["commit"].as_array().unwrap();
 
     let commitment_hash = hex_to_32(commits[0]["commitment_hash"].as_str().unwrap());
@@ -151,7 +152,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_finalize_recover_quorum_sig() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
     let fin = &f["finalize"];
     let commits = f["commit"].as_array().unwrap();
 
@@ -219,7 +220,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_finalize_aggregated_member_sigs() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
     let commits = f["commit"].as_array().unwrap();
 
     let commitment_hash = hex_to_32(commits[0]["commitment_hash"].as_str().unwrap());

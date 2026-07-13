@@ -7,6 +7,7 @@
 //! BLS signature byte bag parameterized by scheme.
 
 use crate::bls::BlsSchemeId;
+use crate::prelude::*;
 
 use bitcoin_consensus_encoding::{Decodable, Encodable};
 use bitcoin_hashes::sha256d;
@@ -123,7 +124,7 @@ impl<S: BlsSchemeId> BaseCodec for BlsSigBytes<S> {
 impl<S: BlsSchemeId> Encodable for BlsSigBytes<S> {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = alloc::vec::Vec::new();
+    let mut buf = Vec::new();
     BaseCodec::encode(self, &mut buf);
     VecEncoder::new(buf)
   }
@@ -189,7 +190,7 @@ cfg_if! {
 
     impl<'de, S: BlsSchemeId> Deserialize<'de> for BlsSigBytes<S> {
       fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = <alloc::string::String as Deserialize>::deserialize(deserializer)?;
+        let s = <String as Deserialize>::deserialize(deserializer)?;
         <[u8; BLS_SIG_LEN] as FromHex>::from_hex(&s)
           .map(Self::from_bytes)
           .map_err(Error::custom)

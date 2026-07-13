@@ -162,9 +162,10 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
 mod tests {
   use crate::bls::BlsSigShare;
   use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
+  use crate::prelude::*;
   use crate::tests::*;
 
-  use alloc::{string::String, string::ToString, vec, vec::Vec};
+  use dash_dev::load_corpus_json;
   use hex_conservative::DisplayHex;
   use rstest::*;
 
@@ -225,7 +226,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_contribute_vvec() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
 
     for c in f["contribute"].as_array().unwrap() {
       let vvec: Vec<&str> = c["vvec"]
@@ -243,7 +244,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_contribute_sk_shares() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
     let n = f["inputs"]["n"].as_u64().unwrap() as usize;
 
     for c in f["contribute"].as_array().unwrap() {
@@ -257,7 +258,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_verify_contributions() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
     let member_ids: Vec<String> = f["inputs"]["member_ids"]
       .as_array()
       .unwrap()
@@ -305,7 +306,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_commit_quorum_key() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
 
     let commits = f["commit"].as_array().unwrap();
     let expected_qpk = commits[0]["quorum_public_key"].as_str().unwrap();
@@ -328,7 +329,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_commit_sk_share() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
 
     for (member_idx, c) in f["commit"].as_array().unwrap().iter().enumerate() {
       let expected_share = c["sk_share"].as_str().unwrap();
@@ -347,7 +348,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_commit_member_sig() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
 
     for c in f["commit"].as_array().unwrap() {
       let sk_share = ChiaSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
@@ -365,7 +366,7 @@ mod tests {
 
   #[test]
   fn chia_llmq_commit_quorum_sig_share() {
-    let f = load("bls_chia_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
 
     for c in f["commit"].as_array().unwrap() {
       let sk_share = ChiaSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
@@ -383,7 +384,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_contribute_vvec() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
 
     let contributions = f["contribute"].as_array().unwrap();
     for c in contributions {
@@ -404,7 +405,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_contribute_sk_shares() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
     let n = f["inputs"]["n"].as_u64().unwrap() as usize;
 
     for c in f["contribute"].as_array().unwrap() {
@@ -420,7 +421,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_verify_contributions() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
     let member_ids: Vec<String> = f["inputs"]["member_ids"]
       .as_array()
       .unwrap()
@@ -468,7 +469,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_commit_quorum_key() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
 
     let commits = f["commit"].as_array().unwrap();
     let expected_qpk = commits[0]["quorum_public_key"].as_str().unwrap();
@@ -497,7 +498,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_commit_sk_share() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
 
     for (member_idx, c) in f["commit"].as_array().unwrap().iter().enumerate() {
       let expected_share = c["sk_share"].as_str().unwrap();
@@ -521,7 +522,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_commit_member_sig() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
 
     for c in f["commit"].as_array().unwrap() {
       let sk_share = IetfSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
@@ -539,7 +540,7 @@ mod tests {
 
   #[test]
   fn ietf_llmq_commit_quorum_sig_share() {
-    let f = load("bls_ietf_llmq_100");
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
 
     for c in f["commit"].as_array().unwrap() {
       let sk_share = IetfSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();

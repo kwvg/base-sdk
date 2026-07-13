@@ -26,6 +26,13 @@ cfg_if::cfg_if! {
     #[cfg(feature = "serde")]
     pub use corpus::{assert_serde_rt, corpus_vectors, read_corpus, write_corpus};
     #[cfg(feature = "serde")]
+    pub use corpus::bls::{
+      bls_aggregate_pk, bls_aggregate_sig, bls_aggregate_sk, bls_dh, bls_hash, bls_keygen, bls_pk_serialization,
+      bls_secure_aggregate, bls_sig_serialization, bls_sign, BlsPkAggEntry, BlsSigAggEntry,
+      BlsSkAggEntry, BlsDhEntry, BlsHashEntry, BlsKeygenEntry, BlsPkSerEntry, BlsSecureAggEntry,
+      BlsSigSerEntry, BlsSignEntry,
+    };
+    #[cfg(feature = "serde")]
     pub use corpus::ecdsa::{ecdsa_keygen, ecdsa_recover, ecdsa_sign, EcdsaKeygenEntry, EcdsaRecoverEntry, EcdsaSignEntry};
   }
 }

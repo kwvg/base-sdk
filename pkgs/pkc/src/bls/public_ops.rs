@@ -9,10 +9,13 @@
 use super::error::BlsError;
 use super::scheme_ops::BlsScheme;
 use super::secret_ops::BlsSecretKey;
-use super::BlsSchemeId;
+use super::{BlsPkBytes, BlsSchemeId};
+use crate::prelude::*;
 
-use core::fmt;
-use core::hash;
+use cfg_if::cfg_if;
+
+use core::fmt::{Debug, Formatter, Result as FmtResult};
+use core::hash::{Hash, Hasher};
 
 /// A BLS public key (48-byte compressed G1 point), generic over
 /// the scheme.
@@ -36,7 +39,7 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
 
   /// Aggregate multiple public keys into one.
   pub fn aggregate(keys: &[&Self]) -> Result<Self, BlsError> {
-    let inner_refs: crate::prelude::Vec<&S::InnerPk> = keys.iter().map(|k| &k.0).collect();
+    let inner_refs: Vec<&S::InnerPk> = keys.iter().map(|k| &k.0).collect();
     S::aggregate_pk(&inner_refs).map(Self::from_inner)
   }
 
@@ -51,8 +54,8 @@ impl<S: BlsSchemeId + BlsScheme> Clone for BlsPublicKey<S> {
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsPublicKey<S> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<S: BlsSchemeId + BlsScheme> Debug for BlsPublicKey<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     self.0.fmt(f)
   }
 }
@@ -65,38 +68,40 @@ impl<S: BlsSchemeId + BlsScheme> PartialEq for BlsPublicKey<S> {
 
 impl<S: BlsSchemeId + BlsScheme> Eq for BlsPublicKey<S> {}
 
-impl<S: BlsSchemeId + BlsScheme> hash::Hash for BlsPublicKey<S> {
-  fn hash<H: hash::Hasher>(&self, state: &mut H) {
+impl<S: BlsSchemeId + BlsScheme> Hash for BlsPublicKey<S> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
     self.to_bytes().hash(state);
   }
 }
 
-#[cfg(feature = "serde")]
-impl<S: BlsSchemeId + BlsScheme> serde::Serialize for BlsPublicKey<S> {
-  fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-    let bytes = crate::bls::BlsPkBytes::<S>::from_bytes(self.to_bytes());
-    bytes.serialize(serializer)
+cfg_if! {
+  if #[cfg(feature = "serde")] {
+    impl<S: BlsSchemeId + BlsScheme> serde::Serialize for BlsPublicKey<S> {
+      fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        let bytes = BlsPkBytes::<S>::from_bytes(self.to_bytes());
+        bytes.serialize(serializer)
+      }
+    }
+
+    impl<'de, S: BlsSchemeId + BlsScheme> serde::Deserialize<'de> for BlsPublicKey<S> {
+      fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let bytes = BlsPkBytes::<S>::deserialize(deserializer)?;
+        Self::from_bytes(bytes.as_bytes()).map_err(serde::de::Error::custom)
+      }
+    }
   }
 }
 
-#[cfg(feature = "serde")]
-impl<'de, S: BlsSchemeId + BlsScheme> serde::Deserialize<'de> for BlsPublicKey<S> {
-  fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    let bytes = crate::bls::BlsPkBytes::<S>::deserialize(deserializer)?;
-    Self::from_bytes(bytes.as_bytes()).map_err(serde::de::Error::custom)
-  }
-}
-
-impl<S: BlsSchemeId + BlsScheme> From<BlsPublicKey<S>> for crate::bls::BlsPkBytes<S> {
+impl<S: BlsSchemeId + BlsScheme> From<BlsPublicKey<S>> for BlsPkBytes<S> {
   fn from(pk: BlsPublicKey<S>) -> Self {
     Self::from_bytes(pk.to_bytes())
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> TryFrom<crate::bls::BlsPkBytes<S>> for BlsPublicKey<S> {
+impl<S: BlsSchemeId + BlsScheme> TryFrom<BlsPkBytes<S>> for BlsPublicKey<S> {
   type Error = BlsError;
 
-  fn try_from(bytes: crate::bls::BlsPkBytes<S>) -> Result<Self, Self::Error> {
+  fn try_from(bytes: BlsPkBytes<S>) -> Result<Self, Self::Error> {
     Self::from_bytes(bytes.as_bytes())
   }
 }
@@ -105,17 +110,9 @@ impl<S: BlsSchemeId + BlsScheme> TryFrom<crate::bls::BlsPkBytes<S>> for BlsPubli
 mod tests {
   use super::*;
   use crate::bls::{BlsScChia, BlsScIetf, BlsSecretKey};
-  use crate::tests::{self, decode_hex, VectorFile, SEED_0, SEED_1};
+  use crate::tests::{SEED_0, SEED_1};
 
-  use alloc::{string::String, vec::Vec};
-  use hex_conservative::DisplayHex;
-  use serde::Deserialize;
-
-  #[derive(Deserialize)]
-  struct SerInternalVector {
-    pk_legacy: String,
-    pk_ietf: String,
-  }
+  use dash_dev::{bls_pk_serialization, load_corpus_json};
 
   fn assert_dh_roundtrip<S: BlsSchemeId + BlsScheme>() {
     let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
@@ -133,36 +130,34 @@ mod tests {
 
   #[test]
   fn serialization_formats_match_vectors() {
-    let f: VectorFile = tests::load("bls_chia_ser_internals");
-    let vecs: Vec<SerInternalVector> = tests::parse_sub(&f, "pk_serialization");
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
+    let vecs = bls_pk_serialization(&corpus, "pk_serialization");
 
     for v in &vecs {
-      let legacy_bytes: [u8; 48] = decode_hex(&v.pk_legacy).try_into().unwrap();
-      let legacy = BlsPublicKey::<BlsScChia>::from_bytes(&legacy_bytes).unwrap();
-      assert_eq!(legacy.to_bytes().to_lower_hex_string(), v.pk_legacy);
+      let legacy = BlsPublicKey::<BlsScChia>::from_bytes(&v.legacy).unwrap();
+      assert_eq!(legacy.to_bytes(), v.legacy);
 
-      let ietf_bytes: [u8; 48] = decode_hex(&v.pk_ietf).try_into().unwrap();
-      let ietf = BlsPublicKey::<BlsScIetf>::from_bytes(&ietf_bytes).unwrap();
-      assert_eq!(ietf.to_bytes().to_lower_hex_string(), v.pk_ietf);
+      let ietf = BlsPublicKey::<BlsScIetf>::from_bytes(&v.ietf).unwrap();
+      assert_eq!(ietf.to_bytes(), v.ietf);
 
-      assert_ne!(v.pk_legacy, v.pk_ietf);
+      assert_ne!(v.legacy, v.ietf);
     }
   }
 
   #[cfg(feature = "serde")]
   #[test]
   fn serde_roundtrip() {
-    let f: VectorFile = tests::load("bls_chia_ser_internals");
-    let v: SerInternalVector = tests::parse_sub::<SerInternalVector>(&f, "pk_serialization")
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
+    let v = bls_pk_serialization(&corpus, "pk_serialization")
       .into_iter()
       .next()
       .unwrap();
 
-    let chia = BlsPublicKey::<BlsScChia>::from_bytes(&decode_hex(&v.pk_legacy).try_into().unwrap()).unwrap();
+    let chia = BlsPublicKey::<BlsScChia>::from_bytes(&v.legacy).unwrap();
     let json = serde_json::to_string(&chia).unwrap();
     assert_eq!(serde_json::from_str::<BlsPublicKey<BlsScChia>>(&json).unwrap(), chia);
 
-    let ietf = BlsPublicKey::<BlsScIetf>::from_bytes(&decode_hex(&v.pk_ietf).try_into().unwrap()).unwrap();
+    let ietf = BlsPublicKey::<BlsScIetf>::from_bytes(&v.ietf).unwrap();
     let json = serde_json::to_string(&ietf).unwrap();
     assert_eq!(serde_json::from_str::<BlsPublicKey<BlsScIetf>>(&json).unwrap(), ietf);
   }

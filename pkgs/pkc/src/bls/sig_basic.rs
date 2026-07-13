@@ -109,17 +109,9 @@ mod tests {
   use super::*;
   use crate::bls::secret_ops::BlsSecretKey;
   use crate::bls::{BlsScChia, BlsScIetf};
-  use crate::tests::{self, decode_hex, VectorFile, MSG_DEADBEEF, SEED_0, SEED_1};
+  use crate::tests::{MSG_DEADBEEF, SEED_0, SEED_1};
 
-  use alloc::{string::String, vec::Vec};
-  use hex_conservative::DisplayHex;
-  use serde::Deserialize;
-
-  #[derive(Deserialize)]
-  struct SerInternalVector {
-    sig_legacy: String,
-    sig_ietf: String,
-  }
+  use dash_dev::{bls_sig_serialization, load_corpus_json};
 
   fn assert_signing<S: BlsSchemeId + BlsScheme>() {
     let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
@@ -139,17 +131,17 @@ mod tests {
 
   #[test]
   fn serialization_formats_match_vectors() {
-    let f: VectorFile = tests::load("bls_chia_ser_internals");
-    let vecs: Vec<SerInternalVector> = tests::parse_sub(&f, "sig_serialization");
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
+    let vecs = bls_sig_serialization(&corpus, "sig_serialization");
 
     for v in &vecs {
-      let chia = BlsSignature::<BlsScChia>::from_bytes(&decode_hex(&v.sig_legacy).try_into().unwrap()).unwrap();
-      assert_eq!(chia.to_bytes().to_lower_hex_string(), v.sig_legacy);
+      let chia = BlsSignature::<BlsScChia>::from_bytes(&v.legacy).unwrap();
+      assert_eq!(chia.to_bytes(), v.legacy);
 
-      let ietf = BlsSignature::<BlsScIetf>::from_bytes(&decode_hex(&v.sig_ietf).try_into().unwrap()).unwrap();
-      assert_eq!(ietf.to_bytes().to_lower_hex_string(), v.sig_ietf);
+      let ietf = BlsSignature::<BlsScIetf>::from_bytes(&v.ietf).unwrap();
+      assert_eq!(ietf.to_bytes(), v.ietf);
 
-      assert_ne!(v.sig_legacy, v.sig_ietf);
+      assert_ne!(v.legacy, v.ietf);
     }
   }
 

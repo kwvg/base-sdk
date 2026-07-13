@@ -11,25 +11,26 @@ use super::public_ops::BlsPublicKey;
 use super::scheme_ops::BlsScheme;
 use super::sig_basic::BlsSignature;
 use super::{BlsScIetf, BlsSchemeId};
+use crate::prelude::*;
 
 impl<S: BlsSchemeId + BlsScheme> BlsSignature<S> {
   /// Aggregate multiple signatures into one.
   pub fn aggregate(sigs: &[&Self]) -> Result<Self, BlsError> {
-    let inner_refs: crate::prelude::Vec<&S::InnerSig> = sigs.iter().map(|s| &s.0).collect();
+    let inner_refs: Vec<&S::InnerSig> = sigs.iter().map(|s| &s.0).collect();
     S::aggregate_sig(&inner_refs).map(Self::from_inner)
   }
 
   /// Verify an aggregated signature where every signer signed
   /// the same message.
   pub fn fast_verify_aggregates(&self, msg: &[u8], pks: &[&BlsPublicKey<S>]) -> Result<(), BlsError> {
-    let inner_pks: crate::prelude::Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
+    let inner_pks: Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
     S::fast_verify_aggregates(&self.0, msg, &inner_pks)
   }
 
   /// Securely aggregate and verify signatures with public-key
   /// weighting.
   pub fn secure_verify_aggregates(&self, msg: &[u8], pks: &[&BlsPublicKey<S>]) -> Result<(), BlsError> {
-    let inner_pks: crate::prelude::Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
+    let inner_pks: Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
     S::secure_verify_aggregates(&self.0, msg, &inner_pks)
   }
 }
@@ -38,7 +39,7 @@ impl BlsSignature<BlsScIetf> {
   /// Verify an aggregated signature where each signer signed a
   /// distinct message. IETF only.
   pub fn verify_aggregates(&self, msgs: &[&[u8]], pks: &[&BlsPublicKey<BlsScIetf>]) -> Result<(), BlsError> {
-    let inner_pks: crate::prelude::Vec<_> = pks.iter().map(|k| &k.0).collect();
+    let inner_pks: Vec<_> = pks.iter().map(|k| &k.0).collect();
     BlsScIetf::verify_aggregates(&self.0, msgs, &inner_pks)
   }
 }
@@ -47,9 +48,9 @@ impl BlsSignature<BlsScIetf> {
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
+  use crate::prelude::*;
   use crate::tests::*;
 
-  use alloc::{vec, vec::Vec};
   use hex_literal::hex;
   use rstest::*;
 
@@ -197,101 +198,55 @@ mod tests {
 
   mod kat {
     use crate::bls::{BlsPublicKey, BlsSecretKey, BlsSignature};
-    use crate::tests::{self, decode_hex, VectorFile};
+    use crate::prelude::*;
 
-    use alloc::{string::String, vec::Vec};
-    use hex_conservative::DisplayHex;
-    use serde::Deserialize;
-
-    #[derive(Deserialize)]
-    struct AggregatePkVector {
-      pks: Vec<String>,
-      agg_pk: String,
-    }
-
-    #[derive(Deserialize)]
-    struct AggregateSigVector {
-      sigs: Vec<String>,
-      agg_sig: String,
-    }
-
-    #[derive(Deserialize)]
-    struct AggregateSkVector {
-      sks: Vec<String>,
-      agg_sk: String,
-    }
-
-    #[derive(Deserialize)]
-    #[expect(dead_code, reason = "deserialized from corpus JSON")]
-    struct SecureAggVector {
-      msg: String,
-      pks: Vec<String>,
-      sigs: Vec<String>,
-      agg_sig_secure: String,
-    }
+    use dash_dev::{bls_aggregate_pk, bls_aggregate_sig, bls_aggregate_sk, bls_secure_aggregate, load_corpus_json};
 
     #[test]
     fn kat_chia_aggregate_pk() {
-      let f: VectorFile = tests::load("bls_chia_aggregate");
-      let vecs: Vec<AggregatePkVector> = tests::parse_sub(&f, "aggregate_pk");
+      let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_aggregate");
+      let vecs = bls_aggregate_pk(&corpus, "aggregate_pk");
 
       for v in &vecs {
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScChia>> = v
-          .pks
-          .iter()
-          .map(|h| {
-            let b: [u8; 48] = decode_hex(h).try_into().unwrap();
-            BlsPublicKey::from_bytes(&b).unwrap()
-          })
-          .collect();
+        let pks: Vec<BlsPublicKey<crate::bls::BlsScChia>> =
+          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
         let pk_refs: Vec<_> = pks.iter().collect();
         let agg = BlsPublicKey::aggregate(&pk_refs).unwrap();
-        assert_eq!(agg.to_bytes().to_lower_hex_string(), v.agg_pk);
+        assert_eq!(agg.to_bytes(), v.aggregate);
       }
     }
 
     #[test]
     fn kat_chia_aggregate_sig() {
-      let f: VectorFile = tests::load("bls_chia_aggregate");
-      let vecs: Vec<AggregateSigVector> = tests::parse_sub(&f, "aggregate_sig");
+      let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_aggregate");
+      let vecs = bls_aggregate_sig(&corpus, "aggregate_sig");
 
       for v in &vecs {
         let sigs: Vec<BlsSignature<crate::bls::BlsScChia>> = v
           .sigs
           .iter()
-          .map(|h| {
-            let b: [u8; 96] = decode_hex(h).try_into().unwrap();
-            BlsSignature::from_bytes(&b).unwrap()
-          })
+          .map(|sig| BlsSignature::from_bytes(sig).unwrap())
           .collect();
         let sig_refs: Vec<_> = sigs.iter().collect();
         let agg = BlsSignature::aggregate(&sig_refs).unwrap();
-        assert_eq!(agg.to_bytes().to_lower_hex_string(), v.agg_sig);
+        assert_eq!(agg.to_bytes(), v.aggregate);
       }
     }
 
     #[test]
     fn kat_chia_secure_verify_aggregates() {
-      let f: VectorFile = tests::load("bls_chia_secure_aggregate");
-      let vecs: Vec<SecureAggVector> = tests::parse_sub(&f, "secure_verify_aggregates");
+      let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_secure_aggregate");
+      let vecs = bls_secure_aggregate(&corpus, "secure_verify_aggregates");
 
       for v in &vecs {
-        let msg: [u8; 32] = decode_hex(&v.msg).try_into().unwrap();
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScChia>> = v
-          .pks
-          .iter()
-          .map(|h| {
-            let b: [u8; 48] = decode_hex(h).try_into().unwrap();
-            BlsPublicKey::from_bytes(&b).unwrap()
-          })
-          .collect();
+        let pks: Vec<BlsPublicKey<crate::bls::BlsScChia>> =
+          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
 
-        let expected_agg: [u8; 96] = decode_hex(&v.agg_sig_secure).try_into().unwrap();
-        let agg_sig = BlsSignature::<crate::bls::BlsScChia>::from_bytes(&expected_agg).unwrap();
+        let agg_sig = BlsSignature::<crate::bls::BlsScChia>::from_bytes(&v.aggregate).unwrap();
         let pk_refs: Vec<_> = pks.iter().collect();
 
         assert!(
-          agg_sig.secure_verify_aggregates(&msg, &pk_refs).is_ok(),
+          agg_sig.secure_verify_aggregates(&v.msg, &pk_refs).is_ok(),
           "secure verify failed for n={}",
           v.pks.len()
         );
@@ -300,86 +255,63 @@ mod tests {
 
     #[test]
     fn kat_ietf_aggregate_pk() {
-      let f: VectorFile = tests::load("bls_ietf_aggregate");
-      let vecs: Vec<AggregatePkVector> = tests::parse_sub(&f, "aggregate_pk");
+      let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_aggregate");
+      let vecs = bls_aggregate_pk(&corpus, "aggregate_pk");
 
       for v in &vecs {
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScIetf>> = v
-          .pks
-          .iter()
-          .map(|h| {
-            let b: [u8; 48] = decode_hex(h).try_into().unwrap();
-            BlsPublicKey::from_bytes(&b).unwrap()
-          })
-          .collect();
+        let pks: Vec<BlsPublicKey<crate::bls::BlsScIetf>> =
+          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
         let pk_refs: Vec<_> = pks.iter().collect();
         let agg = BlsPublicKey::aggregate(&pk_refs).unwrap();
-        assert_eq!(agg.to_bytes().to_lower_hex_string(), v.agg_pk);
+        assert_eq!(agg.to_bytes(), v.aggregate);
       }
     }
 
     #[test]
     fn kat_ietf_aggregate_sig() {
-      let f: VectorFile = tests::load("bls_ietf_aggregate");
-      let vecs: Vec<AggregateSigVector> = tests::parse_sub(&f, "aggregate_sig");
+      let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_aggregate");
+      let vecs = bls_aggregate_sig(&corpus, "aggregate_sig");
 
       for v in &vecs {
         let sigs: Vec<BlsSignature<crate::bls::BlsScIetf>> = v
           .sigs
           .iter()
-          .map(|h| {
-            let b: [u8; 96] = decode_hex(h).try_into().unwrap();
-            BlsSignature::from_bytes(&b).unwrap()
-          })
+          .map(|sig| BlsSignature::from_bytes(sig).unwrap())
           .collect();
         let sig_refs: Vec<_> = sigs.iter().collect();
         let agg = BlsSignature::aggregate(&sig_refs).unwrap();
-        assert_eq!(agg.to_bytes().to_lower_hex_string(), v.agg_sig);
+        assert_eq!(agg.to_bytes(), v.aggregate);
       }
     }
 
     #[test]
     fn kat_ietf_aggregate_sk() {
-      let f: VectorFile = tests::load("bls_aggregate");
-      let vecs: Vec<AggregateSkVector> = tests::parse_sub(&f, "aggregate_sk");
+      let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_aggregate");
+      let vecs = bls_aggregate_sk(&corpus, "aggregate_sk");
 
       for v in &vecs {
-        let sks: Vec<BlsSecretKey<crate::bls::BlsScIetf>> = v
-          .sks
-          .iter()
-          .map(|h| {
-            let b: [u8; 32] = decode_hex(h).try_into().unwrap();
-            BlsSecretKey::from_bytes(&b).unwrap()
-          })
-          .collect();
+        let sks: Vec<BlsSecretKey<crate::bls::BlsScIetf>> =
+          v.sks.iter().map(|sk| BlsSecretKey::from_bytes(sk).unwrap()).collect();
         let sk_refs: Vec<_> = sks.iter().collect();
         let agg = BlsSecretKey::aggregate(&sk_refs).unwrap();
-        assert_eq!(agg.to_bytes().to_lower_hex_string(), v.agg_sk);
+        assert_eq!(agg.to_bytes(), v.aggregate);
       }
     }
 
     #[test]
     fn kat_ietf_secure_verify_aggregates() {
-      let f: VectorFile = tests::load("bls_ietf_secure_aggregate");
-      let vecs: Vec<SecureAggVector> = tests::parse_sub(&f, "secure_verify_aggregates");
+      let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_secure_aggregate");
+      let vecs = bls_secure_aggregate(&corpus, "secure_verify_aggregates");
 
       for v in &vecs {
-        let msg = decode_hex(&v.msg);
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScIetf>> = v
-          .pks
-          .iter()
-          .map(|h| {
-            let b: [u8; 48] = decode_hex(h).try_into().unwrap();
-            BlsPublicKey::from_bytes(&b).unwrap()
-          })
-          .collect();
+        let pks: Vec<BlsPublicKey<crate::bls::BlsScIetf>> =
+          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
 
-        let expected_agg: [u8; 96] = decode_hex(&v.agg_sig_secure).try_into().unwrap();
-        let agg_sig = BlsSignature::<crate::bls::BlsScIetf>::from_bytes(&expected_agg).unwrap();
+        let agg_sig = BlsSignature::<crate::bls::BlsScIetf>::from_bytes(&v.aggregate).unwrap();
         let pk_refs: Vec<_> = pks.iter().collect();
 
         assert!(
-          agg_sig.secure_verify_aggregates(&msg, &pk_refs).is_ok(),
+          agg_sig.secure_verify_aggregates(&v.msg, &pk_refs).is_ok(),
           "secure verify failed for n={}",
           v.pks.len()
         );

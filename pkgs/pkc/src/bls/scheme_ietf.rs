@@ -10,6 +10,7 @@ use super::blst_ffi;
 use super::error::BlsError;
 use super::scheme_ops::{self, BlsScheme};
 use super::schemes::BlsScIetf;
+use crate::prelude::*;
 
 use blst::{blst_p1_affine, blst_p2_affine, min_pk, BLST_ERROR};
 use dash_num::Hash256;
@@ -167,8 +168,6 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn secure_verify_aggregates(sig: &Self::InnerSig, msg: &[u8], pks: &[&Self::InnerPk]) -> Result<(), BlsError> {
-    use crate::prelude::Vec;
-
     if pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
@@ -185,7 +184,7 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn recover_sig_shares(ids: &[&Hash256], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
-    let aff_sigs: crate::prelude::Vec<blst_p2_affine> = sigs
+    let aff_sigs: Vec<blst_p2_affine> = sigs
       .iter()
       .map(|s| blst_ffi::p2_uncompress(&s.compress()).map_err(|_| BlsError::InvalidSignature))
       .collect::<Result<_, _>>()?;
@@ -199,7 +198,7 @@ impl BlsScheme for BlsScIetf {
     if master_pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let aff_pks: crate::prelude::Vec<blst_p1_affine> = master_pks
+    let aff_pks: Vec<blst_p1_affine> = master_pks
       .iter()
       .map(|pk| blst_ffi::p1_uncompress(&pk.compress()).map_err(|_| BlsError::InvalidPublicKey))
       .collect::<Result<_, _>>()?;
@@ -217,37 +216,21 @@ impl BlsScheme for BlsScIetf {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::tests::{self, decode_hex, VectorFile, MSG_DEADBEEF, SEED_0, SEED_1};
+  use crate::tests::{MSG_DEADBEEF, SEED_0, SEED_1};
 
-  use alloc::{string::String, vec::Vec};
-  use hex_conservative::DisplayHex;
+  use dash_dev::{bls_dh, bls_sign, load_corpus_json};
   use hex_literal::hex;
-  use serde::Deserialize;
-
-  #[derive(Deserialize)]
-  struct DhVector {
-    sk: String,
-    peer_pk: String,
-    shared: String,
-  }
-
-  #[derive(Deserialize)]
-  struct SignVector {
-    sk: String,
-    msg: String,
-    sig: String,
-  }
 
   #[test]
   fn dh_exchange_matches_vectors() {
-    let f: VectorFile = tests::load("bls_ietf_dh");
-    let vecs: Vec<DhVector> = tests::parse_sub(&f, "dh_exchange");
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_dh");
+    let vecs = bls_dh(&corpus, "dh_exchange");
 
     for v in &vecs {
-      let sk = BlsScIetf::sk_from_bytes(&decode_hex(&v.sk).try_into().unwrap()).unwrap();
-      let peer = BlsScIetf::pk_from_bytes(&decode_hex(&v.peer_pk).try_into().unwrap()).unwrap();
+      let sk = BlsScIetf::sk_from_bytes(&v.sk).unwrap();
+      let peer = BlsScIetf::pk_from_bytes(&v.peer_pk).unwrap();
       let shared = BlsScIetf::dh_exchange(&sk, &peer).unwrap();
-      assert_eq!(BlsScIetf::pk_to_bytes(&shared).to_lower_hex_string(), v.shared);
+      assert_eq!(BlsScIetf::pk_to_bytes(&shared), v.shared);
     }
   }
 
@@ -286,13 +269,13 @@ mod tests {
 
   #[test]
   fn signing_matches_vectors() {
-    let f: VectorFile = tests::load("bls_ietf_sign");
-    let vecs: Vec<SignVector> = tests::parse_sub(&f, "sign");
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_sign");
+    let vecs = bls_sign(&corpus, "sign");
 
     for v in &vecs {
-      let sk = BlsScIetf::sk_from_bytes(&decode_hex(&v.sk).try_into().unwrap()).unwrap();
-      let sig = BlsScIetf::sign(&sk, &decode_hex(&v.msg));
-      assert_eq!(BlsScIetf::sig_to_bytes(&sig).to_lower_hex_string(), v.sig);
+      let sk = BlsScIetf::sk_from_bytes(&v.sk).unwrap();
+      let sig = BlsScIetf::sign(&sk, &v.msg);
+      assert_eq!(BlsScIetf::sig_to_bytes(&sig), v.sig);
     }
   }
 

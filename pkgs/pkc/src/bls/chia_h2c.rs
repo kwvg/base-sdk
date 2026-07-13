@@ -291,35 +291,22 @@ fn curve_rhs(x: &Fp2) -> Fp2 {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::tests::{self, decode_hex, VectorFile};
 
-  use alloc::{string::String, vec::Vec};
-  use hex_conservative::DisplayHex;
-  use serde::Deserialize;
-
-  #[derive(Deserialize)]
-  struct HashVector {
-    msg: String,
-    t00_fp: String,
-    t01_fp: String,
-    t10_fp: String,
-    t11_fp: String,
-  }
+  use dash_dev::{bls_hash, load_corpus_json};
 
   #[test]
   fn hash_to_fp_matches_vectors() {
-    let f: VectorFile = tests::load("bls_chia_hash_internals");
-    let vecs: Vec<HashVector> = tests::parse_sub(&f, "hash_internals");
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_hash_internals");
+    let vecs = bls_hash(&corpus, "hash_internals");
 
     for v in &vecs {
-      let msg: [u8; 32] = decode_hex(&v.msg).try_into().unwrap();
       for (tag, expected) in [
-        (b"G2_0_c0", &v.t00_fp),
-        (b"G2_0_c1", &v.t01_fp),
-        (b"G2_1_c0", &v.t10_fp),
-        (b"G2_1_c1", &v.t11_fp),
+        (b"G2_0_c0", v.t00_fp),
+        (b"G2_0_c1", v.t01_fp),
+        (b"G2_1_c0", v.t10_fp),
+        (b"G2_1_c1", v.t11_fp),
       ] {
-        assert_eq!(hash_to_fp(&msg, tag).to_bendian().to_lower_hex_string(), *expected);
+        assert_eq!(hash_to_fp(&v.msg, tag).to_bendian(), expected);
       }
     }
   }

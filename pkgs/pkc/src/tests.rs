@@ -4,15 +4,14 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Shared test and benchmark fixtures and corpus helpers.
+//! Shared test and benchmark fixtures.
 
 #![allow(dead_code, reason = "fixtures are used according to enabled algorithms")]
 
-use alloc::format;
-use alloc::vec::Vec;
-use hex_literal::hex;
+use crate::prelude::*;
 
-pub type VectorFile = serde_json::Value;
+use hex_conservative::FromHex;
+use hex_literal::hex;
 
 pub const SEED_0: [u8; 32] = [0u8; 32];
 pub const SEED_1: [u8; 32] = [1u8; 32];
@@ -22,32 +21,12 @@ pub const MSG_DEADBEEF: [u8; 32] = hex!(
   "cafebabecafebabecafebabecafebabe"
 );
 
-pub fn load(name: &str) -> VectorFile {
-  let path = format!("{}/corpus/{}.json", env!("CARGO_MANIFEST_DIR"), name);
-  let data = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
-  serde_json::from_str(&data).unwrap_or_else(|e| panic!("cannot parse {path}: {e}"))
-}
-
-pub fn parse_sub<T: serde::de::DeserializeOwned>(file: &VectorFile, key: &str) -> Vec<T> {
-  let arr = file
-    .get(key)
-    .unwrap_or_else(|| panic!("missing key '{key}' in vector file"));
-  serde_json::from_value(arr.clone()).unwrap_or_else(|e| panic!("cannot parse '{key}': {e}"))
-}
-
-pub fn decode_hex(s: &str) -> Vec<u8> {
-  (0..s.len())
-    .step_by(2)
-    .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-    .collect()
-}
-
 pub fn hex_to_32(s: &str) -> [u8; 32] {
-  decode_hex(s).try_into().unwrap()
+  <[u8; 32]>::from_hex(s).unwrap()
 }
 
 pub fn hex_to_48(s: &str) -> [u8; 48] {
-  decode_hex(s).try_into().unwrap()
+  <[u8; 48]>::from_hex(s).unwrap()
 }
 
 pub fn hash_from_hex(s: &str) -> dash_num::Hash256 {

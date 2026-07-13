@@ -11,6 +11,7 @@ use super::public_ops::BlsPublicKey;
 use super::scheme_ops::BlsScheme;
 use super::sig_basic::BlsSignature;
 use super::{BlsSchemeId, BlsSigId};
+use crate::prelude::*;
 
 use core::fmt;
 
@@ -68,7 +69,7 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
 
   /// Sum multiple secret keys (mod group order).
   pub fn aggregate(keys: &[&Self]) -> Result<Self, BlsError> {
-    let inner_refs: crate::prelude::Vec<&S::InnerSk> = keys.iter().map(|k| &k.0).collect();
+    let inner_refs: Vec<&S::InnerSk> = keys.iter().map(|k| &k.0).collect();
     S::aggregate_sk(&inner_refs).map(Self::from_inner)
   }
 
@@ -93,17 +94,9 @@ impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsSecretKey<S> {
 mod tests {
   use super::*;
   use crate::bls::{BlsScChia, BlsScIetf};
-  use crate::tests::{self, decode_hex, VectorFile, SEED_0};
+  use crate::tests::SEED_0;
 
-  use alloc::{string::String, vec::Vec};
-  use hex_conservative::DisplayHex;
-  use serde::Deserialize;
-
-  #[derive(Deserialize)]
-  struct KeygenVector {
-    sk: String,
-    pk: String,
-  }
+  use dash_dev::{bls_keygen, load_corpus_json};
 
   fn assert_roundtrip<S: BlsSchemeId + BlsScheme>() {
     let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
@@ -112,13 +105,12 @@ mod tests {
   }
 
   fn assert_derive_pk<S: BlsSchemeId + BlsScheme>(corpus: &str) {
-    let f: VectorFile = tests::load(corpus);
-    let vecs: Vec<KeygenVector> = tests::parse_sub(&f, "derive_pk");
+    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
+    let vecs = bls_keygen(&corpus, "derive_pk");
 
     for v in &vecs {
-      let sk_bytes: [u8; 32] = decode_hex(&v.sk).try_into().unwrap();
-      let sk = BlsSecretKey::<S>::from_bytes(&sk_bytes).unwrap();
-      assert_eq!(sk.public_key().to_bytes().to_lower_hex_string(), v.pk);
+      let sk = BlsSecretKey::<S>::from_bytes(&v.sk).unwrap();
+      assert_eq!(sk.public_key().to_bytes(), v.pk);
     }
   }
 

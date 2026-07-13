@@ -7,6 +7,7 @@
 //! BLS secret key byte bag parameterized by scheme.
 
 use crate::bls::BlsSchemeId;
+use crate::prelude::*;
 
 use bitcoin_consensus_encoding::{Decodable, Encodable};
 use bitcoin_hashes::sha256d;
@@ -99,7 +100,7 @@ impl<S: BlsSchemeId> BaseCodec for BlsSkBytes<S> {
 impl<S: BlsSchemeId> Encodable for BlsSkBytes<S> {
   type Encoder<'e> = VecEncoder;
   fn encoder(&self) -> Self::Encoder<'_> {
-    let mut buf = alloc::vec::Vec::new();
+    let mut buf = Vec::new();
     BaseCodec::encode(self, &mut buf);
     VecEncoder::new(buf)
   }

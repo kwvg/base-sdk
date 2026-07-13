@@ -9,6 +9,8 @@
 use crate::prelude::*;
 
 #[cfg(all(feature = "std", feature = "serde"))]
+pub mod bls;
+#[cfg(all(feature = "std", feature = "serde"))]
 pub mod ecdsa;
 
 /// A typed corpus entry pairing raw wire hex with expected details.

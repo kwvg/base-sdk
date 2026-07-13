@@ -23,13 +23,12 @@ pub use sig_bytes::{BlsSigBytes, BLS_SIG_LEN};
 cfg_if::cfg_if! {
   if #[cfg(feature = "bls")] {
     #[expect(unsafe_code, reason = "blst C FFI")]
-    pub(crate) mod blst_ffi;
-    pub(crate) mod chia_h2c;
-    pub(crate) mod scheme_ops;
-
+    mod blst_ffi;
+    mod chia_h2c;
     mod public_ops;
     mod scheme_chia;
     mod scheme_ietf;
+    mod scheme_ops;
     mod secret_ops;
     mod share_ops;
     mod sig_aggregate;
@@ -37,6 +36,7 @@ cfg_if::cfg_if! {
     mod sig_ops;
     mod sig_pop;
     mod sig_threshold;
+
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
     pub use share_ops::{BlsSigShare, BlsSkShare};
