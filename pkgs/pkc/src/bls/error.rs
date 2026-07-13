@@ -6,7 +6,9 @@
 
 //! Error type for BLS operations.
 
-use core::fmt;
+use core::fmt::{Display, Formatter, Result as FmtResult};
+#[cfg(feature = "std")]
+use std::error::Error;
 
 /// Errors produced by BLS operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,8 +37,8 @@ pub enum BlsError {
   UnsupportedScheme,
 }
 
-impl fmt::Display for BlsError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for BlsError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     match self {
       Self::InvalidKeyMaterial => write!(f, "input keying material too short"),
       Self::InvalidSecretKey => write!(f, "invalid secret key bytes"),
@@ -54,4 +56,4 @@ impl fmt::Display for BlsError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for BlsError {}
+impl Error for BlsError {}

@@ -10,9 +10,11 @@ use super::blst_ffi;
 use super::error::BlsError;
 use super::scheme_ops::{self, BlsScheme};
 use super::schemes::BlsScIetf;
+use super::BlsSigId;
 use crate::prelude::*;
 
-use blst::{blst_p1_affine, blst_p2_affine, min_pk, BLST_ERROR};
+use blst::min_pk::{AggregatePublicKey, AggregateSignature, PublicKey, SecretKey, Signature};
+use blst::{blst_p1_affine, blst_p2_affine, BLST_ERROR};
 use dash_num::Hash256;
 use zeroize::Zeroize;
 
@@ -22,16 +24,16 @@ pub(crate) const DST_POP: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_"
 pub(crate) const DST_POP_PROVE: &[u8] = b"BLS_POP_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
 impl BlsScheme for BlsScIetf {
-  type InnerSk = min_pk::SecretKey;
-  type InnerPk = min_pk::PublicKey;
-  type InnerSig = min_pk::Signature;
+  type InnerSk = SecretKey;
+  type InnerPk = PublicKey;
+  type InnerSig = Signature;
 
   fn generate(ikm: &[u8]) -> Result<Self::InnerSk, BlsError> {
-    min_pk::SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidKeyMaterial)
+    SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidKeyMaterial)
   }
 
   fn sk_from_bytes(b: &[u8; 32]) -> Result<Self::InnerSk, BlsError> {
-    min_pk::SecretKey::from_bytes(b).map_err(|_| BlsError::InvalidSecretKey)
+    SecretKey::from_bytes(b).map_err(|_| BlsError::InvalidSecretKey)
   }
 
   fn sk_to_bytes(sk: &Self::InnerSk) -> [u8; 32] {
@@ -43,7 +45,7 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn pk_from_bytes(b: &[u8; 48]) -> Result<Self::InnerPk, BlsError> {
-    min_pk::PublicKey::from_bytes(b).map_err(|_| BlsError::InvalidPublicKey)
+    PublicKey::from_bytes(b).map_err(|_| BlsError::InvalidPublicKey)
   }
 
   fn pk_to_bytes(pk: &Self::InnerPk) -> [u8; 48] {
@@ -51,7 +53,7 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
-    min_pk::Signature::from_bytes(b).map_err(|_| BlsError::InvalidSignature)
+    Signature::from_bytes(b).map_err(|_| BlsError::InvalidSignature)
   }
 
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96] {
@@ -62,10 +64,10 @@ impl BlsScheme for BlsScIetf {
     sk.sign(msg, DST_BASIC, &[])
   }
 
-  fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: super::BlsSigId) -> Result<Self::InnerSig, BlsError> {
+  fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: BlsSigId) -> Result<Self::InnerSig, BlsError> {
     let dst = match scheme {
-      super::BlsSigId::Basic => DST_BASIC,
-      super::BlsSigId::ProofOfPossession => DST_POP,
+      BlsSigId::Basic => DST_BASIC,
+      BlsSigId::ProofOfPossession => DST_POP,
     };
     Ok(sk.sign(msg, dst, &[]))
   }
@@ -79,15 +81,10 @@ impl BlsScheme for BlsScIetf {
     }
   }
 
-  fn verify_with(
-    sig: &Self::InnerSig,
-    msg: &[u8],
-    pk: &Self::InnerPk,
-    scheme: super::BlsSigId,
-  ) -> Result<(), BlsError> {
+  fn verify_with(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk, scheme: BlsSigId) -> Result<(), BlsError> {
     let dst = match scheme {
-      super::BlsSigId::Basic => DST_BASIC,
-      super::BlsSigId::ProofOfPossession => DST_POP,
+      BlsSigId::Basic => DST_BASIC,
+      BlsSigId::ProofOfPossession => DST_POP,
     };
     let result = sig.verify(true, msg, dst, &[], pk, true);
     if result == BLST_ERROR::BLST_SUCCESS {
@@ -128,7 +125,7 @@ impl BlsScheme for BlsScIetf {
     if pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let agg = min_pk::AggregatePublicKey::aggregate(pks, true).map_err(|_| BlsError::InvalidPublicKey)?;
+    let agg = AggregatePublicKey::aggregate(pks, true).map_err(|_| BlsError::InvalidPublicKey)?;
     Ok(agg.to_public_key())
   }
 
@@ -136,7 +133,7 @@ impl BlsScheme for BlsScIetf {
     if sigs.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let agg = min_pk::AggregateSignature::aggregate(sigs, true).map_err(|_| BlsError::InvalidSignature)?;
+    let agg = AggregateSignature::aggregate(sigs, true).map_err(|_| BlsError::InvalidSignature)?;
     Ok(agg.to_signature())
   }
 

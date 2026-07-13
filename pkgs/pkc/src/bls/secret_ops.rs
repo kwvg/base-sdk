@@ -13,7 +13,7 @@ use super::sig_basic::BlsSignature;
 use super::{BlsSchemeId, BlsSigId};
 use crate::prelude::*;
 
-use core::fmt;
+use core::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// A BLS secret key (32-byte scalar), generic over the scheme.
 ///
@@ -84,8 +84,8 @@ impl<S: BlsSchemeId + BlsScheme> Drop for BlsSecretKey<S> {
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsSecretKey<S> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<S: BlsSchemeId + BlsScheme> Debug for BlsSecretKey<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSecretKey<{}>(..)", S::LABEL)
   }
 }

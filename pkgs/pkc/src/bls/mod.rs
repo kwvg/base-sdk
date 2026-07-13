@@ -6,6 +6,8 @@
 
 //! BLS12-381 types with type-level scheme discrimination.
 
+use cfg_if::cfg_if;
+
 mod error;
 mod public_bytes;
 mod schemes;
@@ -20,7 +22,7 @@ pub use secret_bytes::{BlsSkBytes, BLS_SK_LEN};
 pub use share_bytes::{BlsSigShareBytes, BlsSkShareBytes};
 pub use sig_bytes::{BlsSigBytes, BLS_SIG_LEN};
 
-cfg_if::cfg_if! {
+cfg_if! {
   if #[cfg(feature = "bls")] {
     #[expect(unsafe_code, reason = "blst C FFI")]
     mod blst_ffi;

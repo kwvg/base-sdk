@@ -10,13 +10,15 @@
 use super::blst_ffi::{self, Fr};
 use super::error::BlsError;
 use super::schemes::BlsSchemeId;
+use super::BlsSigId;
 use crate::prelude::*;
 
 use blst::{blst_p1, blst_p1_affine, blst_p2, blst_p2_affine};
 use dash_num::Hash256;
+use rand_core::CryptoRngCore;
+use zeroize::{Zeroize, Zeroizing};
 
-use core::fmt;
-use zeroize::Zeroize;
+use core::fmt::Debug;
 
 /// Bit-length for scalars known to be reduced mod q (< 2^255).
 pub(crate) const FR_BITS: usize = blst_ffi::FR_BITS;
@@ -27,8 +29,8 @@ pub(crate) const SCALAR_BITS: usize = blst_ffi::SCALAR_BITS;
 /// Internal trait that provides all low-level BLS operations per scheme.
 pub(crate) trait BlsScheme: BlsSchemeId {
   type InnerSk: Clone;
-  type InnerPk: Clone + fmt::Debug + PartialEq + Eq;
-  type InnerSig: Clone + fmt::Debug + PartialEq + Eq;
+  type InnerPk: Clone + Debug + PartialEq + Eq;
+  type InnerSig: Clone + Debug + PartialEq + Eq;
 
   fn generate(ikm: &[u8]) -> Result<Self::InnerSk, BlsError>;
   fn sk_from_bytes(b: &[u8; 32]) -> Result<Self::InnerSk, BlsError>;
@@ -41,10 +43,9 @@ pub(crate) trait BlsScheme: BlsSchemeId {
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96];
 
   fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Self::InnerSig;
-  fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: super::BlsSigId) -> Result<Self::InnerSig, BlsError>;
+  fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: BlsSigId) -> Result<Self::InnerSig, BlsError>;
   fn verify(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk) -> Result<(), BlsError>;
-  fn verify_with(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk, scheme: super::BlsSigId)
-    -> Result<(), BlsError>;
+  fn verify_with(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk, scheme: BlsSigId) -> Result<(), BlsError>;
   fn prove_possession(sk: &Self::InnerSk, pk: &Self::InnerPk) -> Result<Self::InnerSig, BlsError>;
   fn verify_possession(pk: &Self::InnerPk, pop: &Self::InnerSig) -> Result<(), BlsError>;
   fn dh_exchange(sk: &Self::InnerSk, pk: &Self::InnerPk) -> Result<Self::InnerPk, BlsError>;
@@ -55,7 +56,7 @@ pub(crate) trait BlsScheme: BlsSchemeId {
     if sks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let byte_vecs = zeroize::Zeroizing::new(sks.iter().map(|k| Self::sk_to_bytes(k)).collect::<Vec<[u8; 32]>>());
+    let byte_vecs = Zeroizing::new(sks.iter().map(|k| Self::sk_to_bytes(k)).collect::<Vec<[u8; 32]>>());
     let mut out_bytes = sum_sk_scalars(&byte_vecs).map_err(|()| BlsError::InvalidSecretKey)?;
     let result = Self::sk_from_bytes(&out_bytes).map_err(|_| BlsError::InvalidSecretKey);
     out_bytes.zeroize();
@@ -155,7 +156,7 @@ pub(crate) fn generate_shares(
   sk_bytes: &[u8; 32],
   threshold: usize,
   ids: &[Hash256],
-  rng: &mut impl rand_core::CryptoRngCore,
+  rng: &mut impl CryptoRngCore,
 ) -> Result<Vec<(Hash256, [u8; 32])>, ()> {
   let mut coeffs = Vec::with_capacity(threshold);
 

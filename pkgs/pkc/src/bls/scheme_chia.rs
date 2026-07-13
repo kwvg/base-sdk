@@ -11,9 +11,11 @@ use super::chia_h2c;
 use super::error::BlsError;
 use super::scheme_ops::{self, BlsScheme};
 use super::schemes::BlsScChia;
+use super::BlsSigId;
 use crate::prelude::*;
 
-use blst::{blst_p1_affine, blst_p2_affine, blst_scalar};
+use blst::min_pk::SecretKey;
+use blst::{blst_fp2, blst_p1_affine, blst_p2_affine, blst_scalar};
 use dash_num::Hash256;
 use zeroize::Zeroize;
 
@@ -23,7 +25,7 @@ impl BlsScheme for BlsScChia {
   type InnerSig = blst_p2_affine;
 
   fn generate(ikm: &[u8]) -> Result<Self::InnerSk, BlsError> {
-    let sk = blst::min_pk::SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidSecretKey)?;
+    let sk = SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidSecretKey)?;
     let bytes = sk.to_bytes();
     Self::sk_from_bytes(&bytes)
   }
@@ -68,7 +70,7 @@ impl BlsScheme for BlsScChia {
     blst_ffi::p2_to_affine(&sig)
   }
 
-  fn sign_with(_sk: &Self::InnerSk, _msg: &[u8], _scheme: super::BlsSigId) -> Result<Self::InnerSig, BlsError> {
+  fn sign_with(_sk: &Self::InnerSk, _msg: &[u8], _scheme: BlsSigId) -> Result<Self::InnerSig, BlsError> {
     Err(BlsError::UnsupportedScheme)
   }
 
@@ -82,12 +84,7 @@ impl BlsScheme for BlsScChia {
     }
   }
 
-  fn verify_with(
-    _sig: &Self::InnerSig,
-    _msg: &[u8],
-    _pk: &Self::InnerPk,
-    _scheme: super::BlsSigId,
-  ) -> Result<(), BlsError> {
+  fn verify_with(_sig: &Self::InnerSig, _msg: &[u8], _pk: &Self::InnerPk, _scheme: BlsSigId) -> Result<(), BlsError> {
     Err(BlsError::UnsupportedScheme)
   }
 
@@ -279,7 +276,7 @@ fn y_c1_is_larger(y_c1: &[u8]) -> bool {
   y_c1.len() >= 48 && y_c1[..48] > HALF_P[..]
 }
 
-fn fp2_neg(a: &blst::blst_fp2) -> blst::blst_fp2 {
+fn fp2_neg(a: &blst_fp2) -> blst_fp2 {
   blst_ffi::fp2_cneg(a, true)
 }
 

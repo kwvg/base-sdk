@@ -6,6 +6,8 @@
 
 #![expect(clippy::unwrap_used, reason = "benchmarks rely on trusted test vectors")]
 
+use divan::main as run;
+
 #[cfg(feature = "bls")]
 mod bls_chia;
 #[cfg(feature = "bls")]
@@ -14,5 +16,5 @@ mod bls_ietf;
 mod k256;
 
 fn main() {
-  divan::main();
+  run();
 }

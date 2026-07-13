@@ -17,7 +17,7 @@ use crate::prelude::*;
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 
-use core::fmt;
+use core::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// Secret key share for threshold signing.
 pub struct BlsSkShare<S: BlsSchemeId + BlsScheme> {
@@ -59,8 +59,8 @@ impl<S: BlsSchemeId + BlsScheme> BlsSkShare<S> {
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsSkShare<S> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<S: BlsSchemeId + BlsScheme> Debug for BlsSkShare<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSkShare(id={:?})", self.id)
   }
 }
@@ -97,8 +97,8 @@ impl<S: BlsSchemeId + BlsScheme> BlsSigShare<S> {
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsSigShare<S> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<S: BlsSchemeId + BlsScheme> Debug for BlsSigShare<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSigShare(id={:?})", self.id)
   }
 }
@@ -167,6 +167,7 @@ mod tests {
 
   use dash_dev::load_corpus_json;
   use hex_conservative::DisplayHex;
+  use rand_core::OsRng;
   use rstest::*;
 
   type ChiaSk = BlsSecretKey<BlsScChia>;
@@ -180,7 +181,7 @@ mod tests {
   fn chia_threshold_split_recover() {
     let sk = ChiaSk::generate(&SEED_0).unwrap();
     let ids = sequential_ids(5);
-    let mut rng = rand_core::OsRng;
+    let mut rng = OsRng;
     let shares = sk.split(3, &ids, &mut rng).unwrap();
     let msg32 = MSG_DEADBEEF;
     let full_sig = sk.sign(&msg32);
@@ -195,7 +196,7 @@ mod tests {
   fn ietf_threshold_split_recover() {
     let sk = IetfSk::generate(&SEED_0).unwrap();
     let ids = sequential_ids(5);
-    let mut rng = rand_core::OsRng;
+    let mut rng = OsRng;
     let shares = sk.split(3, &ids, &mut rng).unwrap();
     assert_eq!(shares.len(), 5);
 
@@ -217,7 +218,7 @@ mod tests {
   #[rstest]
   fn ietf_threshold_invalid_params() {
     let sk = IetfSk::generate(&SEED_0).unwrap();
-    let mut rng = rand_core::OsRng;
+    let mut rng = OsRng;
     let ids = sequential_ids(5);
     assert!(sk.split(0, &ids, &mut rng).is_err());
     let ids6 = sequential_ids(5);

@@ -78,17 +78,20 @@ impl<S: BlsSchemeId + BlsScheme> Hash for BlsPublicKey<S> {
 
 cfg_if! {
   if #[cfg(feature = "serde")] {
-    impl<S: BlsSchemeId + BlsScheme> serde::Serialize for BlsPublicKey<S> {
-      fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    impl<S: BlsSchemeId + BlsScheme> Serialize for BlsPublicKey<S> {
+      fn serialize<Ser: Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
         let bytes = BlsPkBytes::<S>::from_bytes(self.to_bytes());
         bytes.serialize(serializer)
       }
     }
 
-    impl<'de, S: BlsSchemeId + BlsScheme> serde::Deserialize<'de> for BlsPublicKey<S> {
-      fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+    impl<'de, S: BlsSchemeId + BlsScheme> Deserialize<'de> for BlsPublicKey<S> {
+      fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let bytes = BlsPkBytes::<S>::deserialize(deserializer)?;
-        Self::from_bytes(bytes.as_bytes()).map_err(serde::de::Error::custom)
+        Self::from_bytes(bytes.as_bytes()).map_err(Error::custom)
       }
     }
   }
@@ -111,6 +114,8 @@ mod tests {
   use crate::tests::{SEED_0, SEED_1};
 
   use dash_dev::{bls_pk_serialization, load_corpus_json};
+  #[cfg(feature = "serde")]
+  use serde_json::{from_str, to_string};
 
   fn assert_dh_roundtrip<S: BlsSchemeId + BlsScheme>() {
     let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
@@ -152,11 +157,11 @@ mod tests {
       .unwrap();
 
     let chia = BlsPublicKey::<BlsScChia>::from_bytes(&v.legacy).unwrap();
-    let json = serde_json::to_string(&chia).unwrap();
-    assert_eq!(serde_json::from_str::<BlsPublicKey<BlsScChia>>(&json).unwrap(), chia);
+    let json = to_string(&chia).unwrap();
+    assert_eq!(from_str::<BlsPublicKey<BlsScChia>>(&json).unwrap(), chia);
 
     let ietf = BlsPublicKey::<BlsScIetf>::from_bytes(&v.ietf).unwrap();
-    let json = serde_json::to_string(&ietf).unwrap();
-    assert_eq!(serde_json::from_str::<BlsPublicKey<BlsScIetf>>(&json).unwrap(), ietf);
+    let json = to_string(&ietf).unwrap();
+    assert_eq!(from_str::<BlsPublicKey<BlsScIetf>>(&json).unwrap(), ietf);
   }
 }

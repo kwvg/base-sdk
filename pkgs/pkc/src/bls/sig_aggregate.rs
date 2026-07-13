@@ -72,7 +72,7 @@ mod tests {
 
   #[rstest]
   fn chia_aggregate_empty_fails() {
-    let empty_pk: Vec<&crate::bls::BlsPublicKey<BlsScChia>> = vec![];
+    let empty_pk: Vec<&BlsPublicKey<BlsScChia>> = vec![];
     assert!(BlsPublicKey::aggregate(&empty_pk).is_err());
     let empty_sig: Vec<&BlsSignature<BlsScChia>> = vec![];
     assert!(BlsSignature::aggregate(&empty_sig).is_err());
@@ -126,7 +126,7 @@ mod tests {
 
   #[rstest]
   fn ietf_aggregate_empty_fails() {
-    let empty_pk: Vec<&crate::bls::BlsPublicKey<BlsScIetf>> = vec![];
+    let empty_pk: Vec<&BlsPublicKey<BlsScIetf>> = vec![];
     assert!(BlsPublicKey::aggregate(&empty_pk).is_err());
     let empty_sig: Vec<&BlsSignature<BlsScIetf>> = vec![];
     assert!(BlsSignature::aggregate(&empty_sig).is_err());
@@ -197,7 +197,7 @@ mod tests {
   }
 
   mod kat {
-    use crate::bls::{BlsPublicKey, BlsSecretKey, BlsSignature};
+    use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
     use crate::prelude::*;
 
     use dash_dev::{bls_aggregate_pk, bls_aggregate_sig, bls_aggregate_sk, bls_secure_aggregate, load_corpus_json};
@@ -208,8 +208,7 @@ mod tests {
       let vecs = bls_aggregate_pk(&corpus, "aggregate_pk");
 
       for v in &vecs {
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScChia>> =
-          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
+        let pks: Vec<BlsPublicKey<BlsScChia>> = v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
         let pk_refs: Vec<_> = pks.iter().collect();
         let agg = BlsPublicKey::aggregate(&pk_refs).unwrap();
         assert_eq!(agg.to_bytes(), v.aggregate);
@@ -222,7 +221,7 @@ mod tests {
       let vecs = bls_aggregate_sig(&corpus, "aggregate_sig");
 
       for v in &vecs {
-        let sigs: Vec<BlsSignature<crate::bls::BlsScChia>> = v
+        let sigs: Vec<BlsSignature<BlsScChia>> = v
           .sigs
           .iter()
           .map(|sig| BlsSignature::from_bytes(sig).unwrap())
@@ -239,10 +238,9 @@ mod tests {
       let vecs = bls_secure_aggregate(&corpus, "secure_verify_aggregates");
 
       for v in &vecs {
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScChia>> =
-          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
+        let pks: Vec<BlsPublicKey<BlsScChia>> = v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
 
-        let agg_sig = BlsSignature::<crate::bls::BlsScChia>::from_bytes(&v.aggregate).unwrap();
+        let agg_sig = BlsSignature::<BlsScChia>::from_bytes(&v.aggregate).unwrap();
         let pk_refs: Vec<_> = pks.iter().collect();
 
         assert!(
@@ -259,8 +257,7 @@ mod tests {
       let vecs = bls_aggregate_pk(&corpus, "aggregate_pk");
 
       for v in &vecs {
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScIetf>> =
-          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
+        let pks: Vec<BlsPublicKey<BlsScIetf>> = v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
         let pk_refs: Vec<_> = pks.iter().collect();
         let agg = BlsPublicKey::aggregate(&pk_refs).unwrap();
         assert_eq!(agg.to_bytes(), v.aggregate);
@@ -273,7 +270,7 @@ mod tests {
       let vecs = bls_aggregate_sig(&corpus, "aggregate_sig");
 
       for v in &vecs {
-        let sigs: Vec<BlsSignature<crate::bls::BlsScIetf>> = v
+        let sigs: Vec<BlsSignature<BlsScIetf>> = v
           .sigs
           .iter()
           .map(|sig| BlsSignature::from_bytes(sig).unwrap())
@@ -290,8 +287,7 @@ mod tests {
       let vecs = bls_aggregate_sk(&corpus, "aggregate_sk");
 
       for v in &vecs {
-        let sks: Vec<BlsSecretKey<crate::bls::BlsScIetf>> =
-          v.sks.iter().map(|sk| BlsSecretKey::from_bytes(sk).unwrap()).collect();
+        let sks: Vec<BlsSecretKey<BlsScIetf>> = v.sks.iter().map(|sk| BlsSecretKey::from_bytes(sk).unwrap()).collect();
         let sk_refs: Vec<_> = sks.iter().collect();
         let agg = BlsSecretKey::aggregate(&sk_refs).unwrap();
         assert_eq!(agg.to_bytes(), v.aggregate);
@@ -304,10 +300,9 @@ mod tests {
       let vecs = bls_secure_aggregate(&corpus, "secure_verify_aggregates");
 
       for v in &vecs {
-        let pks: Vec<BlsPublicKey<crate::bls::BlsScIetf>> =
-          v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
+        let pks: Vec<BlsPublicKey<BlsScIetf>> = v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
 
-        let agg_sig = BlsSignature::<crate::bls::BlsScIetf>::from_bytes(&v.aggregate).unwrap();
+        let agg_sig = BlsSignature::<BlsScIetf>::from_bytes(&v.aggregate).unwrap();
         let pk_refs: Vec<_> = pks.iter().collect();
 
         assert!(

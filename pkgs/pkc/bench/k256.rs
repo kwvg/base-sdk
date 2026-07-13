@@ -7,6 +7,7 @@
 //! Benchmarks for the k256 (secp256k1) feature
 
 use dash_pkc::ecdsa::{EcdsaPublicKey, EcdsaSecretKey};
+use divan::{bench, counter::ItemsCount, Bencher};
 
 fn test_key() -> EcdsaSecretKey {
   let bytes = [
@@ -23,52 +24,50 @@ fn test_msg_hash(i: u8) -> [u8; 32] {
   h
 }
 
-#[divan::bench]
-fn sign(bencher: divan::Bencher) {
+#[bench]
+fn sign(bencher: Bencher) {
   let sk = test_key();
-  bencher.counter(divan::counter::ItemsCount::new(1u32)).bench(|| {
+  bencher.counter(ItemsCount::new(1u32)).bench(|| {
     let msg = test_msg_hash(42);
     sk.sign(&msg).unwrap()
   });
 }
 
-#[divan::bench]
-fn verify(bencher: divan::Bencher) {
+#[bench]
+fn verify(bencher: Bencher) {
   let sk = test_key();
   let msg = test_msg_hash(99);
   let sig = sk.sign(&msg).unwrap();
   let pk = sk.public_key();
-  bencher
-    .counter(divan::counter::ItemsCount::new(1u32))
-    .bench(|| pk.verify(&msg, &sig));
+  bencher.counter(ItemsCount::new(1u32)).bench(|| pk.verify(&msg, &sig));
 }
 
-#[divan::bench]
-fn sign_compact(bencher: divan::Bencher) {
+#[bench]
+fn sign_compact(bencher: Bencher) {
   let sk = test_key();
   bencher
-    .counter(divan::counter::ItemsCount::new(1u32))
+    .counter(ItemsCount::new(1u32))
     .bench(|| sk.sign_compact(&test_msg_hash(7)).unwrap());
 }
 
-#[divan::bench]
-fn recover_compact(bencher: divan::Bencher) {
+#[bench]
+fn recover_compact(bencher: Bencher) {
   let sk = test_key();
   let msg = test_msg_hash(55);
   let sig = sk.sign_compact(&msg).unwrap();
   bencher
-    .counter(divan::counter::ItemsCount::new(1u32))
+    .counter(ItemsCount::new(1u32))
     .bench(|| EcdsaPublicKey::recover_compact(&msg, &sig));
 }
 
-#[divan::bench]
-fn ser_pk(bencher: divan::Bencher) {
+#[bench]
+fn ser_pk(bencher: Bencher) {
   let pk = test_key().public_key();
   bencher.bench(|| pk.to_bytes());
 }
 
-#[divan::bench]
-fn deser_pk(bencher: divan::Bencher) {
+#[bench]
+fn deser_pk(bencher: Bencher) {
   let bytes = test_key().public_key().to_bytes();
   bencher.bench(|| EcdsaPublicKey::from_bytes(&bytes));
 }
@@ -77,6 +76,7 @@ fn deser_pk(bencher: divan::Bencher) {
 mod worker_benches {
   use dash_pkc::ecdsa::{EcdsaPublicKey, EcdsaSecretKey, EcdsaSignature};
   use dash_pkc::worker;
+  use divan::{bench, counter::ItemsCount, Bencher};
 
   fn setup_sigs(n: usize) -> Vec<(EcdsaSignature, EcdsaPublicKey, [u8; 32])> {
     let sk = EcdsaSecretKey::from_bytes(&[0x42u8; 32], true).unwrap();
@@ -92,11 +92,11 @@ mod worker_benches {
       .collect()
   }
 
-  #[divan::bench(args = [100, 1000])]
-  fn worker_verify_n(bencher: divan::Bencher, n: usize) {
+  #[bench(args = [100, 1000])]
+  fn worker_verify_n(bencher: Bencher, n: usize) {
     let tuples = setup_sigs(n);
     bencher
-      .counter(divan::counter::ItemsCount::new(n))
+      .counter(ItemsCount::new(n))
       .bench(|| worker::par_verify(&tuples, |(sig, pk, msg)| pk.verify(msg, sig).is_ok()));
   }
 }

@@ -12,8 +12,8 @@ use crate::bls::BlsSchemeId;
 
 use dash_num::Hash256;
 
-use core::fmt::{self, Debug, Display, Formatter};
-use core::hash;
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 
 /// Unvalidated secret-key share bytes.
@@ -49,13 +49,13 @@ impl<S: BlsSchemeId> Clone for BlsSkShareBytes<S> {
 }
 
 impl<S: BlsSchemeId> Debug for BlsSkShareBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSkShareBytes<{}>(id={:?})", S::LABEL, self.id)
   }
 }
 
 impl<S: BlsSchemeId> Display for BlsSkShareBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSkShareBytes<{}>(id={})", S::LABEL, self.id)
   }
 }
@@ -105,13 +105,13 @@ impl<S: BlsSchemeId> Clone for BlsSigShareBytes<S> {
 impl<S: BlsSchemeId> Copy for BlsSigShareBytes<S> {}
 
 impl<S: BlsSchemeId> Debug for BlsSigShareBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSigShareBytes<{}>(id={:?})", S::LABEL, self.id)
   }
 }
 
 impl<S: BlsSchemeId> Display for BlsSigShareBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSigShareBytes<{}>(id={})", S::LABEL, self.id)
   }
 }
@@ -124,8 +124,8 @@ impl<S: BlsSchemeId> PartialEq for BlsSigShareBytes<S> {
 
 impl<S: BlsSchemeId> Eq for BlsSigShareBytes<S> {}
 
-impl<S: BlsSchemeId> hash::Hash for BlsSigShareBytes<S> {
-  fn hash<H: hash::Hasher>(&self, state: &mut H) {
+impl<S: BlsSchemeId> Hash for BlsSigShareBytes<S> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
     self.id.hash(state);
     self.sig.as_bytes().hash(state);
   }

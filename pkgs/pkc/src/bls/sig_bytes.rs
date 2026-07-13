@@ -10,14 +10,14 @@ use crate::bls::BlsSchemeId;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding::{Decodable, Encodable};
-use bitcoin_hashes::sha256d;
+use bitcoin_hashes::sha256d::Hash as Sha256d;
 use cfg_if::cfg_if;
 use dash_num::Hash256;
 use dash_types::codec::{take, BaseCodec, DecodeError, EncodeBuf, Hashable, TypeId};
-use dash_types::{BufferDecoder, VecEncoder};
+use dash_types::{BufferDecoder, VecEncoder, MAX_SER_SIZE};
 
 use core::cmp::Ordering;
-use core::fmt::{self, Debug, Display, Formatter};
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 
@@ -133,12 +133,12 @@ impl<S: BlsSchemeId> Encodable for BlsSigBytes<S> {
 impl<S: BlsSchemeId> Decodable for BlsSigBytes<S> {
   type Decoder = BufferDecoder<Self>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as BaseCodec>::decode, dash_types::MAX_SER_SIZE)
+    BufferDecoder::new(<Self as BaseCodec>::decode, MAX_SER_SIZE)
   }
 }
 
 impl<S: BlsSchemeId> Debug for BlsSigBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSigBytes<{}>(", S::LABEL)?;
     for byte in &self.inner {
       write!(f, "{byte:02x}")?;
@@ -148,7 +148,7 @@ impl<S: BlsSchemeId> Debug for BlsSigBytes<S> {
 }
 
 impl<S: BlsSchemeId> Display for BlsSigBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     for byte in &self.inner {
       write!(f, "{byte:02x}")?;
     }
@@ -160,7 +160,7 @@ impl<S: BlsSchemeId> Hashable for BlsSigBytes<S> {
   type Hash = Hash256;
 
   fn hash(&self) -> Self::Hash {
-    Self::Hash::from_bytes(sha256d::Hash::hash(&self.inner).to_byte_array())
+    Self::Hash::from_bytes(Sha256d::hash(&self.inner).to_byte_array())
   }
 }
 
@@ -206,6 +206,7 @@ mod tests {
   use crate::bls::{BlsScChia, BlsScIetf};
   use crate::prelude::*;
 
+  use cfg_if::cfg_if;
   use dash_types::codec::TypeId;
   use hex_literal::hex;
   use rstest::*;
@@ -263,13 +264,15 @@ mod tests {
     assert_eq!(arr, SAMPLE);
   }
 
-  cfg_if::cfg_if! {
+  cfg_if! {
     if #[cfg(feature = "serde")] {
+      use serde_json::{from_str, to_string};
+
       #[rstest]
       fn serde_roundtrip() {
         let sig = BlsSigBytes::<BlsScIetf>::from_bytes(SAMPLE);
-        let json = serde_json::to_string(&sig).unwrap();
-        let decoded: BlsSigBytes<BlsScIetf> = serde_json::from_str(&json).unwrap();
+        let json = to_string(&sig).unwrap();
+        let decoded: BlsSigBytes<BlsScIetf> = from_str(&json).unwrap();
         assert_eq!(sig, decoded);
       }
     }

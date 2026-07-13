@@ -8,7 +8,9 @@
 
 use blst::*;
 use core::ops::{Add, Mul, Neg, Sub};
-use zeroize::Zeroize;
+use core::ptr::null_mut;
+use rand_core::CryptoRngCore;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Bit-length for scalars known to be reduced mod q (< 2^255).
 pub(crate) const FR_BITS: usize = 255;
@@ -180,7 +182,7 @@ pub(crate) fn sk_check(sk: &blst_scalar) -> bool {
 
 pub(crate) fn sk_to_pk2_in_g1(sk: &blst_scalar) -> blst_p1_affine {
   let mut aff = blst_p1_affine::default();
-  unsafe { blst_sk_to_pk2_in_g1(core::ptr::null_mut(), &mut aff, sk) };
+  unsafe { blst_sk_to_pk2_in_g1(null_mut(), &mut aff, sk) };
   aff
 }
 
@@ -205,8 +207,8 @@ impl Fr {
     Self::from_scalar(&scalar_from_bendian(bytes))
   }
 
-  pub(crate) fn random(rng: &mut impl rand_core::CryptoRngCore) -> Self {
-    let mut bytes = zeroize::Zeroizing::new([0u8; 32]);
+  pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+    let mut bytes = Zeroizing::new([0u8; 32]);
     loop {
       rng.fill_bytes(&mut *bytes);
       let mut scalar = scalar_from_bendian(&bytes);

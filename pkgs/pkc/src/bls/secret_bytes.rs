@@ -10,14 +10,14 @@ use crate::bls::BlsSchemeId;
 use crate::prelude::*;
 
 use bitcoin_consensus_encoding::{Decodable, Encodable};
-use bitcoin_hashes::sha256d;
+use bitcoin_hashes::sha256d::Hash as Sha256d;
 use dash_num::Hash256;
 use dash_types::codec::{take, BaseCodec, DecodeError, EncodeBuf, Hashable, TypeId};
-use dash_types::{BufferDecoder, VecEncoder};
+use dash_types::{BufferDecoder, VecEncoder, MAX_SER_SIZE};
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use core::fmt::{self, Debug, Display, Formatter};
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use core::marker::PhantomData;
 
 /// Raw BLS secret key length (scalar).
@@ -109,18 +109,18 @@ impl<S: BlsSchemeId> Encodable for BlsSkBytes<S> {
 impl<S: BlsSchemeId> Decodable for BlsSkBytes<S> {
   type Decoder = BufferDecoder<Self>;
   fn decoder() -> Self::Decoder {
-    BufferDecoder::new(<Self as BaseCodec>::decode, dash_types::MAX_SER_SIZE)
+    BufferDecoder::new(<Self as BaseCodec>::decode, MAX_SER_SIZE)
   }
 }
 
 impl<S: BlsSchemeId> Debug for BlsSkBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSkBytes<{}>(..)", S::LABEL)
   }
 }
 
 impl<S: BlsSchemeId> Display for BlsSkBytes<S> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     Debug::fmt(self, f)
   }
 }
@@ -137,7 +137,7 @@ impl<S: BlsSchemeId> Hashable for BlsSkBytes<S> {
   type Hash = Hash256;
 
   fn hash(&self) -> Self::Hash {
-    Self::Hash::from_bytes(sha256d::Hash::hash(&self.inner).to_byte_array())
+    Self::Hash::from_bytes(Sha256d::hash(&self.inner).to_byte_array())
   }
 }
 

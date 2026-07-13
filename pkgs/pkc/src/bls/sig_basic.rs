@@ -11,11 +11,12 @@ use super::public_ops::BlsPublicKey;
 use super::scheme_ops::BlsScheme;
 use super::{BlsSchemeId, BlsSigBytes, BlsSigId};
 
+use cfg_if::cfg_if;
 use dash_num::Hash256;
 use dash_types::{dlgt_codec, type_cvrt};
 
-use core::fmt;
-use core::hash;
+use core::fmt::{Debug, Formatter, Result as FmtResult};
+use core::hash::{Hash, Hasher};
 
 /// A BLS signature (96-byte compressed G2 point), generic over
 /// the scheme.
@@ -57,8 +58,8 @@ impl<S: BlsSchemeId + BlsScheme> Clone for BlsSignature<S> {
   }
 }
 
-impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsSignature<S> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<S: BlsSchemeId + BlsScheme> Debug for BlsSignature<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     self.0.fmt(f)
   }
 }
@@ -71,25 +72,30 @@ impl<S: BlsSchemeId + BlsScheme> PartialEq for BlsSignature<S> {
 
 impl<S: BlsSchemeId + BlsScheme> Eq for BlsSignature<S> {}
 
-impl<S: BlsSchemeId + BlsScheme> hash::Hash for BlsSignature<S> {
-  fn hash<H: hash::Hasher>(&self, state: &mut H) {
+impl<S: BlsSchemeId + BlsScheme> Hash for BlsSignature<S> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
     self.to_bytes().hash(state);
   }
 }
 
-#[cfg(feature = "serde")]
-impl<S: BlsSchemeId + BlsScheme> serde::Serialize for BlsSignature<S> {
-  fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-    let bytes = crate::bls::BlsSigBytes::<S>::from_bytes(self.to_bytes());
-    bytes.serialize(serializer)
-  }
-}
+cfg_if! {
+  if #[cfg(feature = "serde")] {
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "serde")]
-impl<'de, S: BlsSchemeId + BlsScheme> serde::Deserialize<'de> for BlsSignature<S> {
-  fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    let bytes = crate::bls::BlsSigBytes::<S>::deserialize(deserializer)?;
-    Self::from_bytes(bytes.as_bytes()).map_err(serde::de::Error::custom)
+    impl<S: BlsSchemeId + BlsScheme> Serialize for BlsSignature<S> {
+      fn serialize<Ser: Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        let bytes = BlsSigBytes::<S>::from_bytes(self.to_bytes());
+        bytes.serialize(serializer)
+      }
+    }
+
+    impl<'de, S: BlsSchemeId + BlsScheme> Deserialize<'de> for BlsSignature<S> {
+      fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let bytes = BlsSigBytes::<S>::deserialize(deserializer)?;
+        Self::from_bytes(bytes.as_bytes()).map_err(Error::custom)
+      }
+    }
   }
 }
 
@@ -111,6 +117,8 @@ mod tests {
   use crate::tests::{MSG_DEADBEEF, SEED_0, SEED_1};
 
   use dash_dev::{bls_sig_serialization, load_corpus_json};
+  #[cfg(feature = "serde")]
+  use serde_json::{from_str, to_string};
 
   fn assert_signing<S: BlsSchemeId + BlsScheme>() {
     let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
@@ -149,13 +157,13 @@ mod tests {
   fn serde_roundtrip() {
     let chia_sk = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
     let chia = chia_sk.sign(&MSG_DEADBEEF);
-    let json = serde_json::to_string(&chia).unwrap();
-    assert_eq!(serde_json::from_str::<BlsSignature<BlsScChia>>(&json).unwrap(), chia);
+    let json = to_string(&chia).unwrap();
+    assert_eq!(from_str::<BlsSignature<BlsScChia>>(&json).unwrap(), chia);
 
     let ietf_sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
     let ietf = ietf_sk.sign(&MSG_DEADBEEF);
-    let json = serde_json::to_string(&ietf).unwrap();
-    assert_eq!(serde_json::from_str::<BlsSignature<BlsScIetf>>(&json).unwrap(), ietf);
+    let json = to_string(&ietf).unwrap();
+    assert_eq!(from_str::<BlsSignature<BlsScIetf>>(&json).unwrap(), ietf);
   }
 
   #[test]

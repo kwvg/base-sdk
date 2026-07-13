@@ -6,10 +6,12 @@
 
 //! BLS corpus vectors.
 
+use super::corpus_vectors;
 use crate::prelude::*;
 
 use hex_conservative::FromHex;
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Debug)]
 pub struct BlsHashEntry {
@@ -20,7 +22,7 @@ pub struct BlsHashEntry {
   pub t11_fp: [u8; 48],
 }
 
-pub fn bls_hash(corpus: &serde_json::Value, section: &str) -> Vec<BlsHashEntry> {
+pub fn bls_hash(corpus: &Value, section: &str) -> Vec<BlsHashEntry> {
   #[derive(Deserialize)]
   struct Raw {
     msg: String,
@@ -30,7 +32,7 @@ pub fn bls_hash(corpus: &serde_json::Value, section: &str) -> Vec<BlsHashEntry> 
     t11_fp: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsHashEntry {
       msg: <[u8; 32]>::from_hex(&v.msg).unwrap(),
@@ -48,14 +50,14 @@ pub struct BlsKeygenEntry {
   pub pk: [u8; 48],
 }
 
-pub fn bls_keygen(corpus: &serde_json::Value, section: &str) -> Vec<BlsKeygenEntry> {
+pub fn bls_keygen(corpus: &Value, section: &str) -> Vec<BlsKeygenEntry> {
   #[derive(Deserialize)]
   struct Raw {
     sk: String,
     pk: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsKeygenEntry {
       sk: <[u8; 32]>::from_hex(&v.sk).unwrap(),
@@ -71,7 +73,7 @@ pub struct BlsDhEntry {
   pub shared: [u8; 48],
 }
 
-pub fn bls_dh(corpus: &serde_json::Value, section: &str) -> Vec<BlsDhEntry> {
+pub fn bls_dh(corpus: &Value, section: &str) -> Vec<BlsDhEntry> {
   #[derive(Deserialize)]
   struct Raw {
     sk: String,
@@ -79,7 +81,7 @@ pub fn bls_dh(corpus: &serde_json::Value, section: &str) -> Vec<BlsDhEntry> {
     shared: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsDhEntry {
       sk: <[u8; 32]>::from_hex(&v.sk).unwrap(),
@@ -95,14 +97,14 @@ pub struct BlsPkSerEntry {
   pub ietf: [u8; 48],
 }
 
-pub fn bls_pk_serialization(corpus: &serde_json::Value, section: &str) -> Vec<BlsPkSerEntry> {
+pub fn bls_pk_serialization(corpus: &Value, section: &str) -> Vec<BlsPkSerEntry> {
   #[derive(Deserialize)]
   struct Raw {
     pk_legacy: String,
     pk_ietf: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsPkSerEntry {
       legacy: <[u8; 48]>::from_hex(&v.pk_legacy).unwrap(),
@@ -117,14 +119,14 @@ pub struct BlsSigSerEntry {
   pub ietf: [u8; 96],
 }
 
-pub fn bls_sig_serialization(corpus: &serde_json::Value, section: &str) -> Vec<BlsSigSerEntry> {
+pub fn bls_sig_serialization(corpus: &Value, section: &str) -> Vec<BlsSigSerEntry> {
   #[derive(Deserialize)]
   struct Raw {
     sig_legacy: String,
     sig_ietf: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsSigSerEntry {
       legacy: <[u8; 96]>::from_hex(&v.sig_legacy).unwrap(),
@@ -140,7 +142,7 @@ pub struct BlsSignEntry {
   pub sig: [u8; 96],
 }
 
-pub fn bls_sign(corpus: &serde_json::Value, section: &str) -> Vec<BlsSignEntry> {
+pub fn bls_sign(corpus: &Value, section: &str) -> Vec<BlsSignEntry> {
   #[derive(Deserialize)]
   struct Raw {
     sk: String,
@@ -148,7 +150,7 @@ pub fn bls_sign(corpus: &serde_json::Value, section: &str) -> Vec<BlsSignEntry> 
     sig: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsSignEntry {
       sk: <[u8; 32]>::from_hex(&v.sk).unwrap(),
@@ -164,14 +166,14 @@ pub struct BlsPkAggEntry {
   pub aggregate: [u8; 48],
 }
 
-pub fn bls_aggregate_pk(corpus: &serde_json::Value, section: &str) -> Vec<BlsPkAggEntry> {
+pub fn bls_aggregate_pk(corpus: &Value, section: &str) -> Vec<BlsPkAggEntry> {
   #[derive(Deserialize)]
   struct Raw {
     pks: Vec<String>,
     agg_pk: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsPkAggEntry {
       pks: v.pks.iter().map(|pk| <[u8; 48]>::from_hex(pk).unwrap()).collect(),
@@ -186,14 +188,14 @@ pub struct BlsSigAggEntry {
   pub aggregate: [u8; 96],
 }
 
-pub fn bls_aggregate_sig(corpus: &serde_json::Value, section: &str) -> Vec<BlsSigAggEntry> {
+pub fn bls_aggregate_sig(corpus: &Value, section: &str) -> Vec<BlsSigAggEntry> {
   #[derive(Deserialize)]
   struct Raw {
     sigs: Vec<String>,
     agg_sig: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsSigAggEntry {
       sigs: v.sigs.iter().map(|sig| <[u8; 96]>::from_hex(sig).unwrap()).collect(),
@@ -208,14 +210,14 @@ pub struct BlsSkAggEntry {
   pub aggregate: [u8; 32],
 }
 
-pub fn bls_aggregate_sk(corpus: &serde_json::Value, section: &str) -> Vec<BlsSkAggEntry> {
+pub fn bls_aggregate_sk(corpus: &Value, section: &str) -> Vec<BlsSkAggEntry> {
   #[derive(Deserialize)]
   struct Raw {
     sks: Vec<String>,
     agg_sk: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsSkAggEntry {
       sks: v.sks.iter().map(|sk| <[u8; 32]>::from_hex(sk).unwrap()).collect(),
@@ -232,7 +234,7 @@ pub struct BlsSecureAggEntry {
   pub aggregate: [u8; 96],
 }
 
-pub fn bls_secure_aggregate(corpus: &serde_json::Value, section: &str) -> Vec<BlsSecureAggEntry> {
+pub fn bls_secure_aggregate(corpus: &Value, section: &str) -> Vec<BlsSecureAggEntry> {
   #[derive(Deserialize)]
   struct Raw {
     msg: String,
@@ -241,7 +243,7 @@ pub fn bls_secure_aggregate(corpus: &serde_json::Value, section: &str) -> Vec<Bl
     agg_sig_secure: String,
   }
 
-  super::corpus_vectors::<Raw>(corpus, section)
+  corpus_vectors::<Raw>(corpus, section)
     .into_iter()
     .map(|v| BlsSecureAggEntry {
       msg: <[u8; 32]>::from_hex(&v.msg).unwrap(),

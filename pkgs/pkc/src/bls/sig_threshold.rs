@@ -40,6 +40,7 @@ mod tests {
   use crate::tests::*;
 
   use dash_dev::load_corpus_json;
+  use dash_num::Hash256;
   use hex_conservative::DisplayHex;
 
   type ChiaSk = BlsSecretKey<BlsScChia>;
@@ -98,7 +99,7 @@ mod tests {
       "recovered quorum sig failed verification"
     );
 
-    let all_ids: Vec<dash_num::Hash256> = member_ids.iter().map(|mid| hash_from_hex(mid)).collect();
+    let all_ids: Vec<Hash256> = member_ids.iter().map(|mid| hash_from_hex(mid)).collect();
     let all_shares: Vec<BlsSigShare<BlsScChia>> = commits
       .iter()
       .zip(all_ids.iter())
@@ -199,7 +200,7 @@ mod tests {
       "recovered quorum sig failed verification"
     );
 
-    let all_ids: Vec<dash_num::Hash256> = member_ids.iter().map(|mid| hash_from_hex(mid)).collect();
+    let all_ids: Vec<Hash256> = member_ids.iter().map(|mid| hash_from_hex(mid)).collect();
     let all_shares: Vec<BlsSigShare<BlsScIetf>> = commits
       .iter()
       .zip(all_ids.iter())
