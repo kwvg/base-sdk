@@ -6,7 +6,7 @@
 
 //! Legacy (Chia) BLS scheme: `BlsScheme` implementation.
 
-use super::blst_ffi::{self, Fp};
+use super::blst_ffi::{self, Fp, Fp2};
 use super::chia_h2c;
 use super::error::BlsError;
 use super::scheme_ops::{self, BlsScheme};
@@ -15,7 +15,7 @@ use super::BlsSigId;
 use crate::prelude::*;
 
 use blst::min_pk::SecretKey;
-use blst::{blst_fp2, blst_p1_affine, blst_p2_affine, blst_scalar};
+use blst::{blst_p1_affine, blst_p2_affine, blst_scalar};
 use dash_num::Hash256;
 use zeroize::Zeroize;
 
@@ -48,26 +48,25 @@ impl BlsScheme for BlsScChia {
   }
 
   fn pk_from_bytes(b: &[u8; 48]) -> Result<Self::InnerPk, BlsError> {
-    deser_g1(b)
+    chia_deser_g1(b)
   }
 
   fn pk_to_bytes(pk: &Self::InnerPk) -> [u8; 48] {
-    ser_g1(pk)
+    chia_ser_g1(pk)
   }
 
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
-    deser_g2(b)
+    chia_deser_g2(b)
   }
 
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96] {
-    ser_g2(sig)
+    chia_ser_g2(sig)
   }
 
   fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Self::InnerSig {
-    let msg: &[u8; 32] = msg.try_into().expect("legacy BLS signs 32-byte messages");
+    debug_assert!(blst_ffi::sk_check(sk), "zero secret key");
     let h = chia_h2c::hash_to_g2(msg);
-    let sig = blst_ffi::p2_mult(&h, &sk.b, blst_ffi::FR_BITS);
-    blst_ffi::p2_to_affine(&sig)
+    blst_ffi::sign_pk2_in_g1(sk, &h)
   }
 
   fn sign_with(_sk: &Self::InnerSk, _msg: &[u8], _scheme: BlsSigId) -> Result<Self::InnerSig, BlsError> {
@@ -75,6 +74,13 @@ impl BlsScheme for BlsScChia {
   }
 
   fn verify(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk) -> Result<(), BlsError> {
+    if blst_ffi::p1_affine_is_inf(pk) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    if blst_ffi::p2_affine_is_inf(sig) {
+      return Err(BlsError::InvalidSignature);
+    }
+
     let msg32: &[u8; 32] = msg.try_into().map_err(|_| BlsError::VerifyFailed)?;
     let h_proj = chia_h2c::hash_to_g2(msg32);
     if blst_ffi::pairings_equal_with_g1_generator(sig, &h_proj, pk) {
@@ -101,27 +107,23 @@ impl BlsScheme for BlsScChia {
   }
 
   fn aggregate_pk(pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError> {
+    use crate::prelude::Vec;
+
     if pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let mut acc = blst_ffi::p1_from_affine(pks[0]);
-    for pk in &pks[1..] {
-      let point = blst_ffi::p1_from_affine(pk);
-      acc = blst_ffi::p1_add_or_double(&acc, &point);
-    }
-    Ok(blst_ffi::p1_to_affine(&acc))
+    let points: Vec<blst_p1_affine> = pks.iter().map(|pk| **pk).collect();
+    Ok(blst_ffi::p1s_add(&points))
   }
 
   fn aggregate_sig(sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
+    use crate::prelude::Vec;
+
     if sigs.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let mut acc = blst_ffi::p2_from_affine(sigs[0]);
-    for sig in &sigs[1..] {
-      let point = blst_ffi::p2_from_affine(sig);
-      acc = blst_ffi::p2_add_or_double(&acc, &point);
-    }
-    Ok(blst_ffi::p2_to_affine(&acc))
+    let points: Vec<blst_p2_affine> = sigs.iter().map(|sig| **sig).collect();
+    Ok(blst_ffi::p2s_add(&points))
   }
 
   fn fast_verify_aggregates(sig: &Self::InnerSig, msg: &[u8], pks: &[&Self::InnerPk]) -> Result<(), BlsError> {
@@ -140,7 +142,7 @@ impl BlsScheme for BlsScChia {
     let mut sorted: Vec<[u8; 48]> = pks.iter().map(|pk| Self::pk_to_bytes(pk)).collect();
     sorted.sort();
 
-    let agg_pk = scheme_ops::weighted_g1_aggregate(&sorted, deser_g1)?;
+    let agg_pk = scheme_ops::weighted_g1_aggregate(&sorted, chia_deser_g1)?;
     Self::verify(sig, msg, &agg_pk)
   }
 
@@ -169,7 +171,7 @@ fn chia_verify_aggregates(sig: &blst_p2_affine, msg: &[u8], pks: &[&blst_p1_affi
 
 // Chia legacy serialization helpers
 
-fn ser_g1(p: &blst_p1_affine) -> [u8; 48] {
+fn chia_ser_g1(p: &blst_p1_affine) -> [u8; 48] {
   let ietf = blst_ffi::p1_affine_compress(p);
 
   if ietf[0] & 0xc0 == 0xc0 {
@@ -185,7 +187,7 @@ fn ser_g1(p: &blst_p1_affine) -> [u8; 48] {
   legacy
 }
 
-fn deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, BlsError> {
+fn chia_deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, BlsError> {
   if bytes[0] & 0xc0 == 0xc0 {
     return if let Ok(out) = blst_ffi::p1_uncompress(bytes) {
       Ok(out)
@@ -202,10 +204,14 @@ fn deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, BlsError> {
     ietf[0] |= 0x20;
   }
 
-  blst_ffi::p1_uncompress(&ietf).map_err(|_| BlsError::InvalidPublicKey)
+  let out = blst_ffi::p1_uncompress(&ietf).map_err(|_| BlsError::InvalidPublicKey)?;
+  if !blst_ffi::p1_affine_in_g1(&out) {
+    return Err(BlsError::InvalidPublicKey);
+  }
+  Ok(out)
 }
 
-fn ser_g2(p: &blst_p2_affine) -> [u8; 96] {
+fn chia_ser_g2(p: &blst_p2_affine) -> [u8; 96] {
   let uncomp = blst_ffi::p2_affine_serialize(p);
 
   if uncomp.iter().all(|&b| b == 0) {
@@ -218,7 +224,7 @@ fn ser_g2(p: &blst_p2_affine) -> [u8; 96] {
   let x_c0 = &uncomp[48..96];
   let y_c1 = &uncomp[96..144];
 
-  let sign = y_c1_is_larger(y_c1);
+  let sign = chia_y_c1_is_larger(y_c1);
 
   let mut legacy = [0u8; 96];
   legacy[..48].copy_from_slice(x_c0);
@@ -229,7 +235,7 @@ fn ser_g2(p: &blst_p2_affine) -> [u8; 96] {
   legacy
 }
 
-fn deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, BlsError> {
+fn chia_deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, BlsError> {
   if bytes[0] & 0xc0 == 0xc0 {
     let mut ietf = [0u8; 96];
     ietf[0] = 0xc0;
@@ -254,18 +260,21 @@ fn deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, BlsError> {
   ietf[0] |= 0x80;
 
   let mut out = blst_ffi::p2_uncompress(&ietf).map_err(|_| BlsError::InvalidSignature)?;
+  if !blst_ffi::p2_affine_in_g2(&out) {
+    return Err(BlsError::InvalidSignature);
+  }
 
   let y_c1_bytes = Fp::from_raw(out.y.fp[1]).to_bendian();
-  let decompressed_sign = y_c1_is_larger(&y_c1_bytes);
+  let decompressed_sign = chia_y_c1_is_larger(&y_c1_bytes);
 
   if (sign == 1) != decompressed_sign {
-    out.y = fp2_neg(&out.y);
+    out.y = (-Fp2::from_raw(out.y)).into_raw();
   }
 
   Ok(out)
 }
 
-fn y_c1_is_larger(y_c1: &[u8]) -> bool {
+fn chia_y_c1_is_larger(y_c1: &[u8]) -> bool {
   use hex_literal::hex;
   const HALF_P: [u8; 48] = hex!(
     "0d0088f5 1cbff34d 258dd3db 21a5d66b"
@@ -275,11 +284,6 @@ fn y_c1_is_larger(y_c1: &[u8]) -> bool {
 
   y_c1.len() >= 48 && y_c1[..48] > HALF_P[..]
 }
-
-fn fp2_neg(a: &blst_fp2) -> blst_fp2 {
-  blst_ffi::fp2_cneg(a, true)
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

@@ -6,6 +6,8 @@
 
 //! Bridging routines for unsafe blst FFI operations.
 
+use crate::prelude::Vec;
+
 use blst::*;
 use core::ops::{Add, Mul, Neg, Sub};
 use core::ptr::null_mut;
@@ -24,6 +26,10 @@ extern "C" {
   fn blst_fp_sub(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
   fn blst_fp_mul(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
   fn blst_bendian_from_fp(out: *mut u8, a: *const blst_fp);
+  fn blst_p1_affine_is_inf(p: *const blst_p1_affine) -> bool;
+  fn blst_p2_affine_is_inf(p: *const blst_p2_affine) -> bool;
+  fn blst_p1_affine_in_g1(p: *const blst_p1_affine) -> bool;
+  fn blst_p2_affine_in_g2(p: *const blst_p2_affine) -> bool;
   fn blst_p1_affine_generator() -> *const blst_p1_affine;
   fn blst_scalar_fr_check(a: *const blst_scalar) -> bool;
   fn blst_sk_check(sk: *const blst_scalar) -> bool;
@@ -39,20 +45,18 @@ pub(crate) fn bendian_from_scalar(scalar: &blst_scalar) -> [u8; 32] {
   out
 }
 
-pub(crate) fn fp2_cneg(value: &blst_fp2, flag: bool) -> blst_fp2 {
-  Fp2::from_raw(*value).cneg(flag).into_raw()
-}
-
-pub(crate) fn p1_add_or_double(a: &blst_p1, b: &blst_p1) -> blst_p1 {
-  let mut out = blst_p1::default();
-  unsafe { blst_p1_add_or_double(&mut out, a, b) };
-  out
-}
-
 pub(crate) fn p1_affine_compress(point: &blst_p1_affine) -> [u8; 48] {
   let mut out = [0u8; 48];
   unsafe { blst_p1_affine_compress(out.as_mut_ptr(), point) };
   out
+}
+
+pub(crate) fn p1_affine_in_g1(point: &blst_p1_affine) -> bool {
+  unsafe { blst_p1_affine_in_g1(point) }
+}
+
+pub(crate) fn p1_affine_is_inf(point: &blst_p1_affine) -> bool {
+  unsafe { blst_p1_affine_is_inf(point) }
 }
 
 pub(crate) fn p1_from_affine(point: &blst_p1_affine) -> blst_p1 {
@@ -88,6 +92,14 @@ pub(crate) fn p1_uncompress(bytes: &[u8; 48]) -> Result<blst_p1_affine, BLST_ERR
   }
 }
 
+pub(crate) fn p1s_add(points: &[blst_p1_affine]) -> blst_p1_affine {
+  p1_to_affine(&points.add())
+}
+
+pub(crate) fn p1s_mult_pippenger(points: &[blst_p1_affine], scalars: &[u8], nbits: usize) -> blst_p1_affine {
+  p1_to_affine(&points.mult(scalars, nbits))
+}
+
 pub(crate) fn p2_add_or_double(a: &blst_p2, b: &blst_p2) -> blst_p2 {
   let mut out = blst_p2::default();
   unsafe { blst_p2_add_or_double(&mut out, a, b) };
@@ -98,6 +110,14 @@ pub(crate) fn p2_affine_compress(point: &blst_p2_affine) -> [u8; 96] {
   let mut out = [0u8; 96];
   unsafe { blst_p2_affine_compress(out.as_mut_ptr(), point) };
   out
+}
+
+pub(crate) fn p2_affine_in_g2(point: &blst_p2_affine) -> bool {
+  unsafe { blst_p2_affine_in_g2(point) }
+}
+
+pub(crate) fn p2_affine_is_inf(point: &blst_p2_affine) -> bool {
+  unsafe { blst_p2_affine_is_inf(point) }
 }
 
 pub(crate) fn p2_affine_serialize(point: &blst_p2_affine) -> [u8; 192] {
@@ -150,6 +170,14 @@ pub(crate) fn p2_uncompress(bytes: &[u8; 96]) -> Result<blst_p2_affine, BLST_ERR
   }
 }
 
+pub(crate) fn p2s_add(points: &[blst_p2_affine]) -> blst_p2_affine {
+  p2_to_affine(&points.add())
+}
+
+pub(crate) fn p2s_mult_pippenger(points: &[blst_p2_affine], scalars: &[u8], nbits: usize) -> blst_p2_affine {
+  p2_to_affine(&points.mult(scalars, nbits))
+}
+
 pub(crate) fn pairings_equal_with_g1_generator(
   lhs_g2: &blst_p2_affine,
   rhs_g2: &blst_p2,
@@ -174,6 +202,12 @@ pub(crate) fn scalar_from_bendian(bytes: &[u8; 32]) -> blst_scalar {
   let mut scalar = blst_scalar::default();
   unsafe { blst_scalar_from_bendian(&mut scalar, bytes.as_ptr()) };
   scalar
+}
+
+pub(crate) fn sign_pk2_in_g1(sk: &blst_scalar, hash: &blst_p2) -> blst_p2_affine {
+  let mut aff = blst_p2_affine::default();
+  unsafe { blst_sign_pk2_in_g1(core::ptr::null_mut(), &mut aff, hash, sk) };
+  aff
 }
 
 pub(crate) fn sk_check(sk: &blst_scalar) -> bool {
@@ -231,6 +265,12 @@ impl Fr {
     let mut out = blst_fr::default();
     unsafe { blst_fr_inverse(&mut out, &self.0) };
     Self(out)
+  }
+
+  pub(crate) fn append_scalar_le(self, out: &mut Vec<u8>) {
+    let mut scalar = self.to_scalar();
+    out.extend_from_slice(&scalar.b);
+    scalar.zeroize();
   }
 }
 

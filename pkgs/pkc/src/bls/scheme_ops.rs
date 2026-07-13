@@ -13,7 +13,7 @@ use super::schemes::BlsSchemeId;
 use super::BlsSigId;
 use crate::prelude::*;
 
-use blst::{blst_p1, blst_p1_affine, blst_p2, blst_p2_affine};
+use blst::{blst_p1_affine, blst_p2_affine};
 use dash_num::Hash256;
 use rand_core::CryptoRngCore;
 use zeroize::{Zeroize, Zeroizing};
@@ -84,35 +84,42 @@ fn fr_from_hash(id: &Hash256) -> Fr {
 pub(crate) fn sum_sk_scalars(key_bytes: &[[u8; 32]]) -> Result<[u8; 32], ()> {
   let mut acc = Fr::default();
   for bytes in key_bytes {
-    let scalar = blst_ffi::scalar_from_bendian(bytes);
-    let fr = Fr::from_scalar(&scalar);
-    acc = acc + fr;
+    acc = acc + Fr::from_bendian_scalar(bytes);
   }
-  let out_scalar = acc.to_scalar();
+  let mut out_scalar = acc.to_scalar();
   let out_bytes = blst_ffi::bendian_from_scalar(&out_scalar);
   acc.zeroize();
+  out_scalar.zeroize();
   Ok(out_bytes)
+}
+
+fn append_fr_scalar_bytes(out: &mut Vec<u8>, fr: Fr) {
+  fr.append_scalar_le(out);
 }
 
 /// Recover a G2 point from shares via Lagrange interpolation at
 /// x=0.
-fn interpolate_g2(ids: &[Fr], points: &[blst_p2]) -> blst_p2 {
+fn interpolate_g2(ids: &[Fr], points: &[blst_p2_affine]) -> blst_p2_affine {
   let n = ids.len();
-  let coeffs = compute_lagrange_coeffs(ids);
+  debug_assert_eq!(n, points.len());
 
-  let mut result = blst_p2::default();
-  for i in 0..n {
-    let scalar = coeffs[i].to_scalar();
-    let term = blst_ffi::p2_mult(&points[i], &scalar.b, FR_BITS);
-    result = blst_ffi::p2_add_or_double(&result, &term);
+  let coeffs = compute_lagrange_coeffs(ids);
+  let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(n * 32));
+  for &coeff in &coeffs {
+    append_fr_scalar_bytes(&mut scalar_bytes, coeff);
   }
-  result
+
+  blst_ffi::p2s_mult_pippenger(points, scalar_bytes.as_slice(), FR_BITS)
 }
 
 /// Lagrange coefficients at x=0 for the given evaluation points.
+///
+/// Uses Montgomery batch inversion to replace N field inversions
+/// with a single inversion and 3N multiplications.
 fn compute_lagrange_coeffs(ids: &[Fr]) -> Vec<Fr> {
   let n = ids.len();
-  let mut coeffs = Vec::with_capacity(n);
+  let mut nums = Vec::with_capacity(n);
+  let mut dens = Vec::with_capacity(n);
 
   for i in 0..n {
     let mut num = fr_one();
@@ -126,9 +133,51 @@ fn compute_lagrange_coeffs(ids: &[Fr]) -> Vec<Fr> {
       let diff = ids[j] - ids[i];
       den = den * diff;
     }
-    coeffs.push(num * den.inverse());
+    nums.push(num);
+    dens.push(den);
+  }
+
+  let den_invs = batch_invert_fr(&dens);
+
+  let mut coeffs = Vec::with_capacity(n);
+  for i in 0..n {
+    coeffs.push(nums[i] * den_invs[i]);
   }
   coeffs
+}
+
+/// Invert a slice of Fr elements using Montgomery's trick.
+///
+/// Computes all inverses with a single `blst_fr_inverse` call
+/// plus O(3n) multiplications.
+fn batch_invert_fr(values: &[Fr]) -> Vec<Fr> {
+  let n = values.len();
+  if n == 0 {
+    return Vec::new();
+  }
+  if n == 1 {
+    return vec![values[0].inverse()];
+  }
+
+  // prefix[i] = values[0] * values[1] * ... * values[i]
+  let mut prefix = Vec::with_capacity(n);
+  prefix.push(values[0]);
+  for i in 1..n {
+    prefix.push(prefix[i - 1] * values[i]);
+  }
+
+  // Single inversion of the total product.
+  let mut inv = prefix[n - 1].inverse();
+
+  // Back-propagate individual inverses.
+  let mut result = vec![Fr::default(); n];
+  for i in (1..n).rev() {
+    result[i] = inv * prefix[i - 1];
+    inv = inv * values[i];
+  }
+  result[0] = inv;
+
+  result
 }
 
 /// The Fr element 1.
@@ -138,14 +187,14 @@ fn fr_one() -> Fr {
 
 /// Evaluate a scalar polynomial at `x`. Coefficients are in
 /// ascending order: `coeffs[0] + coeffs[1]*x + ...`.
-fn poly_eval(coeffs: &[Fr], x: &Fr) -> Fr {
+fn poly_eval(coeffs: &[Fr], x: Fr) -> Fr {
   let n = coeffs.len();
   if n == 0 {
     return Fr::default();
   }
   let mut result = coeffs[n - 1];
   for i in (0..n - 1).rev() {
-    result = result * *x + coeffs[i];
+    result = result * x + coeffs[i];
   }
   result
 }
@@ -160,8 +209,8 @@ pub(crate) fn generate_shares(
 ) -> Result<Vec<(Hash256, [u8; 32])>, ()> {
   let mut coeffs = Vec::with_capacity(threshold);
 
-  let sk_scalar = blst_ffi::scalar_from_bendian(sk_bytes);
-  let sk_fr = Fr::from_scalar(&sk_scalar);
+  let mut sk_scalar = blst_ffi::scalar_from_bendian(sk_bytes);
+  let mut sk_fr = Fr::from_scalar(&sk_scalar);
   coeffs.push(sk_fr);
 
   for _ in 1..threshold {
@@ -171,10 +220,11 @@ pub(crate) fn generate_shares(
   let mut shares = Vec::with_capacity(ids.len());
   for id in ids {
     let x = fr_from_hash(id);
-    let y = poly_eval(&coeffs, &x);
+    let y = poly_eval(&coeffs, x);
 
-    let y_scalar = y.to_scalar();
+    let mut y_scalar = y.to_scalar();
     let y_bytes = blst_ffi::bendian_from_scalar(&y_scalar);
+    y_scalar.zeroize();
 
     shares.push((*id, y_bytes));
   }
@@ -183,6 +233,9 @@ pub(crate) fn generate_shares(
   for coeff in &mut coeffs {
     coeff.zeroize();
   }
+  sk_scalar.zeroize();
+  sk_fr.zeroize();
+
   Ok(shares)
 }
 
@@ -207,58 +260,49 @@ pub(crate) fn weighted_g1_aggregate(
   }
   let pk_hash: [u8; 32] = hasher.finalize().into();
 
-  let mut acc = blst_p1::default();
+  let mut points = Vec::with_capacity(sorted_pk_bytes.len());
+  let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(sorted_pk_bytes.len() * 32));
   for (i, pk_bytes) in sorted_pk_bytes.iter().enumerate() {
     let mut wh = Sha256::new();
     wh.update((i as u32).to_be_bytes());
     wh.update(pk_hash);
     let weight_hash: [u8; 32] = wh.finalize().into();
 
-    let weight = blst_ffi::scalar_from_bendian(&weight_hash);
-    let pk = deser(pk_bytes)?;
-    let weighted = blst_ffi::p1_mult(&pk, &weight.b, SCALAR_BITS);
-    let weighted = blst_ffi::p1_from_affine(&weighted);
-    acc = blst_ffi::p1_add_or_double(&acc, &weighted);
+    let mut weight = blst_ffi::scalar_from_bendian(&weight_hash);
+    scalar_bytes.extend_from_slice(&weight.b);
+    weight.zeroize();
+
+    points.push(deser(pk_bytes)?);
   }
 
-  Ok(blst_ffi::p1_to_affine(&acc))
+  Ok(blst_ffi::p1s_mult_pippenger(
+    &points,
+    scalar_bytes.as_slice(),
+    SCALAR_BITS,
+  ))
 }
 
 /// Recover a G2 signature from threshold shares given as affine
 /// points. Validates input length and rejects duplicate IDs.
 pub(crate) fn recover_sig_shares_affine(ids: &[&Hash256], sigs: &[blst_p2_affine]) -> Result<blst_p2_affine, BlsError> {
+  if ids.len() != sigs.len() {
+    return Err(BlsError::CountMismatch);
+  }
   if sigs.len() < 2 {
     return Err(BlsError::InsufficientShares);
   }
 
   // Reject duplicate share IDs.
-  for i in 0..ids.len() {
-    for j in (i + 1)..ids.len() {
-      if ids[i] == ids[j] {
-        return Err(BlsError::DuplicateShareId);
-      }
+  let mut sorted_ids: Vec<&Hash256> = ids.to_vec();
+  sorted_ids.sort();
+  for pair in sorted_ids.windows(2) {
+    if pair[0] == pair[1] {
+      return Err(BlsError::DuplicateShareId);
     }
   }
 
   let fr_ids: Vec<Fr> = ids.iter().map(|id| fr_from_hash(id)).collect();
-  let points: Vec<blst_p2> = sigs.iter().map(blst_ffi::p2_from_affine).collect();
-  Ok(blst_ffi::p2_to_affine(&interpolate_g2(&fr_ids, &points)))
-}
-
-/// Evaluate a polynomial of G1 points at scalar `x` using
-/// Horner's method.
-fn eval_poly_g1(coeffs: &[blst_p1], x: &Fr) -> blst_p1 {
-  let n = coeffs.len();
-  if n == 0 {
-    return blst_p1::default();
-  }
-  let x_scalar = x.to_scalar();
-  let mut result = coeffs[n - 1];
-  for i in (0..n - 1).rev() {
-    let tmp = blst_ffi::p1_mult_projective(&result, &x_scalar.b, FR_BITS);
-    result = blst_ffi::p1_add_or_double(&tmp, &coeffs[i]);
-  }
-  result
+  Ok(interpolate_g2(&fr_ids, sigs))
 }
 
 /// Derive a public key share by evaluating a G1 polynomial at the
@@ -268,7 +312,14 @@ pub(crate) fn derive_pk_share_affine(pks: &[blst_p1_affine], id: &Hash256) -> Re
     return Err(BlsError::EmptyAggregation);
   }
 
-  let coeffs: Vec<blst_p1> = pks.iter().map(blst_ffi::p1_from_affine).collect();
   let x = fr_from_hash(id);
-  Ok(blst_ffi::p1_to_affine(&eval_poly_g1(&coeffs, &x)))
+  let mut x_power = fr_one();
+  let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(pks.len() * 32));
+  for _ in pks {
+    append_fr_scalar_bytes(&mut scalar_bytes, x_power);
+
+    x_power = x_power * x;
+  }
+
+  Ok(blst_ffi::p1s_mult_pippenger(pks, scalar_bytes.as_slice(), FR_BITS))
 }
