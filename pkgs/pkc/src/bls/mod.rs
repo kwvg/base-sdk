@@ -4,7 +4,7 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! Unified BLS cryptography module.
+//! BLS12-381 types with type-level scheme discrimination.
 
 mod error;
 mod public_bytes;
@@ -31,10 +31,12 @@ cfg_if::cfg_if! {
     mod scheme_chia;
     mod scheme_ietf;
     mod secret_ops;
+    mod share_ops;
     mod sig_aggregate;
     mod sig_basic;
     mod sig_ops;
     mod sig_pop;
+    mod sig_threshold;
     #[cfg(test)]
     #[allow(dead_code, reason = "temporary refactor artifact")]
     #[expect(clippy::unwrap_used, clippy::panic, reason = "test code")]
@@ -42,6 +44,7 @@ cfg_if::cfg_if! {
 
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
+    pub use share_ops::{BlsSigShare, BlsSkShare};
     pub use sig_basic::BlsSignature;
     pub use sig_ops::BlsSigId;
   }
