@@ -29,7 +29,7 @@ fn sk_seed1() -> SecretKey {
 /// Proof of possession round-trips.
 #[rstest]
 fn pop_prove_verify(sk_seed0: SecretKey) {
-  let pop = sk_seed0.prove_possession();
+  let pop = sk_seed0.prove_possession().unwrap();
   let pk = sk_seed0.public_key();
   assert!(pk.verify_possession(&pop).is_ok());
 }
@@ -37,7 +37,7 @@ fn pop_prove_verify(sk_seed0: SecretKey) {
 /// PoP from a different key is rejected.
 #[rstest]
 fn pop_rejects_wrong_key(sk_seed0: SecretKey, sk_seed1: SecretKey) {
-  let pop = sk_seed0.prove_possession();
+  let pop = sk_seed0.prove_possession().unwrap();
   let wrong_pk = sk_seed1.public_key();
   assert!(wrong_pk.verify_possession(&pop).is_err());
 }

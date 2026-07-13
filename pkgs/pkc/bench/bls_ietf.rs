@@ -183,14 +183,14 @@ fn recover_threshold(bencher: divan::Bencher, t: usize) {
 #[divan::bench]
 fn prove_pop(bencher: divan::Bencher) {
   let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
-  bencher.bench(|| sk.prove_possession());
+  bencher.bench(|| sk.prove_possession().unwrap());
 }
 
 /// Proof of possession verification.
 #[divan::bench]
 fn verify_pop(bencher: divan::Bencher) {
   let sk = SecretKey::generate(&super::common::test_ikm(1)).unwrap();
-  let pop = sk.prove_possession();
+  let pop = sk.prove_possession().unwrap();
   let pk = sk.public_key();
   bencher.bench(|| pk.verify_possession(&pop));
 }
