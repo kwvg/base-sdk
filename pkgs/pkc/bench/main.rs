@@ -11,7 +11,6 @@
 mod bls_chia;
 #[cfg(feature = "bls")]
 mod bls_ietf;
-#[path = "../tests/common/mod.rs"]
 mod common;
 #[cfg(feature = "k256")]
 mod k256;
