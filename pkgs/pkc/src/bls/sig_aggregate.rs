@@ -46,8 +46,8 @@ impl BlsSignature<BlsScIetf> {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use crate::bls::tests::*;
   use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
+  use crate::tests::*;
 
   use alloc::{vec, vec::Vec};
   use hex_literal::hex;
@@ -196,8 +196,8 @@ mod tests {
   }
 
   mod kat {
-    use crate::bls::tests::{self, decode_hex, VectorFile};
     use crate::bls::{BlsPublicKey, BlsSecretKey, BlsSignature};
+    use crate::tests::{self, decode_hex, VectorFile};
 
     use alloc::{string::String, vec::Vec};
     use hex_conservative::DisplayHex;

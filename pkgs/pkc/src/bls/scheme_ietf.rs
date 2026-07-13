@@ -217,7 +217,7 @@ impl BlsScheme for BlsScIetf {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::bls::tests::{self, decode_hex, VectorFile, MSG_DEADBEEF, SEED_0, SEED_1};
+  use crate::tests::{self, decode_hex, VectorFile, MSG_DEADBEEF, SEED_0, SEED_1};
 
   use alloc::{string::String, vec::Vec};
   use hex_conservative::DisplayHex;

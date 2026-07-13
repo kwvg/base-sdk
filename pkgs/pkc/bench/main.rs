@@ -5,14 +5,11 @@
 //
 
 #![expect(clippy::unwrap_used, reason = "benchmarks rely on trusted test vectors")]
-#![expect(clippy::panic, reason = "shared test helpers use panic for missing vectors")]
 
 #[cfg(feature = "bls")]
 mod bls_chia;
 #[cfg(feature = "bls")]
 mod bls_ietf;
-#[path = "../tests/common/mod.rs"]
-mod common;
 #[cfg(feature = "k256")]
 mod k256;
 

@@ -104,8 +104,8 @@ impl<S: BlsSchemeId + BlsScheme> TryFrom<crate::bls::BlsPkBytes<S>> for BlsPubli
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::bls::tests::{self, decode_hex, VectorFile, SEED_0, SEED_1};
   use crate::bls::{BlsScChia, BlsScIetf, BlsSecretKey};
+  use crate::tests::{self, decode_hex, VectorFile, SEED_0, SEED_1};
 
   use alloc::{string::String, vec::Vec};
   use hex_conservative::DisplayHex;

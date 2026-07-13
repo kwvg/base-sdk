@@ -160,9 +160,9 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use crate::bls::tests::*;
   use crate::bls::BlsSigShare;
   use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
+  use crate::tests::*;
 
   use alloc::{string::String, string::ToString, vec, vec::Vec};
   use hex_conservative::DisplayHex;

@@ -13,6 +13,15 @@ extern crate alloc;
 #[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
 mod prelude;
 
+cfg_if::cfg_if! {
+  if #[cfg(feature = "test")] {
+    #[doc(hidden)]
+    pub mod tests;
+  } else if #[cfg(test)] {
+    mod tests;
+  }
+}
+
 pub mod ecdsa;
 
 cfg_if::cfg_if! {

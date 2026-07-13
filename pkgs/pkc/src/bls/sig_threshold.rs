@@ -34,9 +34,9 @@ impl<S: BlsSchemeId + BlsScheme> BlsSignature<S> {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use crate::bls::tests::*;
   use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
   use crate::bls::{BlsSigShare, BlsSkShare};
+  use crate::tests::*;
 
   use alloc::{string::String, string::ToString, vec::Vec};
   use hex_conservative::DisplayHex;

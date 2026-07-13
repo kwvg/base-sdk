@@ -37,11 +37,6 @@ cfg_if::cfg_if! {
     mod sig_ops;
     mod sig_pop;
     mod sig_threshold;
-    #[cfg(test)]
-    #[allow(dead_code, reason = "temporary refactor artifact")]
-    #[expect(clippy::unwrap_used, clippy::panic, reason = "test code")]
-    mod tests;
-
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
     pub use share_ops::{BlsSigShare, BlsSkShare};

@@ -92,8 +92,8 @@ impl<S: BlsSchemeId + BlsScheme> fmt::Debug for BlsSecretKey<S> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::bls::tests::{self, decode_hex, VectorFile, SEED_0};
   use crate::bls::{BlsScChia, BlsScIetf};
+  use crate::tests::{self, decode_hex, VectorFile, SEED_0};
 
   use alloc::{string::String, vec::Vec};
   use hex_conservative::DisplayHex;

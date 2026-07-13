@@ -291,7 +291,7 @@ fn curve_rhs(x: &Fp2) -> Fp2 {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::bls::tests::{self, decode_hex, VectorFile};
+  use crate::tests::{self, decode_hex, VectorFile};
 
   use alloc::{string::String, vec::Vec};
   use hex_conservative::DisplayHex;

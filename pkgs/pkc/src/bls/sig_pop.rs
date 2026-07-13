@@ -40,8 +40,8 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::bls::tests::{SEED_0, SEED_1};
   use crate::bls::BlsScIetf;
+  use crate::tests::{SEED_0, SEED_1};
 
   #[test]
   fn proof_of_possession_roundtrip() {
