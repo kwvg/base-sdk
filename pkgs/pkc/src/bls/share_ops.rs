@@ -62,11 +62,91 @@ impl<S: BlsSchemeId + BlsScheme> BlsSkShare<S> {
   pub fn secret_key(&self) -> &BlsSecretKey<S> {
     &self.sk
   }
+
+  /// Derive this share's public key share.
+  pub fn public_key_share(&self) -> BlsPkShare<S> {
+    BlsPkShare {
+      id: self.id,
+      pk: self.sk.public_key(),
+    }
+  }
 }
 
 impl<S: BlsSchemeId + BlsScheme> Debug for BlsSkShare<S> {
   fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
     write!(f, "BlsSkShare(id={:?})", self.id)
+  }
+}
+
+/// Public key share of one threshold participant.
+pub struct BlsPkShare<S: BlsSchemeId + BlsScheme> {
+  id: Hash256,
+  pk: BlsPublicKey<S>,
+}
+
+impl<S: BlsSchemeId + BlsScheme> Clone for BlsPkShare<S> {
+  fn clone(&self) -> Self {
+    Self {
+      id: self.id,
+      pk: self.pk.clone(),
+    }
+  }
+}
+
+impl<S: BlsSchemeId + BlsScheme> PartialEq for BlsPkShare<S> {
+  fn eq(&self, other: &Self) -> bool {
+    self.id == other.id && self.pk == other.pk
+  }
+}
+
+impl<S: BlsSchemeId + BlsScheme> Eq for BlsPkShare<S> {}
+
+impl<S: BlsSchemeId + BlsScheme> BlsPkShare<S> {
+  /// Construct a public key share from an ID and a public key.
+  pub fn new(id: Hash256, pk: BlsPublicKey<S>) -> Self {
+    Self { id, pk }
+  }
+
+  /// Derive a participant's public key share by evaluating the
+  /// master public key polynomial at the participant id
+  /// (dashbls `Threshold::PublicKeyShare`).
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidVerificationVector` if fewer than 2 master
+  /// keys are given, or `InvalidShareId` if the id reduces to
+  /// zero in the scalar field.
+  pub fn derive(master_pks: &[&BlsPublicKey<S>], id: Hash256) -> Result<Self, BlsError> {
+    BlsPublicKey::derive_share(master_pks, &id).map(|pk| Self { id, pk })
+  }
+
+  /// Participant identifier (32-byte hash).
+  pub fn id(&self) -> &Hash256 {
+    &self.id
+  }
+
+  /// The underlying public key.
+  pub fn public_key(&self) -> &BlsPublicKey<S> {
+    &self.pk
+  }
+
+  /// Verify a signature share against this public key share.
+  ///
+  /// # Errors
+  ///
+  /// Returns `ShareIdMismatch` when the shares carry different
+  /// participant ids, or a verification error from the scheme.
+  pub fn verify(&self, share: &BlsSigShare<S>, msg: &[u8]) -> Result<(), BlsError> {
+    if self.id != share.id {
+      return Err(BlsError::ShareIdMismatch);
+    }
+    share.sig.verify(msg, &self.pk)
+  }
+}
+
+impl<S: BlsSchemeId + BlsScheme> Debug for BlsPkShare<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    write!(f, "BlsPkShare(id={:?})", self.id)
   }
 }
 
@@ -99,6 +179,15 @@ impl<S: BlsSchemeId + BlsScheme> BlsSigShare<S> {
   /// The underlying signature.
   pub fn signature(&self) -> &BlsSignature<S> {
     &self.sig
+  }
+
+  /// Verify this signature share against a public key share.
+  ///
+  /// # Errors
+  ///
+  /// As [`BlsPkShare::verify`].
+  pub fn verify(&self, pk_share: &BlsPkShare<S>, msg: &[u8]) -> Result<(), BlsError> {
+    pk_share.verify(self, msg)
   }
 }
 
@@ -172,6 +261,35 @@ mod tests {
   use hex_literal::hex;
   use rand_core::OsRng;
   use rstest::*;
+
+  fn assert_pk_share_verifies_sig_share<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let ids = sequential_ids(4);
+    let shares = sk.split(3, &ids, &mut OsRng).unwrap();
+
+    let sig_share = shares[1].sign(&MSG_DEADBEEF).unwrap();
+    let pk_share = shares[1].public_key_share();
+    assert!(pk_share.verify(&sig_share, &MSG_DEADBEEF).is_ok());
+    assert!(sig_share.verify(&pk_share, &MSG_DEADBEEF).is_ok());
+    assert!(pk_share.verify(&sig_share, &test_msg(9)).is_err());
+
+    // A share from another participant must not verify, and
+    // mismatched ids are rejected outright.
+    let other = shares[2].sign(&MSG_DEADBEEF).unwrap();
+    assert_eq!(
+      pk_share.verify(&other, &MSG_DEADBEEF).unwrap_err(),
+      crate::bls::BlsError::ShareIdMismatch
+    );
+    let forged = crate::bls::BlsSigShare::<S>::new(*pk_share.id(), other.signature().clone());
+    assert!(pk_share.verify(&forged, &MSG_DEADBEEF).is_err());
+  }
+
+  #[rstest]
+  #[case::chia(assert_pk_share_verifies_sig_share::<BlsScChia>)]
+  #[case::ietf(assert_pk_share_verifies_sig_share::<BlsScIetf>)]
+  fn pk_share_verifies_sig_share(#[case] assertion: fn()) {
+    assertion();
+  }
 
   /// BLS12-381 scalar field order r, big-endian.
   const GROUP_ORDER: [u8; 32] = hex!(

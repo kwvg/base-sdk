@@ -41,6 +41,8 @@ pub enum BlsError {
   InvalidVerificationVector,
   /// A message repeats in a basic-scheme aggregate verification.
   DuplicateMessage,
+  /// Share operands carry different participant ids.
+  ShareIdMismatch,
   /// plaintext length is not a multiple of 16
   InvalidPlaintextLength,
   /// AES decryption failed
@@ -68,6 +70,7 @@ impl Display for BlsError {
       Self::InvalidShareId => write!(f, "share id reduces to zero in the scalar field"),
       Self::InvalidVerificationVector => write!(f, "verification vector needs at least 2 elements"),
       Self::DuplicateMessage => write!(f, "duplicate message in basic scheme aggregate"),
+      Self::ShareIdMismatch => write!(f, "share operands carry different participant ids"),
       Self::InvalidPlaintextLength => write!(f, "plaintext length is not a multiple of 16"),
       Self::DecryptionFailed => write!(f, "AES decryption failed"),
       Self::IndexOutOfRange => write!(f, "recipient index out of range"),

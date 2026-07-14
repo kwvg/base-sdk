@@ -24,7 +24,7 @@ pub use ies_bytes::{BlsIesBytes, BlsIesMultiBytes, BLS_IES_IV_LEN};
 pub use public_bytes::{BlsPkBytes, BLS_PK_LEN};
 pub use schemes::{BlsScChia, BlsScIetf, BlsSchemeId};
 pub use secret_bytes::{BlsSkBytes, BLS_SK_LEN};
-pub use share_bytes::{BlsSigShareBytes, BlsSkShareBytes};
+pub use share_bytes::{BlsPkShareBytes, BlsSigShareBytes, BlsSkShareBytes};
 pub use sig_bytes::{BlsSigBytes, BLS_SIG_LEN};
 
 cfg_if! {
@@ -50,7 +50,7 @@ cfg_if! {
     pub use scheme_ops::BlsScheme;
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
-    pub use share_ops::{BlsSigShare, BlsSkShare};
+    pub use share_ops::{BlsPkShare, BlsSigShare, BlsSkShare};
     pub use sig_basic::BlsSignature;
     pub use sig_ops::BlsSigId;
   }

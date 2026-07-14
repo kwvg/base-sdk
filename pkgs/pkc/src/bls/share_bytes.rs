@@ -6,6 +6,7 @@
 
 //! Unvalidated byte bags for BLS threshold shares.
 
+use crate::bls::public_bytes::BlsPkBytes;
 use crate::bls::secret_bytes::BlsSkBytes;
 use crate::bls::sig_bytes::BlsSigBytes;
 use crate::bls::BlsSchemeId;
@@ -67,6 +68,69 @@ impl<S: BlsSchemeId> PartialEq for BlsSkShareBytes<S> {
 }
 
 impl<S: BlsSchemeId> Eq for BlsSkShareBytes<S> {}
+
+/// Unvalidated public-key share bytes.
+pub struct BlsPkShareBytes<S: BlsSchemeId> {
+  id: Hash256,
+  pk: BlsPkBytes<S>,
+  _scheme: PhantomData<S>,
+}
+
+impl<S: BlsSchemeId> BlsPkShareBytes<S> {
+  /// Construct from an id and public-key bytes.
+  pub fn new(id: Hash256, pk: BlsPkBytes<S>) -> Self {
+    Self {
+      id,
+      pk,
+      _scheme: PhantomData,
+    }
+  }
+
+  /// Participant identifier.
+  pub fn id(&self) -> &Hash256 {
+    &self.id
+  }
+
+  /// The inner public-key bytes.
+  pub fn pk(&self) -> &BlsPkBytes<S> {
+    &self.pk
+  }
+}
+
+impl<S: BlsSchemeId> Clone for BlsPkShareBytes<S> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<S: BlsSchemeId> Copy for BlsPkShareBytes<S> {}
+
+impl<S: BlsSchemeId> Debug for BlsPkShareBytes<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    write!(f, "BlsPkShareBytes<{}>(id={:?})", S::LABEL, self.id)
+  }
+}
+
+impl<S: BlsSchemeId> Display for BlsPkShareBytes<S> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    write!(f, "BlsPkShareBytes<{}>(id={})", S::LABEL, self.id)
+  }
+}
+
+impl<S: BlsSchemeId> PartialEq for BlsPkShareBytes<S> {
+  fn eq(&self, other: &Self) -> bool {
+    self.id == other.id && self.pk == other.pk
+  }
+}
+
+impl<S: BlsSchemeId> Eq for BlsPkShareBytes<S> {}
+
+impl<S: BlsSchemeId> Hash for BlsPkShareBytes<S> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.id.hash(state);
+    self.pk.as_bytes().hash(state);
+  }
+}
 
 /// Unvalidated signature share bytes.
 pub struct BlsSigShareBytes<S: BlsSchemeId> {
