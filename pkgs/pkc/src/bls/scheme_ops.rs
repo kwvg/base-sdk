@@ -42,7 +42,7 @@ pub trait BlsScheme: BlsSchemeId {
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError>;
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96];
 
-  fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Self::InnerSig;
+  fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError>;
   fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: BlsSigId) -> Result<Self::InnerSig, BlsError>;
   fn verify(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk) -> Result<(), BlsError>;
   fn verify_with(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk, scheme: BlsSigId) -> Result<(), BlsError>;

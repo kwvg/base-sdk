@@ -23,6 +23,8 @@ pub enum BlsError {
   InvalidSignature,
   /// signature verification failed
   VerifyFailed,
+  /// message length not supported by the scheme
+  InvalidMessageLength,
   /// no items provided for aggregation
   EmptyAggregation,
   /// public key and message counts do not match
@@ -51,6 +53,7 @@ impl Display for BlsError {
       Self::InvalidPublicKey => write!(f, "invalid public key bytes"),
       Self::InvalidSignature => write!(f, "invalid signature bytes"),
       Self::VerifyFailed => write!(f, "signature verification failed"),
+      Self::InvalidMessageLength => write!(f, "message length not supported by the scheme"),
       Self::EmptyAggregation => write!(f, "no items provided for aggregation"),
       Self::CountMismatch => write!(f, "public key and message counts differ"),
       Self::ThresholdTooLarge => write!(f, "threshold exceeds total or is zero"),

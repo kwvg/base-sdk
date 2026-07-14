@@ -63,10 +63,13 @@ impl BlsScheme for BlsScChia {
     chia_ser_g2(sig)
   }
 
-  fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Self::InnerSig {
+  fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError> {
     debug_assert!(blst_ffi::sk_check(sk), "zero secret key");
-    let h = chia_h2c::hash_to_g2(msg);
-    blst_ffi::sign_pk2_in_g1(sk, &h)
+    // dashbls signs 32-byte hashes only; the previous double-SHA
+    // fallback produced signatures verify could never accept.
+    let msg32: &[u8; 32] = msg.try_into().map_err(|_| BlsError::InvalidMessageLength)?;
+    let h = chia_h2c::hash_to_g2(msg32);
+    Ok(blst_ffi::sign_pk2_in_g1(sk, &h))
   }
 
   fn sign_with(_sk: &Self::InnerSk, _msg: &[u8], _scheme: BlsSigId) -> Result<Self::InnerSig, BlsError> {
@@ -81,7 +84,7 @@ impl BlsScheme for BlsScChia {
       return Err(BlsError::InvalidSignature);
     }
 
-    let msg32: &[u8; 32] = msg.try_into().map_err(|_| BlsError::VerifyFailed)?;
+    let msg32: &[u8; 32] = msg.try_into().map_err(|_| BlsError::InvalidMessageLength)?;
     let h_proj = chia_h2c::hash_to_g2(msg32);
     if blst_ffi::pairings_equal_with_g1_generator(sig, &h_proj, pk) {
       Ok(())
@@ -234,14 +237,12 @@ fn chia_ser_g2(p: &blst_p2_affine) -> [u8; 96] {
 }
 
 fn chia_deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, BlsError> {
+  // Both tag bits set can only encode infinity. The previous
+  // branch canonicalized 2^766 encodings to the infinity point;
+  // Dash Core rejects infinity signatures at parse
+  // (CBLSWrapper::SetBytes) and requires canonical encodings.
   if bytes[0] & 0xc0 == 0xc0 {
-    let mut ietf = [0u8; 96];
-    ietf[0] = 0xc0;
-    return if let Ok(out) = blst_ffi::p2_uncompress(&ietf) {
-      Ok(out)
-    } else {
-      Err(BlsError::InvalidSignature)
-    };
+    return Err(BlsError::InvalidSignature);
   }
 
   let sign = (bytes[0] >> 7) & 1;

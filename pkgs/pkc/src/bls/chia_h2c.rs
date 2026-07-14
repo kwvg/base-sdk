@@ -71,19 +71,14 @@ fn curve_b() -> Fp2 {
   Fp2::new(Fp::from_u64(4), Fp::from_u64(4))
 }
 
-/// Hash a message to a G2 point using the legacy Dash algorithm.
-pub(crate) fn hash_to_g2(msg: &[u8]) -> blst_p2 {
-  let msg32: [u8; 32] = if let Ok(arr) = msg.try_into() {
-    arr
-  } else {
-    Sha256::digest(Sha256::digest(msg)).into()
-  };
-
+/// Hash a 32-byte message to a G2 point using the legacy Dash
+/// algorithm.
+pub(crate) fn hash_to_g2(msg32: &[u8; 32]) -> blst_p2 {
   // Step 1: derive four field elements via SHA-256 with domain prefixes.
-  let t00 = hash_to_fp(&msg32, b"G2_0_c0");
-  let t01 = hash_to_fp(&msg32, b"G2_0_c1");
-  let t10 = hash_to_fp(&msg32, b"G2_1_c0");
-  let t11 = hash_to_fp(&msg32, b"G2_1_c1");
+  let t00 = hash_to_fp(msg32, b"G2_0_c0");
+  let t01 = hash_to_fp(msg32, b"G2_0_c1");
+  let t10 = hash_to_fp(msg32, b"G2_1_c0");
+  let t11 = hash_to_fp(msg32, b"G2_1_c1");
 
   // Step 2: form two Fp2 elements.
   let t0 = Fp2::new(t00, t01);

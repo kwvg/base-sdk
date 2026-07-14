@@ -55,8 +55,13 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
   }
 
   /// Sign a message using the default scheme.
-  pub fn sign(&self, msg: &[u8]) -> BlsSignature<S> {
-    BlsSignature(S::sign(&self.0, msg))
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidMessageLength` for Chia when `msg` is not
+  /// exactly 32 bytes.
+  pub fn sign(&self, msg: &[u8]) -> Result<BlsSignature<S>, BlsError> {
+    S::sign(&self.0, msg).map(BlsSignature)
   }
 
   /// Sign with a specific scheme variant.

@@ -15,7 +15,9 @@ use rand_core::OsRng;
 #[divan::bench(types = [BlsScChia, BlsScIetf])]
 fn sign<S: BlsScheme>(bencher: Bencher) {
   let sk = BlsSecretKey::<S>::generate(&test_ikm(1)).unwrap();
-  bencher.counter(ItemsCount::new(1u32)).bench(|| sk.sign(&test_msg(42)));
+  bencher
+    .counter(ItemsCount::new(1u32))
+    .bench(|| sk.sign(&test_msg(42)).unwrap());
 }
 
 /// Single signature verification.
@@ -23,7 +25,7 @@ fn sign<S: BlsScheme>(bencher: Bencher) {
 fn verify<S: BlsScheme>(bencher: Bencher) {
   let sk = BlsSecretKey::<S>::generate(&test_ikm(2)).unwrap();
   let msg = test_msg(99);
-  let sig = sk.sign(&msg);
+  let sig = sk.sign(&msg).unwrap();
   let pk = sk.public_key();
   bencher.counter(ItemsCount::new(1u32)).bench(|| sig.verify(&msg, &pk));
 }
@@ -49,7 +51,7 @@ fn aggregate_sig_n<S: BlsScheme>(bencher: Bencher, n: usize) {
   let sigs: Vec<_> = keys
     .iter()
     .enumerate()
-    .map(|(i, key)| key.sign(&test_msg(i as u8)))
+    .map(|(i, key)| key.sign(&test_msg(i as u8)).unwrap())
     .collect();
   let sig_refs: Vec<&BlsSignature<S>> = sigs.iter().collect();
   bencher
@@ -65,7 +67,11 @@ fn verify_n_individual<S: BlsScheme>(bencher: Bencher, n: usize) {
     .collect();
   let msgs: Vec<[u8; 32]> = (0..n).map(|i| test_msg(i as u8)).collect();
   let pks: Vec<_> = keys.iter().map(BlsSecretKey::public_key).collect();
-  let sigs: Vec<_> = keys.iter().zip(&msgs).map(|(key, msg)| key.sign(msg)).collect();
+  let sigs: Vec<_> = keys
+    .iter()
+    .zip(&msgs)
+    .map(|(key, msg)| key.sign(msg).unwrap())
+    .collect();
 
   bencher.counter(ItemsCount::new(n)).bench(|| {
     for i in 0..n {
@@ -82,7 +88,7 @@ fn fast_verify_n<S: BlsScheme>(bencher: Bencher, n: usize) {
     .collect();
   let msg = test_msg(42);
   let pks: Vec<_> = keys.iter().map(BlsSecretKey::public_key).collect();
-  let sigs: Vec<_> = keys.iter().map(|key| key.sign(&msg)).collect();
+  let sigs: Vec<_> = keys.iter().map(|key| key.sign(&msg).unwrap()).collect();
   let sig_refs: Vec<&BlsSignature<S>> = sigs.iter().collect();
   let aggregate = BlsSignature::<S>::aggregate(&sig_refs).unwrap();
   let pk_refs: Vec<_> = pks.iter().collect();
@@ -112,7 +118,10 @@ fn deser_pk<S: BlsScheme>(bencher: Bencher) {
 /// Signature serialization.
 #[divan::bench(types = [BlsScChia, BlsScIetf])]
 fn ser_sig<S: BlsScheme>(bencher: Bencher) {
-  let sig = BlsSecretKey::<S>::generate(&test_ikm(1)).unwrap().sign(&test_msg(0));
+  let sig = BlsSecretKey::<S>::generate(&test_ikm(1))
+    .unwrap()
+    .sign(&test_msg(0))
+    .unwrap();
   bencher.bench(|| sig.to_bytes());
 }
 
@@ -122,6 +131,7 @@ fn deser_sig<S: BlsScheme>(bencher: Bencher) {
   let bytes = BlsSecretKey::<S>::generate(&test_ikm(1))
     .unwrap()
     .sign(&test_msg(0))
+    .unwrap()
     .to_bytes();
   bencher.bench(|| BlsSignature::<S>::from_bytes(&bytes));
 }
@@ -144,7 +154,7 @@ fn recover_threshold<S: BlsScheme>(bencher: Bencher, threshold: usize) {
   let ids = sequential_ids(threshold * 2);
   let shares = sk.split(threshold, &ids, &mut OsRng).unwrap();
   let msg = test_msg(42);
-  let sig_shares: Vec<_> = shares.iter().map(|share| share.sign(&msg)).collect();
+  let sig_shares: Vec<_> = shares.iter().map(|share| share.sign(&msg).unwrap()).collect();
   let subset: Vec<&BlsSigShare<S>> = sig_shares.iter().take(threshold).collect();
   bencher
     .counter(ItemsCount::new(threshold))
@@ -163,7 +173,11 @@ mod ietf {
       .collect();
     let msgs: Vec<[u8; 32]> = (0..n).map(|i| test_msg(i as u8)).collect();
     let pks: Vec<_> = keys.iter().map(BlsSecretKey::public_key).collect();
-    let sigs: Vec<_> = keys.iter().zip(&msgs).map(|(key, msg)| key.sign(msg)).collect();
+    let sigs: Vec<_> = keys
+      .iter()
+      .zip(&msgs)
+      .map(|(key, msg)| key.sign(msg).unwrap())
+      .collect();
     let sig_refs: Vec<&BlsSignature<BlsScIetf>> = sigs.iter().collect();
     let aggregate = BlsSignature::<BlsScIetf>::aggregate(&sig_refs).unwrap();
     let pk_refs: Vec<_> = pks.iter().collect();
@@ -202,7 +216,7 @@ mod worker {
         let sk = BlsSecretKey::<S>::generate(&test_ikm(i as u8)).unwrap();
         let msg = test_msg(i as u8);
         let pk = sk.public_key();
-        let sig = sk.sign(&msg);
+        let sig = sk.sign(&msg).unwrap();
         (sig, pk, msg)
       })
       .collect()

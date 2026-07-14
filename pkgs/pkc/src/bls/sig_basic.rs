@@ -124,6 +124,62 @@ mod tests {
   use serde_json::{from_str, to_string};
 
   #[rstest]
+  fn rejects_infinity_signature() {
+    // Dash Core rejects the point at infinity as a signature at
+    // parse time (CBLSWrapper::SetBytes).
+    let mut inf = [0u8; 96];
+    inf[0] = 0xc0;
+    assert_eq!(
+      BlsSignature::<BlsScChia>::from_bytes(&inf).unwrap_err(),
+      BlsError::InvalidSignature
+    );
+    assert_eq!(
+      BlsSignature::<BlsScIetf>::from_bytes(&inf).unwrap_err(),
+      BlsError::InvalidSignature
+    );
+  }
+
+  #[rstest]
+  #[case::low_bits_set({ let mut b = [0u8; 96]; b[0] = 0xc1; b })]
+  #[case::tail_nonzero({ let mut b = [0u8; 96]; b[0] = 0xc0; b[95] = 0x01; b })]
+  #[case::all_ones([0xffu8; 96])]
+  fn rejects_non_canonical_infinity_signature(#[case] bytes: [u8; 96]) {
+    assert_eq!(
+      BlsSignature::<BlsScChia>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidSignature
+    );
+    assert_eq!(
+      BlsSignature::<BlsScIetf>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidSignature
+    );
+  }
+
+  #[rstest]
+  #[case::empty(&[])]
+  #[case::short(&[0x42; 31])]
+  #[case::long(&[0x42; 33])]
+  fn chia_rejects_non_32_byte_message(#[case] msg: &[u8]) {
+    // dashbls signs and verifies 32-byte hashes only.
+    let sk = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
+    assert_eq!(sk.sign(msg).unwrap_err(), BlsError::InvalidMessageLength);
+
+    let sig = sk.sign(&MSG_DEADBEEF).unwrap();
+    assert_eq!(
+      sig.verify(msg, &sk.public_key()).unwrap_err(),
+      BlsError::InvalidMessageLength
+    );
+  }
+
+  #[rstest]
+  fn ietf_signs_any_message_length() {
+    let sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
+    for msg in [&[][..], &[0x42; 3][..], &[0x42; 64][..]] {
+      let sig = sk.sign(msg).unwrap();
+      assert!(sig.verify(msg, &sk.public_key()).is_ok());
+    }
+  }
+
+  #[rstest]
   fn serialization_formats_match_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let vecs = bls_sig_serialization(&corpus, "sig_serialization");
@@ -143,12 +199,12 @@ mod tests {
   #[rstest]
   fn serde_roundtrip() {
     let chia_sk = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
-    let chia = chia_sk.sign(&MSG_DEADBEEF);
+    let chia = chia_sk.sign(&MSG_DEADBEEF).unwrap();
     let json = to_string(&chia).unwrap();
     assert_eq!(from_str::<BlsSignature<BlsScChia>>(&json).unwrap(), chia);
 
     let ietf_sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
-    let ietf = ietf_sk.sign(&MSG_DEADBEEF);
+    let ietf = ietf_sk.sign(&MSG_DEADBEEF).unwrap();
     let json = to_string(&ietf).unwrap();
     assert_eq!(from_str::<BlsSignature<BlsScIetf>>(&json).unwrap(), ietf);
   }
@@ -157,7 +213,10 @@ mod tests {
   fn signatures_differ_across_schemes() {
     let chia = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
     let ietf = BlsSecretKey::<BlsScIetf>::from_bytes(&chia.to_bytes()).unwrap();
-    assert_ne!(chia.sign(&MSG_DEADBEEF).to_bytes(), ietf.sign(&MSG_DEADBEEF).to_bytes());
+    assert_ne!(
+      chia.sign(&MSG_DEADBEEF).unwrap().to_bytes(),
+      ietf.sign(&MSG_DEADBEEF).unwrap().to_bytes()
+    );
   }
 
   #[rstest]

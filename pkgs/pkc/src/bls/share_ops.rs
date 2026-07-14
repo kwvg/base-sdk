@@ -46,11 +46,16 @@ impl<S: BlsSchemeId + BlsScheme> BlsSkShare<S> {
   }
 
   /// Sign a message, producing a signature share.
-  pub fn sign(&self, msg: &[u8]) -> BlsSigShare<S> {
-    BlsSigShare {
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidMessageLength` for Chia when `msg` is not
+  /// exactly 32 bytes.
+  pub fn sign(&self, msg: &[u8]) -> Result<BlsSigShare<S>, BlsError> {
+    Ok(BlsSigShare {
       id: self.id,
-      sig: self.sk.sign(msg),
-    }
+      sig: self.sk.sign(msg)?,
+    })
   }
 
   /// The underlying secret key.
@@ -366,7 +371,7 @@ mod tests {
       let sk_share = BlsSecretKey::<S>::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
       let msg = hex_to_32(c[hash_field].as_str().unwrap());
 
-      let sig = sk_share.sign(&msg);
+      let sig = sk_share.sign(&msg).unwrap();
       let pk = sk_share.public_key();
       assert!(
         sig.verify(&msg, &pk).is_ok(),

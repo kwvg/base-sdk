@@ -93,8 +93,8 @@ mod tests {
 
     let msg1 = hex!("070809");
     let msg2 = hex!("0a0b0c");
-    let sig1 = sk1.sign(&msg1);
-    let sig2 = sk2.sign(&msg2);
+    let sig1 = sk1.sign(&msg1).unwrap();
+    let sig2 = sk2.sign(&msg2).unwrap();
     let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
 
     let pk1 = sk1.public_key();

@@ -55,15 +55,17 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
-    Signature::from_bytes(b).map_err(|_| BlsError::InvalidSignature)
+    // sig_validate rejects infinity and non-subgroup points, so
+    // every InnerSig in circulation is a valid G2 group element.
+    Signature::sig_validate(b, true).map_err(|_| BlsError::InvalidSignature)
   }
 
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96] {
     sig.compress()
   }
 
-  fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Self::InnerSig {
-    sk.sign(msg, DST_BASIC, &[])
+  fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError> {
+    Ok(sk.sign(msg, DST_BASIC, &[]))
   }
 
   fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: BlsSigId) -> Result<Self::InnerSig, BlsError> {
@@ -249,7 +251,7 @@ mod tests {
       "164adbd0a864370a7c222a2768d7704d"
       "a254f1bf1823665bc2361f9dd8c00e99"
     );
-    let sig = BlsScIetf::sign(&sk, &msg);
+    let sig = BlsScIetf::sign(&sk, &msg).unwrap();
     assert_eq!(BlsScIetf::sig_to_bytes(&sig), expected);
     assert!(BlsScIetf::verify(&sig, &msg, &BlsScIetf::derive_pk(&sk)).is_ok());
   }

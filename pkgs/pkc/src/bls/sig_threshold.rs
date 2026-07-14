@@ -68,7 +68,9 @@ mod tests {
           .to_lower_hex_string();
         let idx = member_ids.iter().position(|member| member == &sid_display).unwrap();
         let sk = BlsSecretKey::<S>::from_bytes(&hex_to_32(commits[idx]["sk_share"].as_str().unwrap())).unwrap();
-        BlsSkShare::new(hash_from_hex(&sid_display), sk).sign(&quorum_hash)
+        BlsSkShare::new(hash_from_hex(&sid_display), sk)
+          .sign(&quorum_hash)
+          .unwrap()
       })
       .collect();
 
@@ -86,7 +88,9 @@ mod tests {
       .zip(member_ids.iter())
       .map(|(commit, member_id)| {
         let sk = BlsSecretKey::<S>::from_bytes(&hex_to_32(commit["sk_share"].as_str().unwrap())).unwrap();
-        BlsSkShare::new(hash_from_hex(member_id), sk).sign(&quorum_hash)
+        BlsSkShare::new(hash_from_hex(member_id), sk)
+          .sign(&quorum_hash)
+          .unwrap()
       })
       .collect();
     let all_refs: Vec<&BlsSigShare<S>> = all_shares.iter().collect();
@@ -116,7 +120,10 @@ mod tests {
       .iter()
       .map(|commit| BlsSecretKey::from_bytes(&hex_to_32(commit["sk_share"].as_str().unwrap())).unwrap())
       .collect();
-    let member_sigs: Vec<BlsSignature<S>> = secret_keys.iter().map(|sk| sk.sign(&commitment_hash)).collect();
+    let member_sigs: Vec<BlsSignature<S>> = secret_keys
+      .iter()
+      .map(|sk| sk.sign(&commitment_hash).unwrap())
+      .collect();
     let sig_refs: Vec<&BlsSignature<S>> = member_sigs.iter().collect();
     let aggregate = BlsSignature::aggregate(&sig_refs).unwrap();
     let member_pks: Vec<BlsPublicKey<S>> = secret_keys.iter().map(BlsSecretKey::public_key).collect();
