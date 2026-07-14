@@ -152,7 +152,7 @@ impl BlsScheme for BlsScChia {
     // with the point we already hold instead of re-deriving it
     // through a square root and subgroup check per key.
     let mut sorted: Vec<([u8; 48], blst_p1_affine)> = pks.iter().map(|pk| (Self::pk_to_bytes(pk), **pk)).collect();
-    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    sorted.sort_by_key(|pair| pair.0);
 
     let agg_pk = scheme_ops::weighted_g1_aggregate(&sorted)?;
     Self::verify(sig, msg, &agg_pk)

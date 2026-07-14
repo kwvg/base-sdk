@@ -207,7 +207,7 @@ impl BlsScheme for BlsScIetf {
         Ok((pk.compress(), aff))
       })
       .collect::<Result<_, BlsError>>()?;
-    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    sorted.sort_by_key(|pair| pair.0);
 
     let agg_pk_aff = scheme_ops::weighted_g1_aggregate(&sorted)?;
     let agg_pk_ser = blst_ffi::p1_affine_serialize(&agg_pk_aff);
