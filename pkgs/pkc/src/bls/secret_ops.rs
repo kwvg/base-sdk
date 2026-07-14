@@ -13,6 +13,8 @@ use super::sig_basic::BlsSignature;
 use super::{BlsSchemeId, BlsSigId};
 use crate::prelude::*;
 
+use zeroize::Zeroizing;
+
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// A BLS secret key (32-byte scalar), generic over the scheme.
@@ -31,8 +33,8 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
   ///
   /// # Errors
   ///
-  /// Returns `InvalidKeyMaterial` or `InvalidSecretKey` when `ikm`
-  /// is shorter than 32 bytes.
+  /// Returns `InvalidKeyMaterial` when `ikm` is shorter than 32
+  /// bytes.
   pub fn generate(ikm: &[u8]) -> Result<Self, BlsError> {
     S::generate(ikm).map(Self)
   }
@@ -42,9 +44,9 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
     S::sk_from_bytes(bytes).map(Self)
   }
 
-  /// Serialize to 32 bytes.
-  pub fn to_bytes(&self) -> [u8; 32] {
-    S::sk_to_bytes(&self.0)
+  /// Serialize to 32 bytes; the buffer is zeroised on drop.
+  pub fn to_bytes(&self) -> Zeroizing<[u8; 32]> {
+    Zeroizing::new(S::sk_to_bytes(&self.0))
   }
 
   /// Derive the corresponding public key.
@@ -99,7 +101,14 @@ mod tests {
   use crate::tests::SEED_0;
 
   use dash_dev::{bls_keygen, load_corpus_json};
+  use hex_literal::hex;
   use rstest::rstest;
+
+  /// BLS12-381 scalar field order r, big-endian.
+  const GROUP_ORDER: [u8; 32] = hex!(
+    "73eda753299d7d483339d80809a1d805"
+    "53bda402fffe5bfeffffffff00000001"
+  );
 
   fn assert_derive_pk<S: BlsSchemeId + BlsScheme>(corpus: &str) {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
@@ -122,6 +131,28 @@ mod tests {
   #[case::chia(assert_short_ikm_rejected::<BlsScChia>)]
   #[case::ietf(assert_short_ikm_rejected::<BlsScIetf>)]
   fn generate_rejects_short_ikm(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_sk_scalar_range<S: BlsSchemeId + BlsScheme>() {
+    let zero = [0u8; 32];
+    assert!(BlsSecretKey::<S>::from_bytes(&zero).is_err());
+    assert!(BlsSecretKey::<S>::from_bytes(&GROUP_ORDER).is_err());
+    assert!(BlsSecretKey::<S>::from_bytes(&[0xffu8; 32]).is_err());
+
+    let mut one = [0u8; 32];
+    one[31] = 1;
+    assert!(BlsSecretKey::<S>::from_bytes(&one).is_ok());
+
+    let mut order_minus_one = GROUP_ORDER;
+    order_minus_one[31] = 0;
+    assert!(BlsSecretKey::<S>::from_bytes(&order_minus_one).is_ok());
+  }
+
+  #[rstest]
+  #[case::chia(assert_sk_scalar_range::<BlsScChia>)]
+  #[case::ietf(assert_sk_scalar_range::<BlsScIetf>)]
+  fn rejects_out_of_range_scalars(#[case] assertion: fn()) {
     assertion();
   }
 

@@ -25,7 +25,7 @@ impl BlsScheme for BlsScChia {
   type InnerSig = blst_p2_affine;
 
   fn generate(ikm: &[u8]) -> Result<Self::InnerSk, BlsError> {
-    let sk = SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidSecretKey)?;
+    let sk = SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidKeyMaterial)?;
     let bytes = sk.to_bytes();
     Self::sk_from_bytes(&bytes)
   }

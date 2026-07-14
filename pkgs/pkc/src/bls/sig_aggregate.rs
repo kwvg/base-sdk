@@ -198,7 +198,7 @@ mod tests {
         let sks: Vec<BlsSecretKey<BlsScIetf>> = v.sks.iter().map(|sk| BlsSecretKey::from_bytes(sk).unwrap()).collect();
         let sk_refs: Vec<_> = sks.iter().collect();
         let agg = BlsSecretKey::aggregate(&sk_refs).unwrap();
-        assert_eq!(agg.to_bytes(), v.aggregate);
+        assert_eq!(*agg.to_bytes(), v.aggregate);
       }
     }
 
