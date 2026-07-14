@@ -161,6 +161,29 @@ mod tests {
     assertion();
   }
 
+  fn assert_sk_modulus_neighbourhood<S: BlsSchemeId + BlsScheme>() {
+    // Ported from bls-signatures 0.15.0 key.rs test_from_bytes
+    // (there in little-endian repr): the smallest integer greater
+    // than the modulus must be rejected while simple small
+    // scalars parse.
+    let mut order_plus_one = GROUP_ORDER;
+    order_plus_one[31] = 2;
+    assert!(BlsSecretKey::<S>::from_bytes(&order_plus_one).is_err());
+
+    for small in [10u8, 100] {
+      let mut bytes = [0u8; 32];
+      bytes[31] = small;
+      assert!(BlsSecretKey::<S>::from_bytes(&bytes).is_ok());
+    }
+  }
+
+  #[rstest]
+  #[case::chia(assert_sk_modulus_neighbourhood::<BlsScChia>)]
+  #[case::ietf(assert_sk_modulus_neighbourhood::<BlsScIetf>)]
+  fn rejects_scalars_just_past_the_modulus(#[case] assertion: fn()) {
+    assertion();
+  }
+
   fn assert_corrupted_first_byte_rejected<S: BlsSchemeId + BlsScheme>() {
     // dashbls test.cpp "Should throw on a bad private key":
     // overwriting the first byte of a valid key with 255 pushes
