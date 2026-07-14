@@ -91,6 +91,7 @@ impl<S: BlsSchemeId + BlsScheme> Debug for BlsSecretKey<S> {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
   use crate::bls::tests::{assert_short_ikm_rejected, assert_sk_roundtrip};

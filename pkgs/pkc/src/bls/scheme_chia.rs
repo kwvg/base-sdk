@@ -285,6 +285,7 @@ fn chia_y_c1_is_larger(y_c1: &[u8]) -> bool {
   y_c1.len() >= 48 && y_c1[..48] > HALF_P[..]
 }
 #[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
 

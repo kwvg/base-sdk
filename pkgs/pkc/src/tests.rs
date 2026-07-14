@@ -7,6 +7,7 @@
 //! Shared test and benchmark fixtures.
 
 #![allow(dead_code, reason = "fixtures are used according to enabled algorithms")]
+#![expect(clippy::unwrap_used, reason = "test code")]
 
 use crate::prelude::*;
 

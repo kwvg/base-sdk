@@ -110,6 +110,7 @@ type_cvrt!(for[S: BlsSchemeId + BlsScheme] TryFrom<BlsSigBytes<S>> for BlsSignat
 });
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
   use crate::bls::secret_ops::BlsSecretKey;
