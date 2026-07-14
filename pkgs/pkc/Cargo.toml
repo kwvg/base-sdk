@@ -61,6 +61,11 @@ std = [
   "rand_core/getrandom",
 ]
 bls = ["dep:blst", "dep:sha2", "dep:aes"]
+# Portable blst backend. Without this, blst's build script enables
+# ADX iff the BUILD host supports it, so x86_64 artifacts built on
+# modern CI SIGILL on pre-Broadwell CPUs. Costs ~20-30% on x86_64
+# field ops; no effect on aarch64.
+bls-portable = ["bls", "blst/portable"]
 k256 = ["dep:k256"]
 serde = ["dep:serde", "dash-types/serde"]
 full = ["k256", "bls", "serde", "std"]
