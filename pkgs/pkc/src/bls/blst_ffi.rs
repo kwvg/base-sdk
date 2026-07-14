@@ -229,6 +229,14 @@ pub(crate) fn sign_pk2_in_g1(sk: &blst_scalar, hash: &blst_p2) -> blst_p2_affine
   aff
 }
 
+/// Add two secret scalars mod the group order; `None` when the
+/// result fails blst's secret key check (i.e. is zero).
+pub(crate) fn sk_add_n_check(a: &blst_scalar, b: &blst_scalar) -> Option<blst_scalar> {
+  let mut out = blst_scalar::default();
+  let ok = unsafe { blst_sk_add_n_check(&mut out, a, b) };
+  ok.then_some(out)
+}
+
 pub(crate) fn sk_check(sk: &blst_scalar) -> bool {
   unsafe { blst_sk_check(sk) }
 }
@@ -261,17 +269,16 @@ impl Fr {
   }
 
   pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-    let mut bytes = Zeroizing::new([0u8; 32]);
-    loop {
-      rng.fill_bytes(&mut *bytes);
-      let mut scalar = scalar_from_bendian(&bytes);
-      if scalar_fr_check(&scalar) {
-        let out = Self::from_scalar(&scalar);
-        scalar.zeroize();
-        return out;
-      }
-      scalar.zeroize();
-    }
+    // Reducing 512 uniform bits mod r is uniform up to a 2^-256
+    // bias, replacing the rejection-sampling loop with a single
+    // branch-free reduction.
+    let mut bytes = Zeroizing::new([0u8; 64]);
+    rng.fill_bytes(bytes.as_mut());
+    let mut scalar = blst_scalar::default();
+    unsafe { blst_scalar_from_be_bytes(&mut scalar, bytes.as_ptr(), bytes.len()) };
+    let out = Self::from_scalar(&scalar);
+    scalar.zeroize();
+    out
   }
 
   pub(crate) fn to_scalar(self) -> blst_scalar {
@@ -464,6 +471,18 @@ impl Fp2 {
 
   pub(crate) fn is_zero(self) -> bool {
     self.0.fp[0].l == [0u64; 6] && self.0.fp[1].l == [0u64; 6]
+  }
+
+  /// Quadratic residue test via the Fp-norm Legendre symbol;
+  /// costs about one Fp exponentiation instead of the two a full
+  /// square root pays.
+  pub(crate) fn is_square(self) -> bool {
+    unsafe { blst_fp2_is_square(&self.0) }
+  }
+
+  /// Complex conjugate: `conj(a + b*u) = a - b*u`.
+  pub(crate) fn conj(self) -> Self {
+    self.with_c1(-self.c1())
   }
 
   pub(crate) fn square(self) -> Self {

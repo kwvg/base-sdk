@@ -108,15 +108,22 @@ pub(crate) fn reduce_share_ids(ids: &[&Hash256]) -> Result<Vec<Fr>, BlsError> {
 }
 
 /// Sum secret key scalars (mod group order) via blst FFI.
+///
+/// Uses `blst_sk_add_n_check`, which adds directly on scalars
+/// (no Montgomery-form round trip per key) and rejects a zero
+/// result.
 pub(crate) fn sum_sk_scalars(key_bytes: &[[u8; 32]]) -> Result<[u8; 32], ()> {
-  let mut acc = Fr::default();
-  for bytes in key_bytes {
-    acc = acc + Fr::from_bendian_scalar(bytes);
+  let (first, rest) = key_bytes.split_first().ok_or(())?;
+  let mut acc = blst_ffi::scalar_from_bendian(first);
+  for bytes in rest {
+    let mut term = blst_ffi::scalar_from_bendian(bytes);
+    let sum = blst_ffi::sk_add_n_check(&acc, &term);
+    term.zeroize();
+    acc.zeroize();
+    acc = sum.ok_or(())?;
   }
-  let mut out_scalar = acc.to_scalar();
-  let out_bytes = blst_ffi::bendian_from_scalar(&out_scalar);
+  let out_bytes = blst_ffi::bendian_from_scalar(&acc);
   acc.zeroize();
-  out_scalar.zeroize();
   Ok(out_bytes)
 }
 

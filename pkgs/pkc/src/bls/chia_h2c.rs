@@ -114,43 +114,35 @@ fn mul_cof_b12(p: &blst_p2) -> blst_p2 {
   t2 = blst_ffi::p2_add_or_double(&t2, &neg_p);
 
   // t3 = psi((x - 1)*P) = psi(t0 - P)
-  let mut t3 = blst_ffi::p2_add_or_double(&t0, &neg_p); // t0 - P
-                                                        // Normalize to affine for the psi map, then back.
-  let t3_aff = psi(&blst_ffi::p2_to_affine(&t3));
-  t3 = blst_ffi::p2_from_affine(&t3_aff);
+  let t3 = psi(&blst_ffi::p2_add_or_double(&t0, &neg_p));
 
   // t2 += t3
   t2 = blst_ffi::p2_add_or_double(&t2, &t3);
 
-  // t3 = psi^2(2*P)
-  let dbl_p = blst_ffi::p2_double(p);
-  let psi1 = psi(&blst_ffi::p2_to_affine(&dbl_p));
-  let psi2 = psi(&psi1);
-  t3 = blst_ffi::p2_from_affine(&psi2);
+  // t4 = psi^2(2*P)
+  let t4 = psi(&psi(&blst_ffi::p2_double(p)));
 
-  // result = t2 + t3
-  blst_ffi::p2_add_or_double(&t2, &t3)
+  // result = t2 + t4
+  blst_ffi::p2_add_or_double(&t2, &t4)
 }
 
-/// Frobenius endomorphism psi on E'(Fp2).
+/// Frobenius endomorphism psi on E'(Fp2), in Jacobian
+/// coordinates.
 ///
 /// `psi(x, y) = (conj(x) * PSI_COEFF_X, conj(y) * PSI_COEFF_Y)`
-///
-/// where `conj(a + b*u) = a - b*u`.
-fn psi(p: &blst_p2_affine) -> blst_p2_affine {
-  // Conjugate x and y (negate the c1 component of each).
-  let x = Fp2::from_raw(p.x).with_c1(-Fp::from_raw(p.x.fp[1]));
-  let y = Fp2::from_raw(p.y).with_c1(-Fp::from_raw(p.y.fp[1]));
+/// where `conj(a + b*u) = a - b*u`. Conjugation is a field
+/// automorphism, so with `Z' = conj(Z)` the map applies directly
+/// to `(X, Y, Z)` without normalizing the point (each affine
+/// round-trip previously cost an Fp2 inversion).
+fn psi(p: &blst_p2) -> blst_p2 {
+  let x = Fp2::from_raw(p.x).conj() * psi_coeff_x();
+  let y = Fp2::from_raw(p.y).conj() * psi_coeff_y();
+  let z = Fp2::from_raw(p.z).conj();
 
-  // Multiply by the Frobenius coefficients.
-  let psi_x = psi_coeff_x();
-  let psi_y = psi_coeff_y();
-  let rx = x * psi_x;
-  let ry = y * psi_y;
-
-  blst_p2_affine {
-    x: rx.into_raw(),
-    y: ry.into_raw(),
+  blst_p2 {
+    x: x.into_raw(),
+    y: y.into_raw(),
+    z: z.into_raw(),
   }
 }
 
@@ -240,33 +232,26 @@ fn sw_encode(t: &Fp2) -> blst_p2 {
   let mut x2 = -x1;
   x2 = x2.with_c0(x2.c0() - one);
 
-  // x3 = 1/w^2 + 1
-  let mut x3 = w.square().inverse();
-  x3 = x3.with_c0(x3.c0() + one);
-
+  // Candidate selection: the first x with a square RHS wins (x1,
+  // then x2, then x3, which SW guarantees is square when neither
+  // earlier candidate is). Residue tests cost about half a square
+  // root each, and only the chosen candidate pays the full root.
+  // x3 = 1/w^2 + 1 costs an Fp2 inversion, so it is only computed
+  // when actually selected.
   let rhs1 = curve_rhs(&x1);
   let rhs2 = curve_rhs(&x2);
 
-  let has_y1 = rhs1.sqrt().is_some();
-  let has_y2 = rhs2.sqrt().is_some();
-
-  let xx1: i32 = if has_y1 { 1 } else { -1 };
-  let xx2: i32 = if has_y2 { 1 } else { -1 };
-  let index = (((xx1 - 1) * xx2) % 3 + 3) % 3;
-
-  let (x, mut y) = if index == 0 {
-    let rhs = curve_rhs(&x1);
-    let y = rhs.sqrt().unwrap_or_else(Fp2::zero);
-    (x1, y)
-  } else if index == 1 {
-    let rhs = curve_rhs(&x2);
-    let y = rhs.sqrt().unwrap_or_else(Fp2::zero);
-    (x2, y)
+  let (x, rhs) = if rhs1.is_square() {
+    (x1, rhs1)
+  } else if rhs2.is_square() {
+    (x2, rhs2)
   } else {
-    let rhs = curve_rhs(&x3);
-    let y = rhs.sqrt().unwrap_or_else(Fp2::zero);
-    (x3, y)
+    let mut x3 = w.square().inverse();
+    x3 = x3.with_c0(x3.c0() + one);
+    let rhs3 = curve_rhs(&x3);
+    (x3, rhs3)
   };
+  let mut y = rhs.sqrt().unwrap_or_else(Fp2::zero);
 
   let ny = -y;
   let y_parity = y.c1_bendian() > ny.c1_bendian();
