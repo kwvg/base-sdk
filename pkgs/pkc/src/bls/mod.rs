@@ -14,6 +14,9 @@ mod schemes;
 mod secret_bytes;
 mod share_bytes;
 mod sig_bytes;
+#[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "test code")]
+mod tests;
 
 pub use error::BlsError;
 pub use public_bytes::{BlsPkBytes, BLS_PK_LEN};

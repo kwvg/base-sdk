@@ -110,28 +110,22 @@ type_cvrt!(for[S: BlsSchemeId + BlsScheme] TryFrom<BlsPkBytes<S>> for BlsPublicK
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::bls::{BlsScChia, BlsScIetf, BlsSecretKey};
-  use crate::tests::{SEED_0, SEED_1};
+  use crate::bls::tests::assert_dh_roundtrip;
+  use crate::bls::{BlsScChia, BlsScIetf};
 
   use dash_dev::{bls_pk_serialization, load_corpus_json};
+  use rstest::rstest;
   #[cfg(feature = "serde")]
   use serde_json::{from_str, to_string};
 
-  fn assert_dh_roundtrip<S: BlsSchemeId + BlsScheme>() {
-    let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
-    let sk1 = BlsSecretKey::<S>::generate(&SEED_1).unwrap();
-    let shared0 = BlsPublicKey::dh_exchange(&sk0, &sk1.public_key()).unwrap();
-    let shared1 = BlsPublicKey::dh_exchange(&sk1, &sk0.public_key()).unwrap();
-    assert_eq!(shared0, shared1);
+  #[rstest]
+  #[case::chia(assert_dh_roundtrip::<BlsScChia>)]
+  #[case::ietf(assert_dh_roundtrip::<BlsScIetf>)]
+  fn dh_exchange_roundtrip(#[case] assertion: fn()) {
+    assertion();
   }
 
-  #[test]
-  fn dh_exchange_roundtrip() {
-    assert_dh_roundtrip::<BlsScChia>();
-    assert_dh_roundtrip::<BlsScIetf>();
-  }
-
-  #[test]
+  #[rstest]
   fn serialization_formats_match_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let vecs = bls_pk_serialization(&corpus, "pk_serialization");
@@ -148,7 +142,7 @@ mod tests {
   }
 
   #[cfg(feature = "serde")]
-  #[test]
+  #[rstest]
   fn serde_roundtrip() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let v = bls_pk_serialization(&corpus, "pk_serialization")

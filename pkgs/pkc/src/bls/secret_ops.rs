@@ -93,16 +93,12 @@ impl<S: BlsSchemeId + BlsScheme> Debug for BlsSecretKey<S> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::bls::tests::{assert_short_ikm_rejected, assert_sk_roundtrip};
   use crate::bls::{BlsScChia, BlsScIetf};
   use crate::tests::SEED_0;
 
   use dash_dev::{bls_keygen, load_corpus_json};
-
-  fn assert_roundtrip<S: BlsSchemeId + BlsScheme>() {
-    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
-    let restored = BlsSecretKey::<S>::from_bytes(&sk.to_bytes()).unwrap();
-    assert_eq!(restored.public_key(), sk.public_key());
-  }
+  use rstest::rstest;
 
   fn assert_derive_pk<S: BlsSchemeId + BlsScheme>(corpus: &str) {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
@@ -114,28 +110,31 @@ mod tests {
     }
   }
 
-  #[test]
-  fn derive_public_key_matches_vectors() {
-    assert_derive_pk::<BlsScChia>("bls_chia_keygen");
-    assert_derive_pk::<BlsScIetf>("bls_ietf_keygen");
+  #[rstest]
+  #[case::chia(assert_derive_pk::<BlsScChia>, "bls_chia_keygen")]
+  #[case::ietf(assert_derive_pk::<BlsScIetf>, "bls_ietf_keygen")]
+  fn derive_public_key_matches_vectors(#[case] assertion: fn(&str), #[case] corpus: &str) {
+    assertion(corpus);
   }
 
-  #[test]
-  fn generate_rejects_short_ikm() {
-    assert!(BlsSecretKey::<BlsScChia>::generate(&[0u8; 31]).is_err());
-    assert!(BlsSecretKey::<BlsScIetf>::generate(&[0u8; 31]).is_err());
+  #[rstest]
+  #[case::chia(assert_short_ikm_rejected::<BlsScChia>)]
+  #[case::ietf(assert_short_ikm_rejected::<BlsScIetf>)]
+  fn generate_rejects_short_ikm(#[case] assertion: fn()) {
+    assertion();
   }
 
-  #[test]
+  #[rstest]
   fn public_key_formats_differ() {
     let chia = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
     let ietf = BlsSecretKey::<BlsScIetf>::from_bytes(&chia.to_bytes()).unwrap();
     assert_ne!(chia.public_key().to_bytes(), ietf.public_key().to_bytes());
   }
 
-  #[test]
-  fn serialization_roundtrip() {
-    assert_roundtrip::<BlsScChia>();
-    assert_roundtrip::<BlsScIetf>();
+  #[rstest]
+  #[case::chia(assert_sk_roundtrip::<BlsScChia>)]
+  #[case::ietf(assert_sk_roundtrip::<BlsScIetf>)]
+  fn serialization_roundtrip(#[case] assertion: fn()) {
+    assertion();
   }
 }

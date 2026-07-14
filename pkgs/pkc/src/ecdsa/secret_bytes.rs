@@ -10,7 +10,7 @@ use crate::prelude::*;
 
 use base58ck::{decode_check, encode_check};
 use cfg_if::cfg_if;
-use dash_types::{type_cvrt, MAX_SER_SIZE};
+use dash_types::type_cvrt;
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -127,7 +127,7 @@ cfg_if! {
     use bitcoin_hashes::sha256d;
     use dash_num::Hash256;
     use dash_types::codec::{ensure, BaseCodec, DecodeError, EncodeBuf, Hashable};
-    use dash_types::{impl_type, TypeId};
+    use dash_types::{impl_type, TypeId, MAX_SER_SIZE};
     use hex_literal::hex;
     use k256::{elliptic_curve::sec1::ToEncodedPoint, AffinePoint, SecretKey};
 

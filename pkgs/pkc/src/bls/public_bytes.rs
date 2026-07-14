@@ -204,24 +204,18 @@ cfg_if! {
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::{BlsPkBytes, BLS_PK_LEN};
+  use crate::bls::tests::PK_SAMPLE;
   use crate::bls::{BlsScChia, BlsScIetf};
   use crate::prelude::*;
 
-  use cfg_if::cfg_if;
   use dash_types::codec::TypeId;
-  use hex_literal::hex;
-  use rstest::*;
-
-  const SAMPLE: [u8; BLS_PK_LEN] = hex!(
-    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
-    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
-  );
+  use rstest::rstest;
 
   #[rstest]
   fn roundtrip() {
-    let pk = BlsPkBytes::<BlsScChia>::from_bytes(SAMPLE);
-    assert_eq!(*pk.as_bytes(), SAMPLE);
-    assert_eq!(pk.to_bytes(), SAMPLE);
+    let pk = BlsPkBytes::<BlsScChia>::from_bytes(PK_SAMPLE);
+    assert_eq!(*pk.as_bytes(), PK_SAMPLE);
+    assert_eq!(pk.to_bytes(), PK_SAMPLE);
   }
 
   #[rstest]
@@ -230,23 +224,18 @@ mod tests {
   }
 
   #[rstest]
-  fn display_is_hex() {
-    let pk = BlsPkBytes::<BlsScIetf>::from_bytes(SAMPLE);
-    let s = format!("{pk}");
-    assert_eq!(s.len(), BLS_PK_LEN * 2);
-  }
+  fn formatting() {
+    let pk = BlsPkBytes::<BlsScIetf>::from_bytes(PK_SAMPLE);
+    assert_eq!(format!("{pk}").len(), BLS_PK_LEN * 2);
 
-  #[rstest]
-  fn debug_includes_scheme() {
-    let pk = BlsPkBytes::<BlsScChia>::from_bytes([0u8; BLS_PK_LEN]);
-    let dbg = format!("{pk:?}");
-    assert!(dbg.starts_with("BlsPkBytes<Chia>("));
+    let pk = BlsPkBytes::<BlsScChia>::from_bytes(PK_SAMPLE);
+    assert!(format!("{pk:?}").starts_with("BlsPkBytes<Chia>("));
   }
 
   #[rstest]
   fn null_check() {
     assert!(BlsPkBytes::<BlsScChia>::default().is_null());
-    assert!(!BlsPkBytes::<BlsScChia>::from_bytes(SAMPLE).is_null());
+    assert!(!BlsPkBytes::<BlsScChia>::from_bytes(PK_SAMPLE).is_null());
   }
 
   #[rstest]
@@ -257,23 +246,17 @@ mod tests {
   }
 
   #[rstest]
-  fn from_array() {
-    let pk: BlsPkBytes<BlsScChia> = SAMPLE.into();
-    let arr: [u8; BLS_PK_LEN] = pk.into();
-    assert_eq!(arr, SAMPLE);
+  fn array_conversion() {
+    let pk: BlsPkBytes<BlsScChia> = PK_SAMPLE.into();
+    let array: [u8; BLS_PK_LEN] = pk.into();
+    assert_eq!(array, PK_SAMPLE);
   }
 
-  cfg_if! {
-    if #[cfg(feature = "serde")] {
-      use serde_json::{from_str, to_string};
-
-      #[rstest]
-      fn serde_roundtrip() {
-        let pk = BlsPkBytes::<BlsScChia>::from_bytes(SAMPLE);
-        let json = to_string(&pk).unwrap();
-        let decoded: BlsPkBytes<BlsScChia> = from_str(&json).unwrap();
-        assert_eq!(pk, decoded);
-      }
-    }
+  #[cfg(feature = "serde")]
+  #[rstest]
+  fn serde_roundtrip() {
+    let pk = BlsPkBytes::<BlsScChia>::from_bytes(PK_SAMPLE);
+    let json = serde_json::to_string(&pk).unwrap();
+    assert_eq!(serde_json::from_str::<BlsPkBytes<BlsScChia>>(&json).unwrap(), pk);
   }
 }

@@ -47,6 +47,10 @@ impl BlsSignature<BlsScIetf> {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
+  use crate::bls::tests::{
+    assert_aggregate_order_independent, assert_empty_aggregation_rejected, assert_fast_aggregate_verifies,
+    assert_secure_aggregate_rejects_naive,
+  };
   use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
   use crate::prelude::*;
   use crate::tests::*;
@@ -54,64 +58,34 @@ mod tests {
   use hex_literal::hex;
   use rstest::*;
 
-  type ChiaSk = BlsSecretKey<BlsScChia>;
   type IetfSk = BlsSecretKey<BlsScIetf>;
 
   #[rstest]
-  fn chia_aggregate_and_verify() {
-    let sk0 = ChiaSk::generate(&SEED_0).unwrap();
-    let sk1 = ChiaSk::generate(&SEED_1).unwrap();
-    let msg = [0xabu8; 32];
-    let sig1 = sk0.sign(&msg);
-    let sig2 = sk1.sign(&msg);
-    let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
-    let pk1 = sk0.public_key();
-    let pk2 = sk1.public_key();
-    assert!(agg.fast_verify_aggregates(&msg, &[&pk1, &pk2]).is_ok());
+  #[case::chia(assert_fast_aggregate_verifies::<BlsScChia>)]
+  #[case::ietf(assert_fast_aggregate_verifies::<BlsScIetf>)]
+  fn fast_aggregate_verifies(#[case] assertion: fn()) {
+    assertion();
   }
 
   #[rstest]
-  fn chia_aggregate_empty_fails() {
-    let empty_pk: Vec<&BlsPublicKey<BlsScChia>> = vec![];
-    assert!(BlsPublicKey::aggregate(&empty_pk).is_err());
-    let empty_sig: Vec<&BlsSignature<BlsScChia>> = vec![];
-    assert!(BlsSignature::aggregate(&empty_sig).is_err());
+  #[case::chia(assert_empty_aggregation_rejected::<BlsScChia>)]
+  #[case::ietf(assert_empty_aggregation_rejected::<BlsScIetf>)]
+  fn aggregate_empty_fails(#[case] assertion: fn()) {
+    assertion();
   }
 
   #[rstest]
-  fn chia_secure_verify_rejects_naive() {
-    let sk0 = ChiaSk::generate(&SEED_0).unwrap();
-    let sk1 = ChiaSk::generate(&SEED_1).unwrap();
-    let msg = [0xabu8; 32];
-    let sig1 = sk0.sign(&msg);
-    let sig2 = sk1.sign(&msg);
-    let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
-    let pk1 = sk0.public_key();
-    let pk2 = sk1.public_key();
-    assert!(agg.fast_verify_aggregates(&msg, &[&pk1, &pk2]).is_ok());
-    assert!(agg.secure_verify_aggregates(&msg, &[&pk1, &pk2]).is_err());
+  #[case::chia(assert_secure_aggregate_rejects_naive::<BlsScChia>)]
+  #[case::ietf(assert_secure_aggregate_rejects_naive::<BlsScIetf>)]
+  fn secure_verify_rejects_naive(#[case] assertion: fn()) {
+    assertion();
   }
 
   #[rstest]
-  fn chia_secure_aggregate_order_independent() {
-    let sk1 = ChiaSk::generate(&SEED_1).unwrap();
-    let sk2 = ChiaSk::generate(&[2u8; 32]).unwrap();
-    let sk3 = ChiaSk::generate(&[3u8; 32]).unwrap();
-
-    let msg = [0xffu8; 32];
-    let pk1 = sk1.public_key();
-    let pk2 = sk2.public_key();
-    let pk3 = sk3.public_key();
-    let sig1 = sk1.sign(&msg);
-    let sig2 = sk2.sign(&msg);
-    let sig3 = sk3.sign(&msg);
-
-    let agg_a = BlsSignature::aggregate(&[&sig1, &sig2, &sig3]).unwrap();
-    let agg_b = BlsSignature::aggregate(&[&sig3, &sig1, &sig2]).unwrap();
-
-    assert_eq!(agg_a.to_bytes(), agg_b.to_bytes());
-    assert!(agg_a.fast_verify_aggregates(&msg, &[&pk1, &pk2, &pk3]).is_ok());
-    assert!(agg_a.fast_verify_aggregates(&msg, &[&pk3, &pk1, &pk2]).is_ok());
+  #[case::chia(assert_aggregate_order_independent::<BlsScChia>)]
+  #[case::ietf(assert_aggregate_order_independent::<BlsScIetf>)]
+  fn aggregate_order_independent(#[case] assertion: fn()) {
+    assertion();
   }
 
   #[rstest]
@@ -122,14 +96,6 @@ mod tests {
     let pk2 = sk1.public_key();
     let agg = BlsPublicKey::aggregate(&[&pk1, &pk2]).unwrap();
     assert_eq!(agg.to_bytes().len(), 48);
-  }
-
-  #[rstest]
-  fn ietf_aggregate_empty_fails() {
-    let empty_pk: Vec<&BlsPublicKey<BlsScIetf>> = vec![];
-    assert!(BlsPublicKey::aggregate(&empty_pk).is_err());
-    let empty_sig: Vec<&BlsSignature<BlsScIetf>> = vec![];
-    assert!(BlsSignature::aggregate(&empty_sig).is_err());
   }
 
   #[rstest]
@@ -149,60 +115,14 @@ mod tests {
     assert!(agg.verify_aggregates(&msgs, &[&pk1, &pk2]).is_ok());
   }
 
-  #[rstest]
-  fn ietf_fast_verify_same_message() {
-    let sk0 = IetfSk::generate(&SEED_0).unwrap();
-    let sk1 = IetfSk::generate(&SEED_1).unwrap();
-    let msg = b"same message for both signers";
-    let sig1 = sk0.sign(msg);
-    let sig2 = sk1.sign(msg);
-    let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
-    let pk1 = sk0.public_key();
-    let pk2 = sk1.public_key();
-    assert!(agg.fast_verify_aggregates(msg, &[&pk1, &pk2]).is_ok());
-  }
-
-  #[rstest]
-  fn ietf_fast_verify_order_independent() {
-    let sk1 = IetfSk::generate(&SEED_1).unwrap();
-    let sk2 = IetfSk::generate(&[2u8; 32]).unwrap();
-    let sk3 = IetfSk::generate(&[3u8; 32]).unwrap();
-    let msg = b"order test";
-    let pk1 = sk1.public_key();
-    let pk2 = sk2.public_key();
-    let pk3 = sk3.public_key();
-    let sig1 = sk1.sign(msg);
-    let sig2 = sk2.sign(msg);
-    let sig3 = sk3.sign(msg);
-    let agg = BlsSignature::aggregate(&[&sig1, &sig2, &sig3]).unwrap();
-
-    assert!(agg.fast_verify_aggregates(msg, &[&pk1, &pk2, &pk3]).is_ok());
-    assert!(agg.fast_verify_aggregates(msg, &[&pk3, &pk1, &pk2]).is_ok());
-  }
-
-  #[rstest]
-  fn ietf_secure_verify_rejects_naive_aggregate() {
-    let sk0 = IetfSk::generate(&SEED_0).unwrap();
-    let sk1 = IetfSk::generate(&SEED_1).unwrap();
-
-    let msg = b"secure test";
-    let sig1 = sk0.sign(msg);
-    let sig2 = sk1.sign(msg);
-    let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
-    let pk1 = sk0.public_key();
-    let pk2 = sk1.public_key();
-
-    assert!(agg.fast_verify_aggregates(msg, &[&pk1, &pk2]).is_ok());
-    assert!(agg.secure_verify_aggregates(msg, &[&pk1, &pk2]).is_err());
-  }
-
   mod kat {
     use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
     use crate::prelude::*;
 
     use dash_dev::{bls_aggregate_pk, bls_aggregate_sig, bls_aggregate_sk, bls_secure_aggregate, load_corpus_json};
+    use rstest::rstest;
 
-    #[test]
+    #[rstest]
     fn kat_chia_aggregate_pk() {
       let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_aggregate");
       let vecs = bls_aggregate_pk(&corpus, "aggregate_pk");
@@ -215,7 +135,7 @@ mod tests {
       }
     }
 
-    #[test]
+    #[rstest]
     fn kat_chia_aggregate_sig() {
       let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_aggregate");
       let vecs = bls_aggregate_sig(&corpus, "aggregate_sig");
@@ -232,7 +152,7 @@ mod tests {
       }
     }
 
-    #[test]
+    #[rstest]
     fn kat_chia_secure_verify_aggregates() {
       let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_secure_aggregate");
       let vecs = bls_secure_aggregate(&corpus, "secure_verify_aggregates");
@@ -251,7 +171,7 @@ mod tests {
       }
     }
 
-    #[test]
+    #[rstest]
     fn kat_ietf_aggregate_pk() {
       let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_aggregate");
       let vecs = bls_aggregate_pk(&corpus, "aggregate_pk");
@@ -264,7 +184,7 @@ mod tests {
       }
     }
 
-    #[test]
+    #[rstest]
     fn kat_ietf_aggregate_sig() {
       let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_aggregate");
       let vecs = bls_aggregate_sig(&corpus, "aggregate_sig");
@@ -281,7 +201,7 @@ mod tests {
       }
     }
 
-    #[test]
+    #[rstest]
     fn kat_ietf_aggregate_sk() {
       let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_aggregate");
       let vecs = bls_aggregate_sk(&corpus, "aggregate_sk");
@@ -294,7 +214,7 @@ mod tests {
       }
     }
 
-    #[test]
+    #[rstest]
     fn kat_ietf_secure_verify_aggregates() {
       let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_secure_aggregate");
       let vecs = bls_secure_aggregate(&corpus, "secure_verify_aggregates");

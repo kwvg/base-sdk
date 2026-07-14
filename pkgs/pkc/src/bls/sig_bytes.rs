@@ -203,26 +203,18 @@ cfg_if! {
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::{BlsSigBytes, BLS_SIG_LEN};
+  use crate::bls::tests::SIG_SAMPLE;
   use crate::bls::{BlsScChia, BlsScIetf};
   use crate::prelude::*;
 
-  use cfg_if::cfg_if;
   use dash_types::codec::TypeId;
-  use hex_literal::hex;
-  use rstest::*;
-
-  const SAMPLE: [u8; BLS_SIG_LEN] = hex!(
-    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
-    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
-    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
-    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
-  );
+  use rstest::rstest;
 
   #[rstest]
   fn roundtrip() {
-    let sig = BlsSigBytes::<BlsScChia>::from_bytes(SAMPLE);
-    assert_eq!(*sig.as_bytes(), SAMPLE);
-    assert_eq!(sig.to_bytes(), SAMPLE);
+    let sig = BlsSigBytes::<BlsScChia>::from_bytes(SIG_SAMPLE);
+    assert_eq!(*sig.as_bytes(), SIG_SAMPLE);
+    assert_eq!(sig.to_bytes(), SIG_SAMPLE);
   }
 
   #[rstest]
@@ -231,23 +223,18 @@ mod tests {
   }
 
   #[rstest]
-  fn display_is_hex() {
-    let sig = BlsSigBytes::<BlsScIetf>::from_bytes(SAMPLE);
-    let s = format!("{sig}");
-    assert_eq!(s.len(), BLS_SIG_LEN * 2);
-  }
+  fn formatting() {
+    let sig = BlsSigBytes::<BlsScIetf>::from_bytes(SIG_SAMPLE);
+    assert_eq!(format!("{sig}").len(), BLS_SIG_LEN * 2);
 
-  #[rstest]
-  fn debug_includes_scheme() {
-    let sig = BlsSigBytes::<BlsScChia>::from_bytes([0u8; BLS_SIG_LEN]);
-    let dbg = format!("{sig:?}");
-    assert!(dbg.starts_with("BlsSigBytes<Chia>("));
+    let sig = BlsSigBytes::<BlsScChia>::from_bytes(SIG_SAMPLE);
+    assert!(format!("{sig:?}").starts_with("BlsSigBytes<Chia>("));
   }
 
   #[rstest]
   fn null_check() {
     assert!(BlsSigBytes::<BlsScIetf>::default().is_null());
-    assert!(!BlsSigBytes::<BlsScIetf>::from_bytes(SAMPLE).is_null());
+    assert!(!BlsSigBytes::<BlsScIetf>::from_bytes(SIG_SAMPLE).is_null());
   }
 
   #[rstest]
@@ -258,23 +245,17 @@ mod tests {
   }
 
   #[rstest]
-  fn from_array() {
-    let sig: BlsSigBytes<BlsScIetf> = SAMPLE.into();
-    let arr: [u8; BLS_SIG_LEN] = sig.into();
-    assert_eq!(arr, SAMPLE);
+  fn array_conversion() {
+    let sig: BlsSigBytes<BlsScIetf> = SIG_SAMPLE.into();
+    let array: [u8; BLS_SIG_LEN] = sig.into();
+    assert_eq!(array, SIG_SAMPLE);
   }
 
-  cfg_if! {
-    if #[cfg(feature = "serde")] {
-      use serde_json::{from_str, to_string};
-
-      #[rstest]
-      fn serde_roundtrip() {
-        let sig = BlsSigBytes::<BlsScIetf>::from_bytes(SAMPLE);
-        let json = to_string(&sig).unwrap();
-        let decoded: BlsSigBytes<BlsScIetf> = from_str(&json).unwrap();
-        assert_eq!(sig, decoded);
-      }
-    }
+  #[cfg(feature = "serde")]
+  #[rstest]
+  fn serde_roundtrip() {
+    let sig = BlsSigBytes::<BlsScIetf>::from_bytes(SIG_SAMPLE);
+    let json = serde_json::to_string(&sig).unwrap();
+    assert_eq!(serde_json::from_str::<BlsSigBytes<BlsScIetf>>(&json).unwrap(), sig);
   }
 }

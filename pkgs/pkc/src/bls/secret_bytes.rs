@@ -148,21 +148,17 @@ mod tests {
   use crate::prelude::*;
 
   use dash_types::codec::TypeId;
-  use rstest::*;
+  use rstest::rstest;
 
   #[rstest]
-  fn debug_redacts() {
+  fn redaction() {
     let sk = BlsSkBytes::<BlsScChia>::from_bytes([0xff; BLS_SK_LEN]);
-    let dbg = format!("{sk:?}");
-    assert_eq!(dbg, "BlsSkBytes<Chia>(..)");
-    assert!(!dbg.contains("ff"));
-  }
+    let debug = format!("{sk:?}");
+    assert_eq!(debug, "BlsSkBytes<Chia>(..)");
+    assert!(!debug.contains("ff"));
 
-  #[rstest]
-  fn display_redacts() {
     let sk = BlsSkBytes::<BlsScIetf>::from_bytes([0xab; BLS_SK_LEN]);
-    let s = format!("{sk}");
-    assert!(!s.contains("ab"));
+    assert!(!format!("{sk}").contains("ab"));
   }
 
   #[rstest]
@@ -171,7 +167,7 @@ mod tests {
   }
 
   #[rstest]
-  fn constant_time_equality() {
+  fn equality() {
     let a = BlsSkBytes::<BlsScChia>::from_bytes([1u8; BLS_SK_LEN]);
     let b = BlsSkBytes::<BlsScChia>::from_bytes([1u8; BLS_SK_LEN]);
     let c = BlsSkBytes::<BlsScChia>::from_bytes([2u8; BLS_SK_LEN]);
@@ -188,17 +184,11 @@ mod tests {
   }
 
   #[rstest]
-  fn to_bytes_roundtrip() {
-    let bytes = [0x42u8; BLS_SK_LEN];
-    let sk = BlsSkBytes::<BlsScChia>::from_bytes(bytes);
-    assert_eq!(*sk.to_bytes(), bytes);
-    assert_eq!(*sk.as_bytes(), bytes);
-  }
-
-  #[rstest]
-  fn clone_is_independent() {
-    let a = BlsSkBytes::<BlsScIetf>::from_bytes([0x01; BLS_SK_LEN]);
-    let b = a.clone();
-    assert_eq!(a, b);
+  fn roundtrip() {
+    let expected = [0x42u8; BLS_SK_LEN];
+    let sk = BlsSkBytes::<BlsScChia>::from_bytes(expected);
+    assert_eq!(*sk.to_bytes(), expected);
+    assert_eq!(*sk.as_bytes(), expected);
+    assert_eq!(sk, sk.clone());
   }
 }

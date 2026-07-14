@@ -213,25 +213,12 @@ impl BlsScheme for BlsScIetf {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::tests::{MSG_DEADBEEF, SEED_0, SEED_1};
+  use crate::tests::{SEED_0, SEED_1};
 
-  use dash_dev::{bls_dh, bls_sign, load_corpus_json};
   use hex_literal::hex;
+  use rstest::rstest;
 
-  #[test]
-  fn dh_exchange_matches_vectors() {
-    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_dh");
-    let vecs = bls_dh(&corpus, "dh_exchange");
-
-    for v in &vecs {
-      let sk = BlsScIetf::sk_from_bytes(&v.sk).unwrap();
-      let peer = BlsScIetf::pk_from_bytes(&v.peer_pk).unwrap();
-      let shared = BlsScIetf::dh_exchange(&sk, &peer).unwrap();
-      assert_eq!(BlsScIetf::pk_to_bytes(&shared), v.shared);
-    }
-  }
-
-  #[test]
+  #[rstest]
   fn proof_of_possession_verifies_and_rejects_wrong_key() {
     let sk0 = BlsScIetf::generate(&SEED_0).unwrap();
     let sk1 = BlsScIetf::generate(&SEED_1).unwrap();
@@ -243,7 +230,7 @@ mod tests {
     assert!(BlsScIetf::verify_possession(&pk1, &proof).is_err());
   }
 
-  #[test]
+  #[rstest]
   fn pyecc_signature_matches() {
     let sk = BlsScIetf::sk_from_bytes(&hex!(
       "0101010101010101010101010101010101"
@@ -262,31 +249,5 @@ mod tests {
     let sig = BlsScIetf::sign(&sk, &msg);
     assert_eq!(BlsScIetf::sig_to_bytes(&sig), expected);
     assert!(BlsScIetf::verify(&sig, &msg, &BlsScIetf::derive_pk(&sk)).is_ok());
-  }
-
-  #[test]
-  fn signing_matches_vectors() {
-    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_sign");
-    let vecs = bls_sign(&corpus, "sign");
-
-    for v in &vecs {
-      let sk = BlsScIetf::sk_from_bytes(&v.sk).unwrap();
-      let sig = BlsScIetf::sign(&sk, &v.msg);
-      assert_eq!(BlsScIetf::sig_to_bytes(&sig), v.sig);
-    }
-  }
-
-  #[test]
-  fn signing_verifies_and_rejects_mismatches() {
-    let sk0 = BlsScIetf::generate(&SEED_0).unwrap();
-    let sk1 = BlsScIetf::generate(&SEED_1).unwrap();
-    let pk0 = BlsScIetf::derive_pk(&sk0);
-    let pk1 = BlsScIetf::derive_pk(&sk1);
-    let sig = BlsScIetf::sign(&sk0, &MSG_DEADBEEF);
-
-    assert!(BlsScIetf::verify(&sig, &MSG_DEADBEEF, &pk0).is_ok());
-    assert!(BlsScIetf::verify(&sig, b"wrong", &pk0).is_err());
-    assert!(BlsScIetf::verify(&sig, &MSG_DEADBEEF, &pk1).is_err());
-    assert_eq!(BlsScIetf::sign(&sk0, &MSG_DEADBEEF), sig);
   }
 }

@@ -283,24 +283,11 @@ fn fp2_neg(a: &blst_fp2) -> blst_fp2 {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::tests::{MSG_DEADBEEF, SEED_0, SEED_1};
 
-  use dash_dev::{bls_dh, bls_sig_serialization, bls_sign, load_corpus_json};
+  use dash_dev::{bls_sig_serialization, load_corpus_json};
+  use rstest::rstest;
 
-  #[test]
-  fn dh_exchange_matches_vectors() {
-    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_dh");
-    let vecs = bls_dh(&corpus, "dh_exchange");
-
-    for v in &vecs {
-      let sk = BlsScChia::sk_from_bytes(&v.sk).unwrap();
-      let peer = BlsScChia::pk_from_bytes(&v.peer_pk).unwrap();
-      let shared = BlsScChia::dh_exchange(&sk, &peer).unwrap();
-      assert_eq!(BlsScChia::pk_to_bytes(&shared), v.shared);
-    }
-  }
-
-  #[test]
+  #[rstest]
   fn signature_serialization_matches_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let vecs = bls_sig_serialization(&corpus, "sig_serialization");
@@ -309,31 +296,5 @@ mod tests {
       let sig = BlsScChia::sig_from_bytes(&v.legacy).unwrap();
       assert_eq!(BlsScChia::sig_to_bytes(&sig), v.legacy);
     }
-  }
-
-  #[test]
-  fn signing_matches_vectors() {
-    let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_sign");
-    let vecs = bls_sign(&corpus, "sign");
-
-    for v in &vecs {
-      let sk = BlsScChia::sk_from_bytes(&v.sk).unwrap();
-      let sig = BlsScChia::sign(&sk, &v.msg);
-      assert_eq!(BlsScChia::sig_to_bytes(&sig), v.sig);
-    }
-  }
-
-  #[test]
-  fn signing_verifies_and_rejects_mismatches() {
-    let sk0 = BlsScChia::generate(&SEED_0).unwrap();
-    let sk1 = BlsScChia::generate(&SEED_1).unwrap();
-    let pk0 = BlsScChia::derive_pk(&sk0);
-    let pk1 = BlsScChia::derive_pk(&sk1);
-    let sig = BlsScChia::sign(&sk0, &MSG_DEADBEEF);
-
-    assert!(BlsScChia::verify(&sig, &MSG_DEADBEEF, &pk0).is_ok());
-    assert!(BlsScChia::verify(&sig, &[0x42; 32], &pk0).is_err());
-    assert!(BlsScChia::verify(&sig, &MSG_DEADBEEF, &pk1).is_err());
-    assert_eq!(BlsScChia::sign(&sk0, &MSG_DEADBEEF), sig);
   }
 }

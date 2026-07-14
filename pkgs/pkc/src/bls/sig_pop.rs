@@ -43,14 +43,16 @@ mod tests {
   use crate::bls::BlsScIetf;
   use crate::tests::{SEED_0, SEED_1};
 
-  #[test]
+  use rstest::rstest;
+
+  #[rstest]
   fn proof_of_possession_roundtrip() {
     let sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
     let proof = sk.prove_possession().unwrap();
     assert!(sk.public_key().verify_possession(&proof).is_ok());
   }
 
-  #[test]
+  #[rstest]
   fn proof_of_possession_rejects_wrong_key() {
     let sk0 = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
     let sk1 = BlsSecretKey::<BlsScIetf>::generate(&SEED_1).unwrap();

@@ -160,74 +160,45 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use crate::bls::BlsSigShare;
-  use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
+  use crate::bls::scheme_ops::BlsScheme;
+  use crate::bls::tests::{
+    assert_insufficient_shares_rejected, assert_invalid_threshold_rejected, assert_threshold_roundtrip,
+  };
+  use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSchemeId, BlsSecretKey};
   use crate::prelude::*;
   use crate::tests::*;
 
   use dash_dev::load_corpus_json;
   use hex_conservative::DisplayHex;
-  use rand_core::OsRng;
   use rstest::*;
 
-  type ChiaSk = BlsSecretKey<BlsScChia>;
-  type IetfSk = BlsSecretKey<BlsScIetf>;
-  type ChiaPk = BlsPublicKey<BlsScChia>;
-  type IetfPk = BlsPublicKey<BlsScIetf>;
-  type ChiaSig = BlsSignature<BlsScChia>;
-  type IetfSig = BlsSignature<BlsScIetf>;
-
   #[rstest]
-  fn chia_threshold_split_recover() {
-    let sk = ChiaSk::generate(&SEED_0).unwrap();
-    let ids = sequential_ids(5);
-    let mut rng = OsRng;
-    let shares = sk.split(3, &ids, &mut rng).unwrap();
-    let msg32 = MSG_DEADBEEF;
-    let full_sig = sk.sign(&msg32);
-
-    let sig_shares: Vec<_> = shares.iter().map(|s| s.sign(&msg32)).collect();
-    let subset: Vec<&BlsSigShare<BlsScChia>> = vec![&sig_shares[0], &sig_shares[2], &sig_shares[4]];
-    let recovered = ChiaSig::recover(&subset).unwrap();
-    assert_eq!(recovered.to_bytes(), full_sig.to_bytes());
+  #[case::chia(assert_threshold_roundtrip::<BlsScChia>)]
+  #[case::ietf(assert_threshold_roundtrip::<BlsScIetf>)]
+  fn threshold_split_recover(#[case] assertion: fn()) {
+    assertion();
   }
 
   #[rstest]
-  fn ietf_threshold_split_recover() {
-    let sk = IetfSk::generate(&SEED_0).unwrap();
-    let ids = sequential_ids(5);
-    let mut rng = OsRng;
-    let shares = sk.split(3, &ids, &mut rng).unwrap();
-    assert_eq!(shares.len(), 5);
-
-    let msg = b"threshold test message";
-    let full_sig = sk.sign(msg);
-
-    let sig_shares: Vec<_> = shares.iter().map(|s| s.sign(msg)).collect();
-
-    let subset: Vec<&BlsSigShare<BlsScIetf>> = vec![&sig_shares[0], &sig_shares[2], &sig_shares[4]];
-    let recovered = IetfSig::recover(&subset).unwrap();
-    assert_eq!(recovered.to_bytes(), full_sig.to_bytes());
+  #[case::chia(assert_insufficient_shares_rejected::<BlsScChia>)]
+  #[case::ietf(assert_insufficient_shares_rejected::<BlsScIetf>)]
+  fn threshold_insufficient_shares(#[case] assertion: fn()) {
+    assertion();
   }
 
   #[rstest]
-  fn ietf_threshold_insufficient_shares() {
-    assert!(IetfSig::recover(&[]).is_err());
+  #[case::chia_zero(assert_invalid_threshold_rejected::<BlsScChia>, 0, 5)]
+  #[case::chia_empty(assert_invalid_threshold_rejected::<BlsScChia>, 1, 0)]
+  #[case::chia_above_total(assert_invalid_threshold_rejected::<BlsScChia>, 6, 5)]
+  #[case::ietf_zero(assert_invalid_threshold_rejected::<BlsScIetf>, 0, 5)]
+  #[case::ietf_empty(assert_invalid_threshold_rejected::<BlsScIetf>, 1, 0)]
+  #[case::ietf_above_total(assert_invalid_threshold_rejected::<BlsScIetf>, 6, 5)]
+  fn threshold_invalid_params(#[case] assertion: fn(usize, usize), #[case] threshold: usize, #[case] total: usize) {
+    assertion(threshold, total);
   }
 
-  #[rstest]
-  fn ietf_threshold_invalid_params() {
-    let sk = IetfSk::generate(&SEED_0).unwrap();
-    let mut rng = OsRng;
-    let ids = sequential_ids(5);
-    assert!(sk.split(0, &ids, &mut rng).is_err());
-    let ids6 = sequential_ids(5);
-    assert!(sk.split(6, &ids6, &mut rng).is_err());
-  }
-
-  #[test]
-  fn chia_llmq_contribute_vvec() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
+  fn assert_llmq_contribute_vvec<S: BlsSchemeId + BlsScheme>(corpus: &str) {
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
 
     for c in f["contribute"].as_array().unwrap() {
       let vvec: Vec<&str> = c["vvec"]
@@ -238,28 +209,40 @@ mod tests {
         .collect();
 
       for pk_hex in &vvec {
-        assert!(ChiaPk::from_bytes(&hex_to_48(pk_hex)).is_ok());
+        assert!(BlsPublicKey::<S>::from_bytes(&hex_to_48(pk_hex)).is_ok());
       }
     }
   }
 
-  #[test]
-  fn chia_llmq_contribute_sk_shares() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
+  #[rstest]
+  #[case::chia("bls_chia_llmq_100", assert_llmq_contribute_vvec::<BlsScChia>)]
+  #[case::ietf("bls_ietf_llmq_100", assert_llmq_contribute_vvec::<BlsScIetf>)]
+  fn llmq_contribute_vvec(#[case] corpus: &str, #[case] assertion: fn(&str)) {
+    assertion(corpus);
+  }
+
+  fn assert_llmq_contribute_sk_shares<S: BlsSchemeId + BlsScheme>(corpus: &str) {
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
     let n = f["inputs"]["n"].as_u64().unwrap() as usize;
 
     for c in f["contribute"].as_array().unwrap() {
       let shares = c["sk_shares"].as_array().unwrap();
       assert_eq!(shares.len(), n);
       for s in shares {
-        assert!(ChiaSk::from_bytes(&hex_to_32(s.as_str().unwrap())).is_ok());
+        assert!(BlsSecretKey::<S>::from_bytes(&hex_to_32(s.as_str().unwrap())).is_ok());
       }
     }
   }
 
-  #[test]
-  fn chia_llmq_verify_contributions() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
+  #[rstest]
+  #[case::chia("bls_chia_llmq_100", assert_llmq_contribute_sk_shares::<BlsScChia>)]
+  #[case::ietf("bls_ietf_llmq_100", assert_llmq_contribute_sk_shares::<BlsScIetf>)]
+  fn llmq_contribute_sk_shares(#[case] corpus: &str, #[case] assertion: fn(&str)) {
+    assertion(corpus);
+  }
+
+  fn assert_llmq_verify_contributions<S: BlsSchemeId + BlsScheme>(corpus: &str) {
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
     let member_ids: Vec<String> = f["inputs"]["member_ids"]
       .as_array()
       .unwrap()
@@ -279,19 +262,19 @@ mod tests {
         .zip(results.iter())
         .enumerate()
       {
-        let vvec: Vec<ChiaPk> = vvec_arr
+        let vvec: Vec<BlsPublicKey<S>> = vvec_arr
           .as_array()
           .unwrap()
           .iter()
-          .map(|v| ChiaPk::from_bytes(&hex_to_48(v.as_str().unwrap())).unwrap())
+          .map(|v| BlsPublicKey::<S>::from_bytes(&hex_to_48(v.as_str().unwrap())).unwrap())
           .collect();
-        let vvec_refs: Vec<&ChiaPk> = vvec.iter().collect();
+        let vvec_refs: Vec<&BlsPublicKey<S>> = vvec.iter().collect();
 
-        let sk_share = ChiaSk::from_bytes(&hex_to_32(sk_hex.as_str().unwrap())).unwrap();
+        let sk_share = BlsSecretKey::<S>::from_bytes(&hex_to_32(sk_hex.as_str().unwrap())).unwrap();
         let pk_from_share = sk_share.public_key();
 
         let member_id = hash_from_hex(&member_ids[member_idx]);
-        let pk_from_vvec = ChiaPk::derive_share(&vvec_refs, &member_id).unwrap();
+        let pk_from_vvec = BlsPublicKey::derive_share(&vvec_refs, &member_id).unwrap();
 
         let matches = pk_from_share.to_bytes() == pk_from_vvec.to_bytes();
         assert_eq!(
@@ -305,172 +288,15 @@ mod tests {
     }
   }
 
-  #[test]
-  fn chia_llmq_commit_quorum_key() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
-
-    let commits = f["commit"].as_array().unwrap();
-    let expected_qpk = commits[0]["quorum_public_key"].as_str().unwrap();
-
-    for c in commits {
-      assert_eq!(c["quorum_public_key"].as_str().unwrap(), expected_qpk);
-      let qvvec = c["quorum_vvec"].as_array().unwrap();
-      assert_eq!(qvvec[0].as_str().unwrap(), expected_qpk);
-    }
-
-    let contributions = f["contribute"].as_array().unwrap();
-    let member_pks: Vec<ChiaPk> = contributions
-      .iter()
-      .map(|c| ChiaPk::from_bytes(&hex_to_48(c["vvec"][0].as_str().unwrap())).unwrap())
-      .collect();
-    let pk_refs: Vec<&ChiaPk> = member_pks.iter().collect();
-    let agg_pk = ChiaPk::aggregate(&pk_refs).unwrap();
-    assert_eq!(agg_pk.to_bytes().to_lower_hex_string(), expected_qpk);
+  #[rstest]
+  #[case::chia("bls_chia_llmq_100", assert_llmq_verify_contributions::<BlsScChia>)]
+  #[case::ietf("bls_ietf_llmq_100", assert_llmq_verify_contributions::<BlsScIetf>)]
+  fn llmq_verify_contributions(#[case] corpus: &str, #[case] assertion: fn(&str)) {
+    assertion(corpus);
   }
 
-  #[test]
-  fn chia_llmq_commit_sk_share() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
-
-    for (member_idx, c) in f["commit"].as_array().unwrap().iter().enumerate() {
-      let expected_share = c["sk_share"].as_str().unwrap();
-
-      let mut received: Vec<ChiaSk> = Vec::new();
-      for contrib in f["contribute"].as_array().unwrap() {
-        let sk_hex = contrib["sk_shares"][member_idx].as_str().unwrap();
-        received.push(ChiaSk::from_bytes(&hex_to_32(sk_hex)).unwrap());
-      }
-
-      let refs: Vec<&ChiaSk> = received.iter().collect();
-      let agg = ChiaSk::aggregate(&refs).unwrap();
-      assert_eq!(agg.to_bytes().to_lower_hex_string(), expected_share);
-    }
-  }
-
-  #[test]
-  fn chia_llmq_commit_member_sig() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
-
-    for c in f["commit"].as_array().unwrap() {
-      let sk_share = ChiaSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
-      let commitment_hash = hex_to_32(c["commitment_hash"].as_str().unwrap());
-
-      let sig = sk_share.sign(&commitment_hash);
-      let pk = sk_share.public_key();
-      assert!(
-        sig.verify(&commitment_hash, &pk).is_ok(),
-        "member_sig failed self-verification at member {}",
-        c["member_idx"],
-      );
-    }
-  }
-
-  #[test]
-  fn chia_llmq_commit_quorum_sig_share() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_llmq_100");
-
-    for c in f["commit"].as_array().unwrap() {
-      let sk_share = ChiaSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
-      let quorum_hash = hex_to_32(c["quorum_hash"].as_str().unwrap());
-
-      let sig = sk_share.sign(&quorum_hash);
-      let pk = sk_share.public_key();
-      assert!(
-        sig.verify(&quorum_hash, &pk).is_ok(),
-        "quorum_sig_share failed self-verification at member {}",
-        c["member_idx"],
-      );
-    }
-  }
-
-  #[test]
-  fn ietf_llmq_contribute_vvec() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
-
-    let contributions = f["contribute"].as_array().unwrap();
-    for c in contributions {
-      let vvec: Vec<&str> = c["vvec"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap())
-        .collect();
-
-      for pk_hex in &vvec {
-        assert!(IetfPk::from_bytes(&hex_to_48(pk_hex)).is_ok());
-      }
-
-      assert!(IetfPk::from_bytes(&hex_to_48(vvec[0])).unwrap().to_bytes().len() == 48);
-    }
-  }
-
-  #[test]
-  fn ietf_llmq_contribute_sk_shares() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
-    let n = f["inputs"]["n"].as_u64().unwrap() as usize;
-
-    for c in f["contribute"].as_array().unwrap() {
-      let shares = c["sk_shares"].as_array().unwrap();
-      assert_eq!(shares.len(), n);
-
-      for s in shares {
-        let sk = IetfSk::from_bytes(&hex_to_32(s.as_str().unwrap()));
-        assert!(sk.is_ok());
-      }
-    }
-  }
-
-  #[test]
-  fn ietf_llmq_verify_contributions() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
-    let member_ids: Vec<String> = f["inputs"]["member_ids"]
-      .as_array()
-      .unwrap()
-      .iter()
-      .map(|v| v.as_str().unwrap().to_string())
-      .collect();
-
-    for v in f["verify"].as_array().unwrap() {
-      let member_idx = v["member_idx"].as_u64().unwrap() as usize;
-      let received_vvecs = v["received_vvecs"].as_array().unwrap();
-      let received_sks = v["received_sk_contributions"].as_array().unwrap();
-      let results = v["verification_results"].as_array().unwrap();
-
-      for (contrib_idx, ((vvec_arr, sk_hex), expected)) in received_vvecs
-        .iter()
-        .zip(received_sks.iter())
-        .zip(results.iter())
-        .enumerate()
-      {
-        let vvec: Vec<IetfPk> = vvec_arr
-          .as_array()
-          .unwrap()
-          .iter()
-          .map(|v| IetfPk::from_bytes(&hex_to_48(v.as_str().unwrap())).unwrap())
-          .collect();
-        let vvec_refs: Vec<&IetfPk> = vvec.iter().collect();
-
-        let sk_share = IetfSk::from_bytes(&hex_to_32(sk_hex.as_str().unwrap())).unwrap();
-        let pk_from_share = sk_share.public_key();
-
-        let member_id = hash_from_hex(&member_ids[member_idx]);
-        let pk_from_vvec = IetfPk::derive_share(&vvec_refs, &member_id).unwrap();
-
-        let matches = pk_from_share.to_bytes() == pk_from_vvec.to_bytes();
-        assert_eq!(
-          matches,
-          expected.as_bool().unwrap(),
-          "verification mismatch for member {} from contributor {}",
-          member_idx,
-          contrib_idx,
-        );
-      }
-    }
-  }
-
-  #[test]
-  fn ietf_llmq_commit_quorum_key() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
+  fn assert_llmq_commit_quorum_key<S: BlsSchemeId + BlsScheme>(corpus: &str) {
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
 
     let commits = f["commit"].as_array().unwrap();
     let expected_qpk = commits[0]["quorum_public_key"].as_str().unwrap();
@@ -482,36 +308,41 @@ mod tests {
         "quorum pk disagreement at member {}",
         c["member_idx"],
       );
-
       let qvvec = c["quorum_vvec"].as_array().unwrap();
       assert_eq!(qvvec[0].as_str().unwrap(), expected_qpk);
     }
 
     let contributions = f["contribute"].as_array().unwrap();
-    let member_pks: Vec<IetfPk> = contributions
+    let member_pks: Vec<BlsPublicKey<S>> = contributions
       .iter()
-      .map(|c| IetfPk::from_bytes(&hex_to_48(c["vvec"][0].as_str().unwrap())).unwrap())
+      .map(|c| BlsPublicKey::<S>::from_bytes(&hex_to_48(c["vvec"][0].as_str().unwrap())).unwrap())
       .collect();
-    let pk_refs: Vec<&IetfPk> = member_pks.iter().collect();
-    let agg_pk = IetfPk::aggregate(&pk_refs).unwrap();
+    let pk_refs: Vec<&BlsPublicKey<S>> = member_pks.iter().collect();
+    let agg_pk = BlsPublicKey::aggregate(&pk_refs).unwrap();
     assert_eq!(agg_pk.to_bytes().to_lower_hex_string(), expected_qpk);
   }
 
-  #[test]
-  fn ietf_llmq_commit_sk_share() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
+  #[rstest]
+  #[case::chia("bls_chia_llmq_100", assert_llmq_commit_quorum_key::<BlsScChia>)]
+  #[case::ietf("bls_ietf_llmq_100", assert_llmq_commit_quorum_key::<BlsScIetf>)]
+  fn llmq_commit_quorum_key(#[case] corpus: &str, #[case] assertion: fn(&str)) {
+    assertion(corpus);
+  }
+
+  fn assert_llmq_commit_sk_share<S: BlsSchemeId + BlsScheme>(corpus: &str) {
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
 
     for (member_idx, c) in f["commit"].as_array().unwrap().iter().enumerate() {
       let expected_share = c["sk_share"].as_str().unwrap();
 
-      let mut received: Vec<IetfSk> = Vec::new();
+      let mut received: Vec<BlsSecretKey<S>> = Vec::new();
       for contrib in f["contribute"].as_array().unwrap() {
         let sk_hex = contrib["sk_shares"][member_idx].as_str().unwrap();
-        received.push(IetfSk::from_bytes(&hex_to_32(sk_hex)).unwrap());
+        received.push(BlsSecretKey::<S>::from_bytes(&hex_to_32(sk_hex)).unwrap());
       }
 
-      let refs: Vec<&IetfSk> = received.iter().collect();
-      let agg = IetfSk::aggregate(&refs).unwrap();
+      let refs: Vec<&BlsSecretKey<S>> = received.iter().collect();
+      let agg = BlsSecretKey::aggregate(&refs).unwrap();
       assert_eq!(
         agg.to_bytes().to_lower_hex_string(),
         expected_share,
@@ -521,39 +352,62 @@ mod tests {
     }
   }
 
-  #[test]
-  fn ietf_llmq_commit_member_sig() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
+  #[rstest]
+  #[case::chia("bls_chia_llmq_100", assert_llmq_commit_sk_share::<BlsScChia>)]
+  #[case::ietf("bls_ietf_llmq_100", assert_llmq_commit_sk_share::<BlsScIetf>)]
+  fn llmq_commit_sk_share(#[case] corpus: &str, #[case] assertion: fn(&str)) {
+    assertion(corpus);
+  }
+
+  fn assert_llmq_commit_sig<S: BlsSchemeId + BlsScheme>(corpus: &str, hash_field: &str, label: &str) {
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
 
     for c in f["commit"].as_array().unwrap() {
-      let sk_share = IetfSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
-      let commitment_hash = hex_to_32(c["commitment_hash"].as_str().unwrap());
+      let sk_share = BlsSecretKey::<S>::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
+      let msg = hex_to_32(c[hash_field].as_str().unwrap());
 
-      let sig = sk_share.sign(&commitment_hash);
+      let sig = sk_share.sign(&msg);
       let pk = sk_share.public_key();
       assert!(
-        sig.verify(&commitment_hash, &pk).is_ok(),
-        "member_sig failed self-verification at member {}",
+        sig.verify(&msg, &pk).is_ok(),
+        "{} failed self-verification at member {}",
+        label,
         c["member_idx"],
       );
     }
   }
 
-  #[test]
-  fn ietf_llmq_commit_quorum_sig_share() {
-    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_ietf_llmq_100");
-
-    for c in f["commit"].as_array().unwrap() {
-      let sk_share = IetfSk::from_bytes(&hex_to_32(c["sk_share"].as_str().unwrap())).unwrap();
-      let quorum_hash = hex_to_32(c["quorum_hash"].as_str().unwrap());
-
-      let sig = sk_share.sign(&quorum_hash);
-      let pk = sk_share.public_key();
-      assert!(
-        sig.verify(&quorum_hash, &pk).is_ok(),
-        "quorum_sig_share failed self-verification at member {}",
-        c["member_idx"],
-      );
-    }
+  #[rstest]
+  #[case::chia_member(
+    "bls_chia_llmq_100",
+    assert_llmq_commit_sig::<BlsScChia>,
+    "commitment_hash",
+    "member_sig",
+  )]
+  #[case::chia_quorum(
+    "bls_chia_llmq_100",
+    assert_llmq_commit_sig::<BlsScChia>,
+    "quorum_hash",
+    "quorum_sig_share",
+  )]
+  #[case::ietf_member(
+    "bls_ietf_llmq_100",
+    assert_llmq_commit_sig::<BlsScIetf>,
+    "commitment_hash",
+    "member_sig",
+  )]
+  #[case::ietf_quorum(
+    "bls_ietf_llmq_100",
+    assert_llmq_commit_sig::<BlsScIetf>,
+    "quorum_hash",
+    "quorum_sig_share",
+  )]
+  fn llmq_commit_sig(
+    #[case] corpus: &str,
+    #[case] assertion: fn(&str, &str, &str),
+    #[case] hash_field: &str,
+    #[case] label: &str,
+  ) {
+    assertion(corpus, hash_field, label);
   }
 }

@@ -293,8 +293,9 @@ mod tests {
   use super::*;
 
   use dash_dev::{bls_hash, load_corpus_json};
+  use rstest::rstest;
 
-  #[test]
+  #[rstest]
   fn hash_to_fp_matches_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_hash_internals");
     let vecs = bls_hash(&corpus, "hash_internals");

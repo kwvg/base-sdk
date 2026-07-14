@@ -113,30 +113,16 @@ type_cvrt!(for[S: BlsSchemeId + BlsScheme] TryFrom<BlsSigBytes<S>> for BlsSignat
 mod tests {
   use super::*;
   use crate::bls::secret_ops::BlsSecretKey;
+  use crate::bls::tests::assert_signing_roundtrip;
   use crate::bls::{BlsScChia, BlsScIetf};
-  use crate::tests::{MSG_DEADBEEF, SEED_0, SEED_1};
+  use crate::tests::{MSG_DEADBEEF, SEED_0};
 
   use dash_dev::{bls_sig_serialization, load_corpus_json};
+  use rstest::rstest;
   #[cfg(feature = "serde")]
   use serde_json::{from_str, to_string};
 
-  fn assert_signing<S: BlsSchemeId + BlsScheme>() {
-    let sk0 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
-    let sk1 = BlsSecretKey::<S>::generate(&SEED_1).unwrap();
-    let sig = sk0.sign(&MSG_DEADBEEF);
-
-    assert!(sig.verify(&MSG_DEADBEEF, &sk0.public_key()).is_ok());
-
-    let mut wrong_msg = MSG_DEADBEEF;
-    wrong_msg[0] ^= 0xff;
-    assert!(sig.verify(&wrong_msg, &sk0.public_key()).is_err());
-    assert!(sig.verify(&MSG_DEADBEEF, &sk1.public_key()).is_err());
-
-    assert_eq!(sk0.sign(&MSG_DEADBEEF), sig);
-    assert_eq!(BlsSignature::<S>::from_bytes(&sig.to_bytes()).unwrap(), sig);
-  }
-
-  #[test]
+  #[rstest]
   fn serialization_formats_match_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let vecs = bls_sig_serialization(&corpus, "sig_serialization");
@@ -153,7 +139,7 @@ mod tests {
   }
 
   #[cfg(feature = "serde")]
-  #[test]
+  #[rstest]
   fn serde_roundtrip() {
     let chia_sk = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
     let chia = chia_sk.sign(&MSG_DEADBEEF);
@@ -166,16 +152,17 @@ mod tests {
     assert_eq!(from_str::<BlsSignature<BlsScIetf>>(&json).unwrap(), ietf);
   }
 
-  #[test]
+  #[rstest]
   fn signatures_differ_across_schemes() {
     let chia = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
     let ietf = BlsSecretKey::<BlsScIetf>::from_bytes(&chia.to_bytes()).unwrap();
     assert_ne!(chia.sign(&MSG_DEADBEEF).to_bytes(), ietf.sign(&MSG_DEADBEEF).to_bytes());
   }
 
-  #[test]
-  fn signing_roundtrip_and_rejections() {
-    assert_signing::<BlsScChia>();
-    assert_signing::<BlsScIetf>();
+  #[rstest]
+  #[case::chia(assert_signing_roundtrip::<BlsScChia>)]
+  #[case::ietf(assert_signing_roundtrip::<BlsScIetf>)]
+  fn signing_roundtrip_and_rejections(#[case] assertion: fn()) {
+    assertion();
   }
 }
