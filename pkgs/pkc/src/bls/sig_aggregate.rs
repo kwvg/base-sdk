@@ -34,6 +34,33 @@ impl<S: BlsSchemeId + BlsScheme> BlsSignature<S> {
     S::secure_verify_aggregates(&self.0, msg, &inner_pks)
   }
 
+  /// Securely aggregate signatures with the same public-key
+  /// weighting used by secure verification (dashbls
+  /// `CoreMPL::AggregateSecure`); the result verifies with
+  /// [`Self::secure_verify_aggregates`].
+  ///
+  /// # Errors
+  ///
+  /// Returns `CountMismatch` when the slices differ in length,
+  /// `EmptyAggregation` without inputs, or `InvalidSignature`
+  /// when the weighted sum degenerates to infinity.
+  pub fn aggregate_secure(sigs: &[&Self], pks: &[&BlsPublicKey<S>]) -> Result<Self, BlsError> {
+    let inner_pks: Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
+    let inner_sigs: Vec<&S::InnerSig> = sigs.iter().map(|s| &s.0).collect();
+    S::aggregate_sig_secure(&inner_pks, &inner_sigs).map(Self::from_inner)
+  }
+
+  /// Subtract a signature from this one (dashbls
+  /// `CBLSSignature::SubInsecure`).
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidSignature` when the difference is the point
+  /// at infinity (subtracting a signature from itself).
+  pub fn sub_insecure(&self, other: &Self) -> Result<Self, BlsError> {
+    S::sub_sig(&self.0, &other.0).map(Self::from_inner)
+  }
+
   /// Verify an aggregated signature over per-signer messages.
   ///
   /// The IETF scheme enforces the basic scheme's distinct
@@ -180,6 +207,67 @@ mod tests {
       agg.verify_aggregates(&short, &[&pk1, &pk2]).unwrap_err(),
       crate::bls::BlsError::InvalidMessageLength
     );
+  }
+
+  fn assert_aggregate_secure_matches_corpus<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>(
+    corpus: &str,
+  ) {
+    use crate::bls::BlsPublicKey;
+    use dash_dev::{bls_secure_aggregate, load_corpus_json};
+
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
+    for v in bls_secure_aggregate(&f, "secure_verify_aggregates") {
+      let pks: Vec<BlsPublicKey<S>> = v.pks.iter().map(|pk| BlsPublicKey::from_bytes(pk).unwrap()).collect();
+      let sigs: Vec<BlsSignature<S>> = v
+        .sigs
+        .iter()
+        .map(|sig| BlsSignature::from_bytes(sig).unwrap())
+        .collect();
+      let pk_refs: Vec<_> = pks.iter().collect();
+      let sig_refs: Vec<_> = sigs.iter().collect();
+
+      let agg = BlsSignature::aggregate_secure(&sig_refs, &pk_refs).unwrap();
+      assert_eq!(agg.to_bytes(), v.aggregate, "aggregate_secure diverges from corpus");
+      assert!(agg.secure_verify_aggregates(&v.msg, &pk_refs).is_ok());
+    }
+  }
+
+  #[rstest]
+  #[case::chia(
+    assert_aggregate_secure_matches_corpus::<BlsScChia>,
+    "bls_chia_secure_aggregate",
+  )]
+  #[case::ietf(
+    assert_aggregate_secure_matches_corpus::<BlsScIetf>,
+    "bls_ietf_secure_aggregate",
+  )]
+  fn aggregate_secure_matches_corpus(#[case] assertion: fn(&str), #[case] corpus: &str) {
+    assertion(corpus);
+  }
+
+  fn assert_sub_insecure_roundtrip<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>() {
+    let sk1 = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let sk2 = BlsSecretKey::<S>::generate(&SEED_1).unwrap();
+    let sig1 = sk1.sign(&MSG_DEADBEEF).unwrap();
+    let sig2 = sk2.sign(&MSG_DEADBEEF).unwrap();
+
+    // CBLSSignature::SubInsecure inverts aggregation.
+    let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
+    assert_eq!(agg.sub_insecure(&sig2).unwrap(), sig1);
+    assert_eq!(agg.sub_insecure(&sig1).unwrap(), sig2);
+
+    // Subtracting a signature from itself yields infinity.
+    assert_eq!(
+      sig1.sub_insecure(&sig1).unwrap_err(),
+      crate::bls::BlsError::InvalidSignature
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_sub_insecure_roundtrip::<BlsScChia>)]
+  #[case::ietf(assert_sub_insecure_roundtrip::<BlsScIetf>)]
+  fn sub_insecure_roundtrip(#[case] assertion: fn()) {
+    assertion();
   }
 
   #[rstest]

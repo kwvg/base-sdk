@@ -304,6 +304,58 @@ impl BlsScheme for BlsScIetf {
     Signature::deserialize(&ser).map_err(|_| BlsError::InvalidSignature)
   }
 
+  fn recover_pk_shares(ids: &[&Hash256], pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError> {
+    let affs: Vec<blst_p1_affine> = pks
+      .iter()
+      .map(|pk| blst_ffi::p1_deserialize(&pk.serialize()).map_err(|_| BlsError::InvalidPublicKey))
+      .collect::<Result<_, _>>()?;
+    let recovered = scheme_ops::recover_pk_shares_affine(ids, &affs)?;
+    // An infinity result is not a usable public key.
+    if blst_ffi::p1_affine_is_inf(&recovered) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    let ser = blst_ffi::p1_affine_serialize(&recovered);
+    PublicKey::deserialize(&ser).map_err(|_| BlsError::InvalidPublicKey)
+  }
+
+  fn aggregate_sig_secure(pks: &[&Self::InnerPk], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
+    if pks.len() != sigs.len() {
+      return Err(BlsError::CountMismatch);
+    }
+    // dashbls CoreMPL::AggregateSecure: sort (pk bytes, sig)
+    // pairs by the serialized key, then sum sig_i * t_i.
+    let mut sorted: Vec<([u8; 48], blst_p2_affine)> = pks
+      .iter()
+      .zip(sigs)
+      .map(|(pk, sig)| {
+        let aff = blst_ffi::p2_deserialize(&sig.serialize()).map_err(|_| BlsError::InvalidSignature)?;
+        Ok((pk.compress(), aff))
+      })
+      .collect::<Result<_, BlsError>>()?;
+    sorted.sort_by_key(|pair| pair.0);
+    let agg = scheme_ops::weighted_g2_aggregate(&sorted)?;
+    if blst_ffi::p2_affine_is_inf(&agg) {
+      return Err(BlsError::InvalidSignature);
+    }
+    let ser = blst_ffi::p2_affine_serialize(&agg);
+    Signature::deserialize(&ser).map_err(|_| BlsError::InvalidSignature)
+  }
+
+  fn sub_sig(a: &Self::InnerSig, b: &Self::InnerSig) -> Result<Self::InnerSig, BlsError> {
+    // CBLSSignature::SubInsecure: a + (-b). Subtracting a
+    // signature from itself would yield infinity, which is not a
+    // usable signature.
+    let a_aff = blst_ffi::p2_deserialize(&a.serialize()).map_err(|_| BlsError::InvalidSignature)?;
+    let mut b_aff = blst_ffi::p2_deserialize(&b.serialize()).map_err(|_| BlsError::InvalidSignature)?;
+    b_aff.y = (-blst_ffi::Fp2::from_raw(b_aff.y)).into_raw();
+    let out = blst_ffi::p2s_add(&[a_aff, b_aff]);
+    if blst_ffi::p2_affine_is_inf(&out) {
+      return Err(BlsError::InvalidSignature);
+    }
+    let ser = blst_ffi::p2_affine_serialize(&out);
+    Signature::deserialize(&ser).map_err(|_| BlsError::InvalidSignature)
+  }
+
   fn derive_pk_share(master_pks: &[&Self::InnerPk], id: &Hash256) -> Result<Self::InnerPk, BlsError> {
     let aff_pks: Vec<blst_p1_affine> = master_pks
       .iter()

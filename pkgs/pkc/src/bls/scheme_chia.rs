@@ -199,6 +199,48 @@ impl BlsScheme for BlsScChia {
     scheme_ops::derive_pk_share_affine(&pk_vals, id)
   }
 
+  fn recover_pk_shares(ids: &[&Hash256], pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError> {
+    let pk_vals: Vec<blst_p1_affine> = pks.iter().map(|pk| **pk).collect();
+    let recovered = scheme_ops::recover_pk_shares_affine(ids, &pk_vals)?;
+    // An infinity result is not a usable public key.
+    if blst_ffi::p1_affine_is_inf(&recovered) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    Ok(recovered)
+  }
+
+  fn aggregate_sig_secure(pks: &[&Self::InnerPk], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
+    if pks.len() != sigs.len() {
+      return Err(BlsError::CountMismatch);
+    }
+    // dashbls CoreMPL::AggregateSecure: sort (pk bytes, sig)
+    // pairs by the serialized key, then sum sig_i * t_i.
+    let mut sorted: Vec<([u8; 48], blst_p2_affine)> = pks
+      .iter()
+      .zip(sigs)
+      .map(|(pk, sig)| (Self::pk_to_bytes(pk), **sig))
+      .collect();
+    sorted.sort_by_key(|pair| pair.0);
+    let agg = scheme_ops::weighted_g2_aggregate(&sorted)?;
+    if blst_ffi::p2_affine_is_inf(&agg) {
+      return Err(BlsError::InvalidSignature);
+    }
+    Ok(agg)
+  }
+
+  fn sub_sig(a: &Self::InnerSig, b: &Self::InnerSig) -> Result<Self::InnerSig, BlsError> {
+    // CBLSSignature::SubInsecure: a + (-b). Subtracting a
+    // signature from itself would yield infinity, which is not a
+    // usable signature.
+    let mut neg = *b;
+    neg.y = (-Fp2::from_raw(neg.y)).into_raw();
+    let out = blst_ffi::p2s_add(&[*a, neg]);
+    if blst_ffi::p2_affine_is_inf(&out) {
+      return Err(BlsError::InvalidSignature);
+    }
+    Ok(out)
+  }
+
   fn zeroize_sk(sk: &mut Self::InnerSk) {
     sk.zeroize();
   }

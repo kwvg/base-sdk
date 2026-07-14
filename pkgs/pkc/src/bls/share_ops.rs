@@ -242,6 +242,36 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
     let inner_refs: Vec<&S::InnerPk> = master_pks.iter().map(|pk| &pk.0).collect();
     S::derive_pk_share(&inner_refs, id).map(Self::from_inner)
   }
+
+  /// Recover the master public key from public key shares via
+  /// Lagrange interpolation at x=0 (dashbls
+  /// `Threshold::PublicKeyRecover`).
+  ///
+  /// # Errors
+  ///
+  /// Returns `InsufficientShares` with fewer than 2 shares, or a
+  /// share id reduction error.
+  pub fn recover(shares: &[&BlsPkShare<S>]) -> Result<Self, BlsError> {
+    let ids: Vec<&Hash256> = shares.iter().map(|s| &s.id).collect();
+    let pks: Vec<&S::InnerPk> = shares.iter().map(|s| &s.pk.0).collect();
+    S::recover_pk_shares(&ids, &pks).map(Self::from_inner)
+  }
+}
+
+impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
+  /// Recover the master secret key from secret key shares via
+  /// Lagrange interpolation at x=0 (dashbls
+  /// `Threshold::PrivateKeyRecover`).
+  ///
+  /// # Errors
+  ///
+  /// Returns `InsufficientShares` with fewer than 2 shares, or a
+  /// share id reduction error.
+  pub fn recover(shares: &[&BlsSkShare<S>]) -> Result<Self, BlsError> {
+    let ids: Vec<&Hash256> = shares.iter().map(|s| &s.id).collect();
+    let sks: Vec<&S::InnerSk> = shares.iter().map(|s| &s.sk.0).collect();
+    S::recover_sk_shares(&ids, &sks).map(Self::from_inner)
+  }
 }
 
 #[cfg(test)]
@@ -288,6 +318,40 @@ mod tests {
   #[case::chia(assert_pk_share_verifies_sig_share::<BlsScChia>)]
   #[case::ietf(assert_pk_share_verifies_sig_share::<BlsScIetf>)]
   fn pk_share_verifies_sig_share(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_sk_and_pk_recover<S: BlsSchemeId + BlsScheme>() {
+    // dashbls Threshold::PrivateKeyRecover / PublicKeyRecover:
+    // Lagrange at x=0 over any threshold-sized share subset.
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let ids = sequential_ids(5);
+    let shares = sk.split(3, &ids, &mut OsRng).unwrap();
+
+    let subset = [&shares[0], &shares[2], &shares[4]];
+    let recovered = BlsSecretKey::recover(&subset).unwrap();
+    assert_eq!(*recovered.to_bytes(), *sk.to_bytes());
+
+    let pk_shares: Vec<_> = subset.iter().map(|s| s.public_key_share()).collect();
+    let pk_refs: Vec<_> = pk_shares.iter().collect();
+    let recovered_pk = BlsPublicKey::recover(&pk_refs).unwrap();
+    assert_eq!(recovered_pk, sk.public_key());
+
+    // A sub-threshold subset recovers the wrong key.
+    let below = [&shares[0], &shares[1]];
+    let wrong = BlsSecretKey::recover(&below).unwrap();
+    assert_ne!(*wrong.to_bytes(), *sk.to_bytes());
+
+    assert_eq!(
+      BlsSecretKey::recover(&[&shares[0]]).unwrap_err(),
+      crate::bls::BlsError::InsufficientShares
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_sk_and_pk_recover::<BlsScChia>)]
+  #[case::ietf(assert_sk_and_pk_recover::<BlsScIetf>)]
+  fn sk_and_pk_recover(#[case] assertion: fn()) {
     assertion();
   }
 

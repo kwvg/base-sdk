@@ -84,6 +84,15 @@ pub trait BlsScheme: BlsSchemeId {
 
   fn recover_sig_shares(ids: &[&Hash256], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError>;
   fn derive_pk_share(master_pks: &[&Self::InnerPk], id: &Hash256) -> Result<Self::InnerPk, BlsError>;
+  fn recover_pk_shares(ids: &[&Hash256], pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError>;
+  fn recover_sk_shares(ids: &[&Hash256], sks: &[&Self::InnerSk]) -> Result<Self::InnerSk, BlsError> {
+    let byte_vecs = Zeroizing::new(sks.iter().map(|k| Self::sk_to_bytes(k)).collect::<Vec<[u8; 32]>>());
+    let out_bytes = recover_sk_shares(ids, &byte_vecs)?;
+    Self::sk_from_bytes(&out_bytes).map_err(|_| BlsError::InvalidSecretKey)
+  }
+
+  fn aggregate_sig_secure(pks: &[&Self::InnerPk], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError>;
+  fn sub_sig(a: &Self::InnerSig, b: &Self::InnerSig) -> Result<Self::InnerSig, BlsError>;
 
   fn zeroize_sk(sk: &mut Self::InnerSk);
 }
@@ -314,22 +323,20 @@ pub(crate) fn generate_shares(
 ///
 /// Callers pass points paired with their compressed encoding
 /// (sorted by encoding), so no point is re-derived from bytes.
-pub(crate) fn weighted_g1_aggregate(sorted_pks: &[([u8; 48], blst_p1_affine)]) -> Result<blst_p1_affine, BlsError> {
+/// Per-key secure-aggregation weights t_i = H(i || H(pk_0..pk_n))
+/// over already-sorted serialized keys, as concatenated scalars.
+fn secure_aggregation_weights(sorted_pk_bytes: impl Iterator<Item = [u8; 48]>, count: usize) -> Vec<u8> {
   use sha2::{Digest, Sha256};
 
-  if sorted_pks.is_empty() {
-    return Err(BlsError::EmptyAggregation);
-  }
-
   let mut hasher = Sha256::new();
-  for (pk_bytes, _) in sorted_pks {
+  let keys: Vec<[u8; 48]> = sorted_pk_bytes.collect();
+  for pk_bytes in &keys {
     hasher.update(pk_bytes);
   }
   let pk_hash: [u8; 32] = hasher.finalize().into();
 
-  let mut points = Vec::with_capacity(sorted_pks.len());
-  let mut scalar_bytes = Vec::with_capacity(sorted_pks.len() * 32);
-  for (i, (_, point)) in sorted_pks.iter().enumerate() {
+  let mut scalar_bytes = Vec::with_capacity(count * 32);
+  for i in 0..count {
     let mut wh = Sha256::new();
     wh.update((i as u32).to_be_bytes());
     wh.update(pk_hash);
@@ -337,11 +344,36 @@ pub(crate) fn weighted_g1_aggregate(sorted_pks: &[([u8; 48], blst_p1_affine)]) -
 
     let weight = blst_ffi::scalar_from_bendian(&weight_hash);
     scalar_bytes.extend_from_slice(&weight.b);
+  }
+  scalar_bytes
+}
 
-    points.push(*point);
+pub(crate) fn weighted_g1_aggregate(sorted_pks: &[([u8; 48], blst_p1_affine)]) -> Result<blst_p1_affine, BlsError> {
+  if sorted_pks.is_empty() {
+    return Err(BlsError::EmptyAggregation);
   }
 
+  let scalar_bytes = secure_aggregation_weights(sorted_pks.iter().map(|(b, _)| *b), sorted_pks.len());
+  let points: Vec<blst_p1_affine> = sorted_pks.iter().map(|(_, p)| *p).collect();
+
   Ok(blst_ffi::p1s_mult_pippenger(
+    &points,
+    scalar_bytes.as_slice(),
+    SCALAR_BITS,
+  ))
+}
+
+/// Weighted signature aggregation with the same per-key weights
+/// as `weighted_g1_aggregate` (dashbls `AggregateSecure`).
+pub(crate) fn weighted_g2_aggregate(sorted: &[([u8; 48], blst_p2_affine)]) -> Result<blst_p2_affine, BlsError> {
+  if sorted.is_empty() {
+    return Err(BlsError::EmptyAggregation);
+  }
+
+  let scalar_bytes = secure_aggregation_weights(sorted.iter().map(|(b, _)| *b), sorted.len());
+  let points: Vec<blst_p2_affine> = sorted.iter().map(|(_, p)| *p).collect();
+
+  Ok(blst_ffi::p2s_mult_pippenger(
     &points,
     scalar_bytes.as_slice(),
     SCALAR_BITS,
@@ -351,6 +383,57 @@ pub(crate) fn weighted_g1_aggregate(sorted_pks: &[([u8; 48], blst_p1_affine)]) -
 /// Recover a G2 signature from threshold shares given as affine
 /// points. Validates input length and rejects zero or duplicate
 /// IDs (after reduction into the scalar field).
+/// Recover a G1 point from shares via Lagrange interpolation at
+/// x=0 (dashbls `Threshold::PublicKeyRecover`).
+pub(crate) fn recover_pk_shares_affine(ids: &[&Hash256], pks: &[blst_p1_affine]) -> Result<blst_p1_affine, BlsError> {
+  if ids.len() != pks.len() {
+    return Err(BlsError::CountMismatch);
+  }
+  if pks.len() < 2 {
+    return Err(BlsError::InsufficientShares);
+  }
+
+  let fr_ids = reduce_share_ids(ids)?;
+  let coeffs = compute_lagrange_coeffs(&fr_ids);
+  let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(pks.len() * 32));
+  for &coeff in &coeffs {
+    append_fr_scalar_bytes(&mut scalar_bytes, coeff);
+  }
+
+  Ok(blst_ffi::p1s_mult_pippenger(pks, scalar_bytes.as_slice(), FR_BITS))
+}
+
+/// Recover the master secret scalar from shares via Lagrange
+/// interpolation at x=0 (dashbls `Threshold::PrivateKeyRecover`).
+pub(crate) fn recover_sk_shares(ids: &[&Hash256], sk_bytes: &[[u8; 32]]) -> Result<Zeroizing<[u8; 32]>, BlsError> {
+  if ids.len() != sk_bytes.len() {
+    return Err(BlsError::CountMismatch);
+  }
+  if sk_bytes.len() < 2 {
+    return Err(BlsError::InsufficientShares);
+  }
+
+  let fr_ids = reduce_share_ids(ids)?;
+  let coeffs = compute_lagrange_coeffs(&fr_ids);
+
+  let mut acc = Fr::default();
+  for (coeff, bytes) in coeffs.iter().zip(sk_bytes) {
+    let mut scalar = blst_ffi::scalar_from_bendian(bytes);
+    let mut share_fr = Fr::from_scalar(&scalar);
+    let mut term = *coeff * share_fr;
+    acc = acc + term;
+    scalar.zeroize();
+    share_fr.zeroize();
+    term.zeroize();
+  }
+
+  let mut acc_scalar = acc.to_scalar();
+  let out = Zeroizing::new(blst_ffi::bendian_from_scalar(&acc_scalar));
+  acc.zeroize();
+  acc_scalar.zeroize();
+  Ok(out)
+}
+
 pub(crate) fn recover_sig_shares_affine(ids: &[&Hash256], sigs: &[blst_p2_affine]) -> Result<blst_p2_affine, BlsError> {
   if ids.len() != sigs.len() {
     return Err(BlsError::CountMismatch);
