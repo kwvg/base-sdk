@@ -69,6 +69,17 @@ pub trait BlsScheme: BlsSchemeId {
 
   fn fast_verify_aggregates(sig: &Self::InnerSig, msg: &[u8], pks: &[&Self::InnerPk]) -> Result<(), BlsError>;
   fn verify_aggregates(sig: &Self::InnerSig, msgs: &[&[u8]], pks: &[&Self::InnerPk]) -> Result<(), BlsError>;
+  fn verify_aggregates_with(
+    sig: &Self::InnerSig,
+    msgs: &[&[u8]],
+    pks: &[&Self::InnerPk],
+    scheme: BlsSigId,
+  ) -> Result<(), BlsError> {
+    match scheme {
+      BlsSigId::Basic => Self::verify_aggregates(sig, msgs, pks),
+      _ => Err(BlsError::UnsupportedScheme),
+    }
+  }
   fn secure_verify_aggregates(sig: &Self::InnerSig, msg: &[u8], pks: &[&Self::InnerPk]) -> Result<(), BlsError>;
 
   fn recover_sig_shares(ids: &[&Hash256], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError>;

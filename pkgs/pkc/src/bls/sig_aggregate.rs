@@ -10,7 +10,7 @@ use super::error::BlsError;
 use super::public_ops::BlsPublicKey;
 use super::scheme_ops::BlsScheme;
 use super::sig_basic::BlsSignature;
-use super::{BlsScIetf, BlsSchemeId};
+use super::{BlsSchemeId, BlsSigId};
 use crate::prelude::*;
 
 impl<S: BlsSchemeId + BlsScheme> BlsSignature<S> {
@@ -33,14 +33,39 @@ impl<S: BlsSchemeId + BlsScheme> BlsSignature<S> {
     let inner_pks: Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
     S::secure_verify_aggregates(&self.0, msg, &inner_pks)
   }
-}
 
-impl BlsSignature<BlsScIetf> {
-  /// Verify an aggregated signature where each signer signed a
-  /// distinct message. IETF only.
-  pub fn verify_aggregates(&self, msgs: &[&[u8]], pks: &[&BlsPublicKey<BlsScIetf>]) -> Result<(), BlsError> {
-    let inner_pks: Vec<_> = pks.iter().map(|k| &k.0).collect();
-    BlsScIetf::verify_aggregates(&self.0, msgs, &inner_pks)
+  /// Verify an aggregated signature over per-signer messages.
+  ///
+  /// The IETF scheme enforces the basic scheme's distinct
+  /// message rule; the legacy scheme matches dashbls
+  /// `LegacySchemeMPL::AggregateVerify` (32-byte hashes, no
+  /// distinctness requirement).
+  ///
+  /// # Errors
+  ///
+  /// Returns `CountMismatch`, `EmptyAggregation`,
+  /// `DuplicateMessage` (IETF), `InvalidMessageLength` (legacy)
+  /// or `VerifyFailed`.
+  pub fn verify_aggregates(&self, msgs: &[&[u8]], pks: &[&BlsPublicKey<S>]) -> Result<(), BlsError> {
+    let inner_pks: Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
+    S::verify_aggregates(&self.0, msgs, &inner_pks)
+  }
+
+  /// Verify an aggregated signature over per-signer messages
+  /// under a specific signature scheme variant.
+  ///
+  /// # Errors
+  ///
+  /// As [`Self::verify_aggregates`], plus `UnsupportedScheme`
+  /// for variants the scheme does not implement.
+  pub fn verify_aggregates_with(
+    &self,
+    msgs: &[&[u8]],
+    pks: &[&BlsPublicKey<S>],
+    scheme: BlsSigId,
+  ) -> Result<(), BlsError> {
+    let inner_pks: Vec<&S::InnerPk> = pks.iter().map(|k| &k.0).collect();
+    S::verify_aggregates_with(&self.0, msgs, &inner_pks, scheme)
   }
 }
 
@@ -101,6 +126,108 @@ mod tests {
     let pk2 = sk2.public_key();
     let msgs: Vec<&[u8]> = vec![msg1.as_slice(), msg2.as_slice()];
     assert!(agg.verify_aggregates(&msgs, &[&pk1, &pk2]).is_ok());
+  }
+
+  #[rstest]
+  fn ietf_basic_rejects_duplicate_messages() {
+    let sk1 = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
+    let sk2 = BlsSecretKey::<BlsScIetf>::generate(&SEED_1).unwrap();
+
+    let sig1 = sk1.sign(&MSG_DEADBEEF).unwrap();
+    let sig2 = sk2.sign(&MSG_DEADBEEF).unwrap();
+    let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
+
+    let pk1 = sk1.public_key();
+    let pk2 = sk2.public_key();
+    let msgs: Vec<&[u8]> = vec![&MSG_DEADBEEF, &MSG_DEADBEEF];
+    // BasicSchemeMPL requires distinct messages.
+    assert_eq!(
+      agg.verify_aggregates(&msgs, &[&pk1, &pk2]).unwrap_err(),
+      crate::bls::BlsError::DuplicateMessage
+    );
+  }
+
+  #[rstest]
+  fn chia_verify_aggregates_distinct_messages() {
+    // LegacySchemeMPL::AggregateVerify semantics: per-signer
+    // 32-byte hashes, repeats allowed, order significant.
+    let sk1 = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
+    let sk2 = BlsSecretKey::<BlsScChia>::generate(&SEED_1).unwrap();
+    let msg1 = test_msg(1);
+    let msg2 = test_msg(2);
+
+    let sig1 = sk1.sign(&msg1).unwrap();
+    let sig2 = sk2.sign(&msg2).unwrap();
+    let agg = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
+
+    let pk1 = sk1.public_key();
+    let pk2 = sk2.public_key();
+    let msgs: Vec<&[u8]> = vec![&msg1, &msg2];
+    assert!(agg.verify_aggregates(&msgs, &[&pk1, &pk2]).is_ok());
+
+    let swapped: Vec<&[u8]> = vec![&msg2, &msg1];
+    assert!(agg.verify_aggregates(&swapped, &[&pk1, &pk2]).is_err());
+
+    // Same message twice is allowed in legacy mode.
+    let sig2_same = sk2.sign(&msg1).unwrap();
+    let agg_same = BlsSignature::aggregate(&[&sig1, &sig2_same]).unwrap();
+    let same: Vec<&[u8]> = vec![&msg1, &msg1];
+    assert!(agg_same.verify_aggregates(&same, &[&pk1, &pk2]).is_ok());
+
+    // Legacy signing covers 32-byte hashes only.
+    let short: Vec<&[u8]> = vec![&msg1[..16], &msg2];
+    assert_eq!(
+      agg.verify_aggregates(&short, &[&pk1, &pk2]).unwrap_err(),
+      crate::bls::BlsError::InvalidMessageLength
+    );
+  }
+
+  #[rstest]
+  fn aug_aggregate_of_aggregates_matches_dashbls() {
+    // dashbls test.cpp "Chia test vector 2 (Augmented, aggregate
+    // of aggregates)": nested aggregation, repeated messages
+    // disambiguated by the pk prefix, pinned aggregate bytes.
+    use crate::bls::BlsSigId;
+
+    let msg1: &[u8] = &[1, 2, 3, 40];
+    let msg2: &[u8] = &[5, 6, 70, 201];
+    let msg3: &[u8] = &[9, 10, 11, 12, 13];
+    let msg4: &[u8] = &[15, 63, 244, 92, 0, 1];
+
+    let sk1 = BlsSecretKey::<BlsScIetf>::generate(&[0x02u8; 32]).unwrap();
+    let sk2 = BlsSecretKey::<BlsScIetf>::generate(&[0x03u8; 32]).unwrap();
+    let pk1 = sk1.public_key();
+    let pk2 = sk2.public_key();
+
+    let aug = BlsSigId::MessageAugmentation;
+    let sig1 = sk1.sign_with(msg1, aug).unwrap();
+    let sig2 = sk2.sign_with(msg2, aug).unwrap();
+    let sig3 = sk2.sign_with(msg1, aug).unwrap();
+    let sig4 = sk1.sign_with(msg3, aug).unwrap();
+    let sig5 = sk1.sign_with(msg1, aug).unwrap();
+    let sig6 = sk1.sign_with(msg4, aug).unwrap();
+
+    let agg_l = BlsSignature::aggregate(&[&sig1, &sig2]).unwrap();
+    let agg_r = BlsSignature::aggregate(&[&sig3, &sig4, &sig5]).unwrap();
+    let agg = BlsSignature::aggregate(&[&agg_l, &agg_r, &sig6]).unwrap();
+
+    assert_eq!(
+      agg.to_bytes(),
+      hex!(
+        "a1d5360dcb418d33b29b90b912b4accde535cf0e52caf467a005dc632d9f7af4"
+        "4b6c4e9acd46eac218b28cdb07a3e3bc087df1cd1e3213aa4e11322a3ff3847b"
+        "bba0b2fd19ddc25ca964871997b9bceeab37a4c2565876da19382ea32a962200"
+      )
+    );
+
+    let pks = [&pk1, &pk2, &pk2, &pk1, &pk1, &pk1];
+    let msgs: Vec<&[u8]> = vec![msg1, msg2, msg1, msg3, msg1, msg4];
+    assert!(agg.verify_aggregates_with(&msgs, &pks, aug).is_ok());
+    // The repeated message means the basic scheme must refuse.
+    assert_eq!(
+      agg.verify_aggregates_with(&msgs, &pks, BlsSigId::Basic).unwrap_err(),
+      crate::bls::BlsError::DuplicateMessage
+    );
   }
 
   mod kat {

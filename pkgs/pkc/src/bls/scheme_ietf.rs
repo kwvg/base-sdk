@@ -195,11 +195,70 @@ impl BlsScheme for BlsScIetf {
     if pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
+    // BasicSchemeMPL requires all messages to be distinct; a
+    // repeated message would allow signature splitting.
+    let mut seen: alloc::collections::BTreeSet<&[u8]> = alloc::collections::BTreeSet::new();
+    if !msgs.iter().all(|m| seen.insert(m)) {
+      return Err(BlsError::DuplicateMessage);
+    }
     let result = sig.aggregate_verify(false, msgs, DST_BASIC, pks, false);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {
       Err(BlsError::VerifyFailed)
+    }
+  }
+
+  fn verify_aggregates_with(
+    sig: &Self::InnerSig,
+    msgs: &[&[u8]],
+    pks: &[&Self::InnerPk],
+    scheme: BlsSigId,
+  ) -> Result<(), BlsError> {
+    match scheme {
+      BlsSigId::Basic => Self::verify_aggregates(sig, msgs, pks),
+      BlsSigId::MessageAugmentation => {
+        if pks.len() != msgs.len() {
+          return Err(BlsError::CountMismatch);
+        }
+        if pks.is_empty() {
+          return Err(BlsError::EmptyAggregation);
+        }
+        // AugSchemeMPL verifies pk_i || msg_i; the pk prefix
+        // disambiguates repeated messages, so no distinctness
+        // rule applies.
+        let aug_msgs: Vec<Vec<u8>> = pks
+          .iter()
+          .zip(msgs)
+          .map(|(pk, msg)| {
+            let mut m = Vec::with_capacity(48 + msg.len());
+            m.extend_from_slice(&pk.compress());
+            m.extend_from_slice(msg);
+            m
+          })
+          .collect();
+        let aug_refs: Vec<&[u8]> = aug_msgs.iter().map(|m| m.as_slice()).collect();
+        let result = sig.aggregate_verify(false, &aug_refs, DST_AUG, pks, false);
+        if result == BLST_ERROR::BLST_SUCCESS {
+          Ok(())
+        } else {
+          Err(BlsError::VerifyFailed)
+        }
+      }
+      BlsSigId::ProofOfPossession => {
+        if pks.len() != msgs.len() {
+          return Err(BlsError::CountMismatch);
+        }
+        if pks.is_empty() {
+          return Err(BlsError::EmptyAggregation);
+        }
+        let result = sig.aggregate_verify(false, msgs, DST_POP, pks, false);
+        if result == BLST_ERROR::BLST_SUCCESS {
+          Ok(())
+        } else {
+          Err(BlsError::VerifyFailed)
+        }
+      }
     }
   }
 

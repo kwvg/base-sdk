@@ -206,6 +206,30 @@ pub(crate) fn pairings_equal_with_g1_generator(
   unsafe { blst_fp12_is_one(&ml.final_exp()) }
 }
 
+/// Checks `e(-G, sig) * prod e(pk_i, h_i) == 1`, i.e. that `sig`
+/// aggregates the pairs `(pk_i, h_i)`, in one fused Miller loop.
+pub(crate) fn aggregate_pairings_verify(
+  sig: &blst_p2_affine,
+  hashes: &[blst_p2_affine],
+  pks: &[blst_p1_affine],
+) -> bool {
+  use crate::prelude::Vec;
+
+  debug_assert_eq!(hashes.len(), pks.len());
+  let mut neg_gen = p1_affine_generator();
+  neg_gen.y = (-Fp::from_raw(neg_gen.y)).into_raw();
+
+  let mut g2s = Vec::with_capacity(hashes.len() + 1);
+  g2s.push(*sig);
+  g2s.extend_from_slice(hashes);
+  let mut g1s = Vec::with_capacity(pks.len() + 1);
+  g1s.push(neg_gen);
+  g1s.extend_from_slice(pks);
+
+  let ml = blst_fp12::miller_loop_n(&g2s, &g1s);
+  unsafe { blst_fp12_is_one(&ml.final_exp()) }
+}
+
 pub(crate) fn scalar_from_bendian(bytes: &[u8; 32]) -> blst_scalar {
   let mut scalar = blst_scalar::default();
   unsafe { blst_scalar_from_bendian(&mut scalar, bytes.as_ptr()) };

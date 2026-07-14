@@ -146,8 +146,27 @@ impl BlsScheme for BlsScChia {
     chia_verify_aggregates(sig, msg, pks)
   }
 
-  fn verify_aggregates(_sig: &Self::InnerSig, _msgs: &[&[u8]], _pks: &[&Self::InnerPk]) -> Result<(), BlsError> {
-    Err(BlsError::UnsupportedScheme)
+  fn verify_aggregates(sig: &Self::InnerSig, msgs: &[&[u8]], pks: &[&Self::InnerPk]) -> Result<(), BlsError> {
+    if pks.len() != msgs.len() {
+      return Err(BlsError::CountMismatch);
+    }
+    if pks.is_empty() {
+      return Err(BlsError::EmptyAggregation);
+    }
+    // LegacySchemeMPL::AggregateVerify: one multi-pairing over
+    // the legacy hash map, without the basic scheme's distinct
+    // message rule (VerifyInsecureAggregated in legacy mode).
+    let mut hashes = Vec::with_capacity(msgs.len());
+    for msg in msgs {
+      let msg32: &[u8; 32] = (*msg).try_into().map_err(|_| BlsError::InvalidMessageLength)?;
+      hashes.push(blst_ffi::p2_to_affine(&chia_h2c::hash_to_g2(msg32)));
+    }
+    let points: Vec<blst_p1_affine> = pks.iter().map(|pk| **pk).collect();
+    if blst_ffi::aggregate_pairings_verify(sig, &hashes, &points) {
+      Ok(())
+    } else {
+      Err(BlsError::VerifyFailed)
+    }
   }
 
   fn secure_verify_aggregates(sig: &Self::InnerSig, msg: &[u8], pks: &[&Self::InnerPk]) -> Result<(), BlsError> {
