@@ -20,21 +20,6 @@ pub(crate) const FR_BITS: usize = 255;
 /// Bit-length for unreduced 256-bit scalars.
 pub(crate) const SCALAR_BITS: usize = 256;
 
-extern "C" {
-  fn blst_p2_generator() -> *const blst_p2;
-  fn blst_fp_add(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
-  fn blst_fp_sub(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
-  fn blst_fp_mul(ret: *mut blst_fp, a: *const blst_fp, b: *const blst_fp);
-  fn blst_bendian_from_fp(out: *mut u8, a: *const blst_fp);
-  fn blst_p1_affine_is_inf(p: *const blst_p1_affine) -> bool;
-  fn blst_p2_affine_is_inf(p: *const blst_p2_affine) -> bool;
-  fn blst_p1_affine_in_g1(p: *const blst_p1_affine) -> bool;
-  fn blst_p2_affine_in_g2(p: *const blst_p2_affine) -> bool;
-  fn blst_p1_affine_generator() -> *const blst_p1_affine;
-  fn blst_scalar_fr_check(a: *const blst_scalar) -> bool;
-  fn blst_sk_check(sk: *const blst_scalar) -> bool;
-}
-
 fn p1_affine_generator() -> blst_p1_affine {
   unsafe { *blst_p1_affine_generator() }
 }
@@ -122,12 +107,6 @@ pub(crate) fn p1s_mult_pippenger(points: &[blst_p1_affine], scalars: &[u8], nbit
 pub(crate) fn p2_add_or_double(a: &blst_p2, b: &blst_p2) -> blst_p2 {
   let mut out = blst_p2::default();
   unsafe { blst_p2_add_or_double(&mut out, a, b) };
-  out
-}
-
-pub(crate) fn p2_affine_compress(point: &blst_p2_affine) -> [u8; 96] {
-  let mut out = [0u8; 96];
-  unsafe { blst_p2_affine_compress(out.as_mut_ptr(), point) };
   out
 }
 
@@ -225,10 +204,6 @@ pub(crate) fn pairings_equal_with_g1_generator(
 
   let ml = blst_fp12::miller_loop_n(&[*lhs_g2, rhs_g2_aff], &[neg_gen, *rhs_g1]);
   unsafe { blst_fp12_is_one(&ml.final_exp()) }
-}
-
-pub(crate) fn scalar_fr_check(scalar: &blst_scalar) -> bool {
-  unsafe { blst_scalar_fr_check(scalar) }
 }
 
 pub(crate) fn scalar_from_bendian(bytes: &[u8; 32]) -> blst_scalar {
