@@ -225,6 +225,27 @@ mod tests {
     );
   }
 
+  #[rstest]
+  #[case::x_4("800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004")]
+  #[case::x_4_neg_y("a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004")]
+  #[case::x_5("800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005")]
+  fn rejects_on_curve_but_not_in_subgroup_g2(#[case] hex: &str) {
+    // On-curve points outside the prime-order subgroup, verified
+    // with bls12_381 0.8.0 (from_compressed_unchecked succeeds,
+    // is_torsion_free is false), following its test_is_torsion_free.
+    // Both schemes must reject them; the legacy layout reads the
+    // same bytes as a different x, which is equally invalid.
+    let bytes = crate::tests::hex_to_96(hex);
+    assert_eq!(
+      BlsSignature::<BlsScIetf>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidSignature
+    );
+    assert_eq!(
+      BlsSignature::<BlsScChia>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidSignature
+    );
+  }
+
   fn assert_sig_roundtrip_canonical<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>(
     corpus: &str,
     sign_section: bool,

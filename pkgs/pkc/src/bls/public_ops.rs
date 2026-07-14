@@ -210,6 +210,26 @@ mod tests {
     );
   }
 
+  #[rstest]
+  #[case::x_4("800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004")]
+  #[case::x_4_neg_y("a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004")]
+  #[case::x_5("800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005")]
+  fn rejects_on_curve_but_not_in_subgroup_g1(#[case] hex: &str) {
+    // On-curve points outside the prime-order subgroup, verified
+    // with bls12_381 0.8.0 (from_compressed_unchecked succeeds,
+    // is_torsion_free is false), following its test_is_torsion_free.
+    // Both schemes must reject them via the subgroup check.
+    let bytes = crate::tests::hex_to_48(hex);
+    assert_eq!(
+      BlsPublicKey::<BlsScIetf>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidPublicKey
+    );
+    assert_eq!(
+      BlsPublicKey::<BlsScChia>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidPublicKey
+    );
+  }
+
   fn assert_pk_roundtrip_canonical<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>(corpus: &str) {
     // CheckMalleable-style property from Dash Core: parsing a
     // valid encoding and reserializing must reproduce the exact
