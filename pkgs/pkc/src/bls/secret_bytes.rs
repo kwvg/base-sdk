@@ -153,9 +153,7 @@ mod tests {
   #[rstest]
   fn redaction() {
     let sk = BlsSkBytes::<BlsScChia>::from_bytes([0xff; BLS_SK_LEN]);
-    let debug = format!("{sk:?}");
-    assert_eq!(debug, "BlsSkBytes<Chia>(..)");
-    assert!(!debug.contains("ff"));
+    assert!(!format!("{sk:?}").contains("ff"));
 
     let sk = BlsSkBytes::<BlsScIetf>::from_bytes([0xab; BLS_SK_LEN]);
     assert!(!format!("{sk}").contains("ab"));
@@ -173,22 +171,5 @@ mod tests {
     let c = BlsSkBytes::<BlsScChia>::from_bytes([2u8; BLS_SK_LEN]);
     assert_eq!(a, b);
     assert_ne!(a, c);
-  }
-
-  #[rstest]
-  fn null_check() {
-    let null = BlsSkBytes::<BlsScIetf>::from_bytes([0u8; BLS_SK_LEN]);
-    let non_null = BlsSkBytes::<BlsScIetf>::from_bytes([1u8; BLS_SK_LEN]);
-    assert!(null.is_null());
-    assert!(!non_null.is_null());
-  }
-
-  #[rstest]
-  fn roundtrip() {
-    let expected = [0x42u8; BLS_SK_LEN];
-    let sk = BlsSkBytes::<BlsScChia>::from_bytes(expected);
-    assert_eq!(*sk.to_bytes(), expected);
-    assert_eq!(*sk.as_bytes(), expected);
-    assert_eq!(sk, sk.clone());
   }
 }

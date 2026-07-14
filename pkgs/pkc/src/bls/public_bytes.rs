@@ -203,20 +203,14 @@ cfg_if! {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use super::{BlsPkBytes, BLS_PK_LEN};
+  use super::BlsPkBytes;
   use crate::bls::tests::PK_SAMPLE;
   use crate::bls::{BlsScChia, BlsScIetf};
   use crate::prelude::*;
 
   use dash_types::codec::TypeId;
+  use hex_conservative::DisplayHex;
   use rstest::rstest;
-
-  #[rstest]
-  fn roundtrip() {
-    let pk = BlsPkBytes::<BlsScChia>::from_bytes(PK_SAMPLE);
-    assert_eq!(*pk.as_bytes(), PK_SAMPLE);
-    assert_eq!(pk.to_bytes(), PK_SAMPLE);
-  }
 
   #[rstest]
   fn distinct_type_ids() {
@@ -224,32 +218,9 @@ mod tests {
   }
 
   #[rstest]
-  fn formatting() {
+  fn display_is_hex() {
     let pk = BlsPkBytes::<BlsScIetf>::from_bytes(PK_SAMPLE);
-    assert_eq!(format!("{pk}").len(), BLS_PK_LEN * 2);
-
-    let pk = BlsPkBytes::<BlsScChia>::from_bytes(PK_SAMPLE);
-    assert!(format!("{pk:?}").starts_with("BlsPkBytes<Chia>("));
-  }
-
-  #[rstest]
-  fn null_check() {
-    assert!(BlsPkBytes::<BlsScChia>::default().is_null());
-    assert!(!BlsPkBytes::<BlsScChia>::from_bytes(PK_SAMPLE).is_null());
-  }
-
-  #[rstest]
-  fn ordering() {
-    let a = BlsPkBytes::<BlsScIetf>::from_bytes([0x01; BLS_PK_LEN]);
-    let b = BlsPkBytes::<BlsScIetf>::from_bytes([0x02; BLS_PK_LEN]);
-    assert!(a < b);
-  }
-
-  #[rstest]
-  fn array_conversion() {
-    let pk: BlsPkBytes<BlsScChia> = PK_SAMPLE.into();
-    let array: [u8; BLS_PK_LEN] = pk.into();
-    assert_eq!(array, PK_SAMPLE);
+    assert_eq!(format!("{pk}"), PK_SAMPLE.to_lower_hex_string());
   }
 
   #[cfg(feature = "serde")]

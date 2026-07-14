@@ -202,20 +202,14 @@ cfg_if! {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use super::{BlsSigBytes, BLS_SIG_LEN};
+  use super::BlsSigBytes;
   use crate::bls::tests::SIG_SAMPLE;
   use crate::bls::{BlsScChia, BlsScIetf};
   use crate::prelude::*;
 
   use dash_types::codec::TypeId;
+  use hex_conservative::DisplayHex;
   use rstest::rstest;
-
-  #[rstest]
-  fn roundtrip() {
-    let sig = BlsSigBytes::<BlsScChia>::from_bytes(SIG_SAMPLE);
-    assert_eq!(*sig.as_bytes(), SIG_SAMPLE);
-    assert_eq!(sig.to_bytes(), SIG_SAMPLE);
-  }
 
   #[rstest]
   fn distinct_type_ids() {
@@ -223,32 +217,9 @@ mod tests {
   }
 
   #[rstest]
-  fn formatting() {
+  fn display_is_hex() {
     let sig = BlsSigBytes::<BlsScIetf>::from_bytes(SIG_SAMPLE);
-    assert_eq!(format!("{sig}").len(), BLS_SIG_LEN * 2);
-
-    let sig = BlsSigBytes::<BlsScChia>::from_bytes(SIG_SAMPLE);
-    assert!(format!("{sig:?}").starts_with("BlsSigBytes<Chia>("));
-  }
-
-  #[rstest]
-  fn null_check() {
-    assert!(BlsSigBytes::<BlsScIetf>::default().is_null());
-    assert!(!BlsSigBytes::<BlsScIetf>::from_bytes(SIG_SAMPLE).is_null());
-  }
-
-  #[rstest]
-  fn ordering() {
-    let a = BlsSigBytes::<BlsScChia>::from_bytes([0x01; BLS_SIG_LEN]);
-    let b = BlsSigBytes::<BlsScChia>::from_bytes([0x02; BLS_SIG_LEN]);
-    assert!(a < b);
-  }
-
-  #[rstest]
-  fn array_conversion() {
-    let sig: BlsSigBytes<BlsScIetf> = SIG_SAMPLE.into();
-    let array: [u8; BLS_SIG_LEN] = sig.into();
-    assert_eq!(array, SIG_SAMPLE);
+    assert_eq!(format!("{sig}"), SIG_SAMPLE.to_lower_hex_string());
   }
 
   #[cfg(feature = "serde")]

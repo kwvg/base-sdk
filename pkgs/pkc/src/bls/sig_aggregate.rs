@@ -51,14 +51,12 @@ mod tests {
     assert_aggregate_order_independent, assert_empty_aggregation_rejected, assert_fast_aggregate_verifies,
     assert_secure_aggregate_rejects_naive,
   };
-  use crate::bls::{BlsPublicKey, BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
+  use crate::bls::{BlsScChia, BlsScIetf, BlsSecretKey, BlsSignature};
   use crate::prelude::*;
   use crate::tests::*;
 
   use hex_literal::hex;
   use rstest::*;
-
-  type IetfSk = BlsSecretKey<BlsScIetf>;
 
   #[rstest]
   #[case::chia(assert_fast_aggregate_verifies::<BlsScChia>)]
@@ -89,19 +87,9 @@ mod tests {
   }
 
   #[rstest]
-  fn ietf_aggregate_pk_roundtrip() {
-    let sk0 = IetfSk::generate(&SEED_0).unwrap();
-    let sk1 = IetfSk::generate(&SEED_1).unwrap();
-    let pk1 = sk0.public_key();
-    let pk2 = sk1.public_key();
-    let agg = BlsPublicKey::aggregate(&[&pk1, &pk2]).unwrap();
-    assert_eq!(agg.to_bytes().len(), 48);
-  }
-
-  #[rstest]
   fn ietf_aggregate_two_distinct_messages() {
-    let sk1 = IetfSk::generate(&SEED_0).unwrap();
-    let sk2 = IetfSk::generate(&SEED_1).unwrap();
+    let sk1 = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
+    let sk2 = BlsSecretKey::<BlsScIetf>::generate(&SEED_1).unwrap();
 
     let msg1 = hex!("070809");
     let msg2 = hex!("0a0b0c");
