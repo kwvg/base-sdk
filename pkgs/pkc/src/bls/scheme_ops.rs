@@ -39,6 +39,10 @@ pub trait BlsScheme: BlsSchemeId {
 
   fn pk_from_bytes(b: &[u8; 48]) -> Result<Self::InnerPk, BlsError>;
   fn pk_to_bytes(pk: &Self::InnerPk) -> [u8; 48];
+  /// Basic-scheme (IETF compressed) serialization regardless of
+  /// the scheme's native format. BLS-IES derives its AES key from
+  /// this form in Dash Core (`ToByteVector(false)`) in both modes.
+  fn pk_to_ietf_bytes(pk: &Self::InnerPk) -> [u8; 48];
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError>;
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96];
 

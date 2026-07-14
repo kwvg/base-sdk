@@ -55,6 +55,10 @@ impl BlsScheme for BlsScChia {
     chia_ser_g1(pk)
   }
 
+  fn pk_to_ietf_bytes(pk: &Self::InnerPk) -> [u8; 48] {
+    blst_ffi::p1_affine_compress(pk)
+  }
+
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
     chia_deser_g2(b)
   }

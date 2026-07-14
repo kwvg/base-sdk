@@ -54,6 +54,10 @@ impl BlsScheme for BlsScIetf {
     pk.compress()
   }
 
+  fn pk_to_ietf_bytes(pk: &Self::InnerPk) -> [u8; 48] {
+    pk.compress()
+  }
+
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
     // sig_validate rejects infinity and non-subgroup points, so
     // every InnerSig in circulation is a valid G2 group element.
