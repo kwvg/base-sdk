@@ -25,7 +25,6 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "bls")]
-#[expect(private_bounds, reason = "BlsScheme is crate-private")]
 pub mod bls;
 pub mod ecdsa;
 #[cfg(feature = "std")]

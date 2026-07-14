@@ -9,9 +9,7 @@
 use divan::main as run;
 
 #[cfg(feature = "bls")]
-mod bls_chia;
-#[cfg(feature = "bls")]
-mod bls_ietf;
+mod bls;
 #[cfg(feature = "k256")]
 mod k256;
 

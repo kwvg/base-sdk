@@ -42,6 +42,9 @@ cfg_if! {
     mod sig_pop;
     mod sig_threshold;
 
+    #[cfg(feature = "test")]
+    #[doc(hidden)]
+    pub use scheme_ops::BlsScheme;
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
     pub use share_ops::{BlsSigShare, BlsSkShare};

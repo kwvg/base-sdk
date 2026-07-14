@@ -27,10 +27,10 @@ pub(crate) const FR_BITS: usize = blst_ffi::FR_BITS;
 pub(crate) const SCALAR_BITS: usize = blst_ffi::SCALAR_BITS;
 
 /// Internal trait that provides all low-level BLS operations per scheme.
-pub(crate) trait BlsScheme: BlsSchemeId {
-  type InnerSk: Clone;
-  type InnerPk: Clone + Debug + PartialEq + Eq;
-  type InnerSig: Clone + Debug + PartialEq + Eq;
+pub trait BlsScheme: BlsSchemeId {
+  type InnerSk: Clone + Send + Sync;
+  type InnerPk: Clone + Debug + PartialEq + Eq + Send + Sync;
+  type InnerSig: Clone + Debug + PartialEq + Eq + Send + Sync;
 
   fn generate(ikm: &[u8]) -> Result<Self::InnerSk, BlsError>;
   fn sk_from_bytes(b: &[u8; 32]) -> Result<Self::InnerSk, BlsError>;
