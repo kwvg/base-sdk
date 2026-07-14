@@ -116,7 +116,13 @@ impl BlsScheme for BlsScChia {
       return Err(BlsError::EmptyAggregation);
     }
     let points: Vec<blst_p1_affine> = pks.iter().map(|pk| **pk).collect();
-    Ok(blst_ffi::p1s_add(&points))
+    let agg = blst_ffi::p1s_add(&points);
+    // Keys can cancel to infinity; an infinity aggregate is not a
+    // usable public key (Dash Core treats it as invalid).
+    if blst_ffi::p1_affine_is_inf(&agg) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    Ok(agg)
   }
 
   fn aggregate_sig(sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
@@ -142,10 +148,13 @@ impl BlsScheme for BlsScChia {
       return Err(BlsError::EmptyAggregation);
     }
 
-    let mut sorted: Vec<[u8; 48]> = pks.iter().map(|pk| Self::pk_to_bytes(pk)).collect();
-    sorted.sort();
+    // Pair each legacy encoding (the weight-derivation input)
+    // with the point we already hold instead of re-deriving it
+    // through a square root and subgroup check per key.
+    let mut sorted: Vec<([u8; 48], blst_p1_affine)> = pks.iter().map(|pk| (Self::pk_to_bytes(pk), **pk)).collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let agg_pk = scheme_ops::weighted_g1_aggregate(&sorted, chia_deser_g1)?;
+    let agg_pk = scheme_ops::weighted_g1_aggregate(&sorted)?;
     Self::verify(sig, msg, &agg_pk)
   }
 

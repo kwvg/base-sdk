@@ -271,35 +271,34 @@ pub(crate) fn generate_shares(
 /// Each public key is weighted by `SHA256(index || pk_hash)` where
 /// `pk_hash = SHA256(sorted_pk_bytes)`. This prevents rogue-key
 /// attacks without requiring proof-of-possession.
-pub(crate) fn weighted_g1_aggregate(
-  sorted_pk_bytes: &[[u8; 48]],
-  deser: impl Fn(&[u8; 48]) -> Result<blst_p1_affine, BlsError>,
-) -> Result<blst_p1_affine, BlsError> {
+///
+/// Callers pass points paired with their compressed encoding
+/// (sorted by encoding), so no point is re-derived from bytes.
+pub(crate) fn weighted_g1_aggregate(sorted_pks: &[([u8; 48], blst_p1_affine)]) -> Result<blst_p1_affine, BlsError> {
   use sha2::{Digest, Sha256};
 
-  if sorted_pk_bytes.is_empty() {
+  if sorted_pks.is_empty() {
     return Err(BlsError::EmptyAggregation);
   }
 
   let mut hasher = Sha256::new();
-  for pk_bytes in sorted_pk_bytes {
+  for (pk_bytes, _) in sorted_pks {
     hasher.update(pk_bytes);
   }
   let pk_hash: [u8; 32] = hasher.finalize().into();
 
-  let mut points = Vec::with_capacity(sorted_pk_bytes.len());
-  let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(sorted_pk_bytes.len() * 32));
-  for (i, pk_bytes) in sorted_pk_bytes.iter().enumerate() {
+  let mut points = Vec::with_capacity(sorted_pks.len());
+  let mut scalar_bytes = Vec::with_capacity(sorted_pks.len() * 32);
+  for (i, (_, point)) in sorted_pks.iter().enumerate() {
     let mut wh = Sha256::new();
     wh.update((i as u32).to_be_bytes());
     wh.update(pk_hash);
     let weight_hash: [u8; 32] = wh.finalize().into();
 
-    let mut weight = blst_ffi::scalar_from_bendian(&weight_hash);
+    let weight = blst_ffi::scalar_from_bendian(&weight_hash);
     scalar_bytes.extend_from_slice(&weight.b);
-    weight.zeroize();
 
-    points.push(deser(pk_bytes)?);
+    points.push(*point);
   }
 
   Ok(blst_ffi::p1s_mult_pippenger(

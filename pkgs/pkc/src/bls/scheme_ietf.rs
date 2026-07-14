@@ -114,23 +114,36 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn dh_exchange(sk: &Self::InnerSk, peer_pk: &Self::InnerPk) -> Result<Self::InnerPk, BlsError> {
-    let compressed = peer_pk.compress();
-    let aff = blst_ffi::p1_uncompress(&compressed).map_err(|_| BlsError::InvalidPublicKey)?;
+    // Uncompressed serialization round-trips cost an on-curve
+    // check only; the compressed form would pay a square root in
+    // each direction. The peer key is group-checked at parse and
+    // the secret key is a nonzero reduced scalar, so the product
+    // is a valid non-infinity group element.
+    let ser = peer_pk.serialize();
+    let aff = blst_ffi::p1_deserialize(&ser).map_err(|_| BlsError::InvalidPublicKey)?;
     let mut sk_bytes = sk.to_bytes();
     let mut sk_scalar = blst_ffi::scalar_from_bendian(&sk_bytes);
     let out_aff = blst_ffi::p1_mult(&aff, &sk_scalar.b, blst_ffi::FR_BITS);
-    let out_bytes = blst_ffi::p1_affine_compress(&out_aff);
     sk_bytes.zeroize();
     sk_scalar.zeroize();
-    Self::pk_from_bytes(&out_bytes)
+    let out_ser = blst_ffi::p1_affine_serialize(&out_aff);
+    PublicKey::deserialize(&out_ser).map_err(|_| BlsError::InvalidPublicKey)
   }
 
   fn aggregate_pk(pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError> {
     if pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let agg = AggregatePublicKey::aggregate(pks, true).map_err(|_| BlsError::InvalidPublicKey)?;
-    Ok(agg.to_public_key())
+    // Inputs are subgroup-checked at parse (pk_from_bytes), so
+    // per-element validation here would be redundant.
+    let agg = AggregatePublicKey::aggregate(pks, false).map_err(|_| BlsError::InvalidPublicKey)?;
+    let pk = agg.to_public_key();
+    // Keys can cancel to infinity; an infinity aggregate is not a
+    // usable public key (Dash Core treats it as invalid).
+    if pk.compress()[0] & 0xc0 == 0xc0 {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    Ok(pk)
   }
 
   fn aggregate_sig(sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
@@ -173,14 +186,21 @@ impl BlsScheme for BlsScIetf {
       return Err(BlsError::EmptyAggregation);
     }
 
-    let mut sorted: Vec<[u8; 48]> = pks.iter().map(|pk| pk.compress()).collect();
-    sorted.sort();
+    // Pair each compressed encoding (the weight-derivation input)
+    // with the point we already hold, avoiding a square root per
+    // key to re-derive points from compressed bytes.
+    let mut sorted: Vec<([u8; 48], blst_p1_affine)> = pks
+      .iter()
+      .map(|pk| {
+        let aff = blst_ffi::p1_deserialize(&pk.serialize()).map_err(|_| BlsError::InvalidPublicKey)?;
+        Ok((pk.compress(), aff))
+      })
+      .collect::<Result<_, BlsError>>()?;
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let deser = |b: &[u8; 48]| blst_ffi::p1_uncompress(b).map_err(|_| BlsError::InvalidPublicKey);
-
-    let agg_pk_aff = scheme_ops::weighted_g1_aggregate(&sorted, deser)?;
-    let agg_pk_bytes = blst_ffi::p1_affine_compress(&agg_pk_aff);
-    let agg_pk = Self::pk_from_bytes(&agg_pk_bytes).map_err(|_| BlsError::InvalidPublicKey)?;
+    let agg_pk_aff = scheme_ops::weighted_g1_aggregate(&sorted)?;
+    let agg_pk_ser = blst_ffi::p1_affine_serialize(&agg_pk_aff);
+    let agg_pk = PublicKey::deserialize(&agg_pk_ser).map_err(|_| BlsError::InvalidPublicKey)?;
     Self::verify(sig, msg, &agg_pk)
   }
 
@@ -196,17 +216,19 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn derive_pk_share(master_pks: &[&Self::InnerPk], id: &Hash256) -> Result<Self::InnerPk, BlsError> {
-    if master_pks.is_empty() {
-      return Err(BlsError::EmptyAggregation);
-    }
     let aff_pks: Vec<blst_p1_affine> = master_pks
       .iter()
-      .map(|pk| blst_ffi::p1_uncompress(&pk.compress()).map_err(|_| BlsError::InvalidPublicKey))
+      .map(|pk| blst_ffi::p1_deserialize(&pk.serialize()).map_err(|_| BlsError::InvalidPublicKey))
       .collect::<Result<_, _>>()?;
 
+    // The MSM over subgroup points stays in the subgroup, so the
+    // result only needs an infinity check, not a group check.
     let result = scheme_ops::derive_pk_share_affine(&aff_pks, id)?;
-    let bytes = blst_ffi::p1_affine_compress(&result);
-    Self::pk_from_bytes(&bytes)
+    if blst_ffi::p1_affine_is_inf(&result) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    let ser = blst_ffi::p1_affine_serialize(&result);
+    PublicKey::deserialize(&ser).map_err(|_| BlsError::InvalidPublicKey)
   }
 
   fn zeroize_sk(_sk: &mut Self::InnerSk) {

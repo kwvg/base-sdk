@@ -82,6 +82,25 @@ pub(crate) fn p1_to_affine(point: &blst_p1) -> blst_p1_affine {
   aff
 }
 
+pub(crate) fn p1_affine_serialize(point: &blst_p1_affine) -> [u8; 96] {
+  let mut out = [0u8; 96];
+  unsafe { blst_p1_affine_serialize(out.as_mut_ptr(), point) };
+  out
+}
+
+/// Deserialize an uncompressed G1 point. On-curve check only (no
+/// square root and no subgroup check), so this is much cheaper
+/// than `p1_uncompress`.
+pub(crate) fn p1_deserialize(bytes: &[u8; 96]) -> Result<blst_p1_affine, BLST_ERROR> {
+  let mut aff = blst_p1_affine::default();
+  let rc = unsafe { blst_p1_deserialize(&mut aff, bytes.as_ptr()) };
+  if rc == BLST_ERROR::BLST_SUCCESS {
+    Ok(aff)
+  } else {
+    Err(rc)
+  }
+}
+
 pub(crate) fn p1_uncompress(bytes: &[u8; 48]) -> Result<blst_p1_affine, BLST_ERROR> {
   let mut aff = blst_p1_affine::default();
   let rc = unsafe { blst_p1_uncompress(&mut aff, bytes.as_ptr()) };
