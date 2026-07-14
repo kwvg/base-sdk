@@ -202,15 +202,16 @@ pub(crate) fn pairings_equal_with_g1_generator(
   rhs_g2: &blst_p2,
   rhs_g1: &blst_p1_affine,
 ) -> bool {
+  // e(-G, sig) * e(pk, H(m)) == 1 iff e(G, sig) == e(pk, H(m)),
+  // evaluated as a single 2-pair Miller loop (sharing the
+  // doubling bookkeeping) plus one final exponentiation, instead
+  // of two independent loops and a final-verify.
   let rhs_g2_aff = p2_to_affine(rhs_g2);
-  let g1_generator = p1_affine_generator();
-  let mut lhs = blst_fp12::default();
-  let mut rhs = blst_fp12::default();
-  unsafe {
-    blst_miller_loop(&mut lhs, lhs_g2, &g1_generator);
-    blst_miller_loop(&mut rhs, &rhs_g2_aff, rhs_g1);
-    blst_fp12_finalverify(&lhs, &rhs)
-  }
+  let mut neg_gen = p1_affine_generator();
+  neg_gen.y = (-Fp::from_raw(neg_gen.y)).into_raw();
+
+  let ml = blst_fp12::miller_loop_n(&[*lhs_g2, rhs_g2_aff], &[neg_gen, *rhs_g1]);
+  unsafe { blst_fp12_is_one(&ml.final_exp()) }
 }
 
 pub(crate) fn scalar_fr_check(scalar: &blst_scalar) -> bool {

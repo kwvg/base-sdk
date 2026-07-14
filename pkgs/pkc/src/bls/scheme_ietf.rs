@@ -77,7 +77,10 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn verify(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk) -> Result<(), BlsError> {
-    let result = sig.verify(true, msg, DST_BASIC, &[], pk, true);
+    // Signatures and keys are group-checked at parse (and closed
+    // under the operations that produce them), so per-verify
+    // validation would repeat that work.
+    let result = sig.verify(false, msg, DST_BASIC, &[], pk, false);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {
@@ -90,7 +93,7 @@ impl BlsScheme for BlsScIetf {
       BlsSigId::Basic => DST_BASIC,
       BlsSigId::ProofOfPossession => DST_POP,
     };
-    let result = sig.verify(true, msg, dst, &[], pk, true);
+    let result = sig.verify(false, msg, dst, &[], pk, false);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {
@@ -105,7 +108,7 @@ impl BlsScheme for BlsScIetf {
 
   fn verify_possession(pk: &Self::InnerPk, pop: &Self::InnerSig) -> Result<(), BlsError> {
     let pk_bytes = pk.compress();
-    let result = pop.verify(true, &pk_bytes, DST_POP_PROVE, &[], pk, true);
+    let result = pop.verify(false, &pk_bytes, DST_POP_PROVE, &[], pk, false);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {
@@ -150,15 +153,23 @@ impl BlsScheme for BlsScIetf {
     if sigs.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let agg = AggregateSignature::aggregate(sigs, true).map_err(|_| BlsError::InvalidSignature)?;
-    Ok(agg.to_signature())
+    // Inputs are subgroup-checked at parse (sig_from_bytes), so
+    // per-element validation here would be redundant.
+    let agg = AggregateSignature::aggregate(sigs, false).map_err(|_| BlsError::InvalidSignature)?;
+    let sig = agg.to_signature();
+    // Signatures can cancel to infinity; an infinity aggregate is
+    // not a usable signature (Dash Core treats it as invalid).
+    if sig.compress()[0] & 0xc0 == 0xc0 {
+      return Err(BlsError::InvalidSignature);
+    }
+    Ok(sig)
   }
 
   fn fast_verify_aggregates(sig: &Self::InnerSig, msg: &[u8], pks: &[&Self::InnerPk]) -> Result<(), BlsError> {
     if pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let result = sig.fast_aggregate_verify(true, msg, DST_BASIC, pks);
+    let result = sig.fast_aggregate_verify(false, msg, DST_BASIC, pks);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {
@@ -173,7 +184,7 @@ impl BlsScheme for BlsScIetf {
     if pks.is_empty() {
       return Err(BlsError::EmptyAggregation);
     }
-    let result = sig.aggregate_verify(true, msgs, DST_BASIC, pks, true);
+    let result = sig.aggregate_verify(false, msgs, DST_BASIC, pks, false);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {
