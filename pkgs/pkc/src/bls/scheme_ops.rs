@@ -80,6 +80,33 @@ fn fr_from_hash(id: &Hash256) -> Fr {
   Fr::from_bendian_scalar(id.as_bytes())
 }
 
+/// Reduce participant IDs into the scalar field, rejecting ids
+/// that reduce to zero and duplicates after reduction.
+///
+/// Interpolation is defined over reduced scalars: an id congruent
+/// to 0 mod r would evaluate the polynomial at its constant term
+/// (leaking the master secret in share generation), and two
+/// distinct hashes congruent mod r produce a zero Lagrange
+/// denominator, which blst inverts to zero silently.
+pub(crate) fn reduce_share_ids(ids: &[&Hash256]) -> Result<Vec<Fr>, BlsError> {
+  let fr_ids: Vec<Fr> = ids.iter().map(|id| fr_from_hash(id)).collect();
+  for fr in &fr_ids {
+    if *fr == Fr::default() {
+      return Err(BlsError::InvalidShareId);
+    }
+  }
+
+  let mut sorted: Vec<[u8; 32]> = fr_ids.iter().map(|fr| fr.to_scalar().b).collect();
+  sorted.sort_unstable();
+  for pair in sorted.windows(2) {
+    if pair[0] == pair[1] {
+      return Err(BlsError::DuplicateShareId);
+    }
+  }
+
+  Ok(fr_ids)
+}
+
 /// Sum secret key scalars (mod group order) via blst FFI.
 pub(crate) fn sum_sk_scalars(key_bytes: &[[u8; 32]]) -> Result<[u8; 32], ()> {
   let mut acc = Fr::default();
@@ -283,7 +310,8 @@ pub(crate) fn weighted_g1_aggregate(
 }
 
 /// Recover a G2 signature from threshold shares given as affine
-/// points. Validates input length and rejects duplicate IDs.
+/// points. Validates input length and rejects zero or duplicate
+/// IDs (after reduction into the scalar field).
 pub(crate) fn recover_sig_shares_affine(ids: &[&Hash256], sigs: &[blst_p2_affine]) -> Result<blst_p2_affine, BlsError> {
   if ids.len() != sigs.len() {
     return Err(BlsError::CountMismatch);
@@ -292,27 +320,23 @@ pub(crate) fn recover_sig_shares_affine(ids: &[&Hash256], sigs: &[blst_p2_affine
     return Err(BlsError::InsufficientShares);
   }
 
-  // Reject duplicate share IDs.
-  let mut sorted_ids: Vec<&Hash256> = ids.to_vec();
-  sorted_ids.sort();
-  for pair in sorted_ids.windows(2) {
-    if pair[0] == pair[1] {
-      return Err(BlsError::DuplicateShareId);
-    }
-  }
-
-  let fr_ids: Vec<Fr> = ids.iter().map(|id| fr_from_hash(id)).collect();
+  let fr_ids = reduce_share_ids(ids)?;
   Ok(interpolate_g2(&fr_ids, sigs))
 }
 
 /// Derive a public key share by evaluating a G1 polynomial at the
 /// given participant ID.
 pub(crate) fn derive_pk_share_affine(pks: &[blst_p1_affine], id: &Hash256) -> Result<blst_p1_affine, BlsError> {
-  if pks.is_empty() {
-    return Err(BlsError::EmptyAggregation);
+  // dashbls Poly::Evaluate requires at least 2 coefficients; a
+  // shorter verification vector is malformed.
+  if pks.len() < 2 {
+    return Err(BlsError::InvalidVerificationVector);
   }
 
   let x = fr_from_hash(id);
+  if x == Fr::default() {
+    return Err(BlsError::InvalidShareId);
+  }
   let mut x_power = fr_one();
   let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(pks.len() * 32));
   for _ in pks {

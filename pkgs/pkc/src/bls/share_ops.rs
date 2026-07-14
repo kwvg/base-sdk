@@ -115,7 +115,9 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
   /// # Errors
   ///
   /// Returns `ThresholdTooLarge` if `threshold > ids.len()` or
-  /// either is zero.
+  /// either is zero, `InvalidShareId` if an id reduces to zero in
+  /// the scalar field, or `DuplicateShareId` if two ids collide
+  /// after reduction.
   pub fn split(
     &self,
     threshold: usize,
@@ -126,19 +128,10 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
       return Err(BlsError::ThresholdTooLarge);
     }
 
-    for id in ids {
-      if id.is_null() {
-        return Err(BlsError::ThresholdTooLarge);
-      }
-    }
-
-    for i in 0..ids.len() {
-      for j in (i + 1)..ids.len() {
-        if ids[i] == ids[j] {
-          return Err(BlsError::DuplicateShareId);
-        }
-      }
-    }
+    // An id congruent to 0 mod r would make the share equal the
+    // master key (the polynomial's constant term).
+    let id_refs: Vec<&Hash256> = ids.iter().collect();
+    scheme_ops::reduce_share_ids(&id_refs)?;
 
     let raw =
       scheme_ops::generate_shares(&self.to_bytes(), threshold, ids, rng).map_err(|()| BlsError::InvalidSecretKey)?;
@@ -174,13 +167,90 @@ mod tests {
   use crate::tests::*;
 
   use dash_dev::load_corpus_json;
+  use dash_num::Hash256;
   use hex_conservative::DisplayHex;
+  use hex_literal::hex;
+  use rand_core::OsRng;
   use rstest::*;
+
+  /// BLS12-381 scalar field order r, big-endian.
+  const GROUP_ORDER: [u8; 32] = hex!(
+    "73eda753299d7d483339d80809a1d805"
+    "53bda402fffe5bfeffffffff00000001"
+  );
 
   #[rstest]
   #[case::chia(assert_threshold_roundtrip::<BlsScChia>)]
   #[case::ietf(assert_threshold_roundtrip::<BlsScIetf>)]
   fn threshold_split_recover(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_zero_reducing_ids_rejected<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let mut ids = sequential_ids(3);
+
+    // The null id evaluates the polynomial at zero.
+    ids[1] = Hash256::from([0u8; 32]);
+    assert_eq!(
+      sk.split(2, &ids, &mut OsRng).unwrap_err(),
+      crate::bls::BlsError::InvalidShareId
+    );
+
+    // An id equal to the group order reduces to zero mod r, which
+    // would make the share equal the master secret key.
+    ids[1] = Hash256::from(GROUP_ORDER);
+    assert_eq!(
+      sk.split(2, &ids, &mut OsRng).unwrap_err(),
+      crate::bls::BlsError::InvalidShareId
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_zero_reducing_ids_rejected::<BlsScChia>)]
+  #[case::ietf(assert_zero_reducing_ids_rejected::<BlsScIetf>)]
+  fn split_rejects_zero_reducing_ids(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_congruent_ids_rejected<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+
+    // 1 and r+1 are distinct hashes but the same scalar mod r; a
+    // raw-byte duplicate check misses them and interpolation
+    // would divide by zero.
+    let mut one = [0u8; 32];
+    one[31] = 1;
+    let mut order_plus_one = GROUP_ORDER;
+    order_plus_one[31] = 2;
+    let ids = [Hash256::from(one), Hash256::from(order_plus_one)];
+
+    assert_eq!(
+      sk.split(2, &ids, &mut OsRng).unwrap_err(),
+      crate::bls::BlsError::DuplicateShareId
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_congruent_ids_rejected::<BlsScChia>)]
+  #[case::ietf(assert_congruent_ids_rejected::<BlsScIetf>)]
+  fn split_rejects_ids_congruent_mod_order(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_short_vvec_rejected<S: BlsSchemeId + BlsScheme>() {
+    let pk = BlsSecretKey::<S>::generate(&SEED_0).unwrap().public_key();
+    let id = sequential_ids(1)[0];
+    assert_eq!(
+      BlsPublicKey::<S>::derive_share(&[&pk], &id).unwrap_err(),
+      crate::bls::BlsError::InvalidVerificationVector
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_short_vvec_rejected::<BlsScChia>)]
+  #[case::ietf(assert_short_vvec_rejected::<BlsScIetf>)]
+  fn derive_share_rejects_short_verification_vector(#[case] assertion: fn()) {
     assertion();
   }
 

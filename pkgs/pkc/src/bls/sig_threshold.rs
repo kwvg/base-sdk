@@ -43,7 +43,75 @@ mod tests {
 
   use dash_dev::load_corpus_json;
   use hex_conservative::DisplayHex;
+  use rand_core::OsRng;
   use rstest::rstest;
+
+  fn assert_sub_threshold_recovery_does_not_verify<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let pk = sk.public_key();
+    let ids = sequential_ids(5);
+    let shares = sk.split(3, &ids, &mut OsRng).unwrap();
+    let sig_shares: Vec<_> = shares.iter().map(|share| share.sign(&MSG_DEADBEEF).unwrap()).collect();
+
+    // Interpolation over fewer than threshold shares succeeds but
+    // yields a point unrelated to the master signature; callers
+    // must verify recovered signatures (matches dashbls).
+    let below = [&sig_shares[0], &sig_shares[1]];
+    let recovered = BlsSignature::<S>::recover(&below).unwrap();
+    assert!(recovered.verify(&MSG_DEADBEEF, &pk).is_err());
+
+    let at_threshold = [&sig_shares[0], &sig_shares[2], &sig_shares[4]];
+    let recovered = BlsSignature::<S>::recover(&at_threshold).unwrap();
+    assert!(recovered.verify(&MSG_DEADBEEF, &pk).is_ok());
+  }
+
+  #[rstest]
+  #[case::chia(assert_sub_threshold_recovery_does_not_verify::<BlsScChia>)]
+  #[case::ietf(assert_sub_threshold_recovery_does_not_verify::<BlsScIetf>)]
+  fn sub_threshold_recovery_does_not_verify(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_mixed_polynomial_recovery_does_not_verify<S: BlsSchemeId + BlsScheme>() {
+    let sk_a = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let sk_b = BlsSecretKey::<S>::generate(&SEED_1).unwrap();
+    let ids = sequential_ids(3);
+    let shares_a = sk_a.split(2, &ids, &mut OsRng).unwrap();
+    let shares_b = sk_b.split(2, &ids, &mut OsRng).unwrap();
+
+    let sig_a = shares_a[0].sign(&MSG_DEADBEEF).unwrap();
+    let sig_b = shares_b[1].sign(&MSG_DEADBEEF).unwrap();
+    let recovered = BlsSignature::<S>::recover(&[&sig_a, &sig_b]).unwrap();
+    assert!(recovered.verify(&MSG_DEADBEEF, &sk_a.public_key()).is_err());
+    assert!(recovered.verify(&MSG_DEADBEEF, &sk_b.public_key()).is_err());
+  }
+
+  #[rstest]
+  #[case::chia(assert_mixed_polynomial_recovery_does_not_verify::<BlsScChia>)]
+  #[case::ietf(assert_mixed_polynomial_recovery_does_not_verify::<BlsScIetf>)]
+  fn mixed_polynomial_recovery_does_not_verify(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_duplicate_share_ids_rejected<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let ids = sequential_ids(3);
+    let shares = sk.split(2, &ids, &mut OsRng).unwrap();
+    let sig = shares[0].sign(&MSG_DEADBEEF).unwrap();
+
+    let dup = BlsSigShare::<S>::new(*sig.id(), sig.signature().clone());
+    assert_eq!(
+      BlsSignature::<S>::recover(&[&sig, &dup]).unwrap_err(),
+      crate::bls::BlsError::DuplicateShareId
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_duplicate_share_ids_rejected::<BlsScChia>)]
+  #[case::ietf(assert_duplicate_share_ids_rejected::<BlsScIetf>)]
+  fn recover_rejects_duplicate_share_ids(#[case] assertion: fn()) {
+    assertion();
+  }
 
   fn assert_llmq_finalize_recover_quorum_sig<S: BlsSchemeId + BlsScheme>(corpus: &str) {
     let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);

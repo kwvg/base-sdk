@@ -35,6 +35,10 @@ pub enum BlsError {
   InsufficientShares,
   /// duplicate share id in recovery set
   DuplicateShareId,
+  /// share id reduces to zero in the scalar field
+  InvalidShareId,
+  /// verification vector needs at least 2 elements
+  InvalidVerificationVector,
   /// plaintext length is not a multiple of 16
   InvalidPlaintextLength,
   /// AES decryption failed
@@ -59,6 +63,8 @@ impl Display for BlsError {
       Self::ThresholdTooLarge => write!(f, "threshold exceeds total or is zero"),
       Self::InsufficientShares => write!(f, "not enough shares to recover"),
       Self::DuplicateShareId => write!(f, "duplicate share id in recovery set"),
+      Self::InvalidShareId => write!(f, "share id reduces to zero in the scalar field"),
+      Self::InvalidVerificationVector => write!(f, "verification vector needs at least 2 elements"),
       Self::InvalidPlaintextLength => write!(f, "plaintext length is not a multiple of 16"),
       Self::DecryptionFailed => write!(f, "AES decryption failed"),
       Self::IndexOutOfRange => write!(f, "recipient index out of range"),
