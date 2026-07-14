@@ -30,7 +30,10 @@ impl BlsScheme for BlsScIetf {
   type InnerSig = Signature;
 
   fn generate(ikm: &[u8]) -> Result<Self::InnerSk, BlsError> {
-    SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidKeyMaterial)
+    // key_gen_v3 is the EIP-2333 form dashbls CoreMPL::KeyGen
+    // uses (plain keygen salt, OS2IP mod r); the default key_gen
+    // is draft v4 and derives different keys from the same seed.
+    SecretKey::key_gen_v3(ikm, &[]).map_err(|_| BlsError::InvalidKeyMaterial)
   }
 
   fn sk_from_bytes(b: &[u8; 32]) -> Result<Self::InnerSk, BlsError> {

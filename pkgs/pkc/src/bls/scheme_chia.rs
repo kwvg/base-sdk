@@ -25,7 +25,10 @@ impl BlsScheme for BlsScChia {
   type InnerSig = blst_p2_affine;
 
   fn generate(ikm: &[u8]) -> Result<Self::InnerSk, BlsError> {
-    let sk = SecretKey::key_gen(ikm, &[]).map_err(|_| BlsError::InvalidKeyMaterial)?;
+    // key_gen_v3 is the EIP-2333 form dashbls CoreMPL::KeyGen
+    // uses (plain keygen salt, OS2IP mod r); the default key_gen
+    // is draft v4 and derives different keys from the same seed.
+    let sk = SecretKey::key_gen_v3(ikm, &[]).map_err(|_| BlsError::InvalidKeyMaterial)?;
     let bytes = sk.to_bytes();
     Self::sk_from_bytes(&bytes)
   }

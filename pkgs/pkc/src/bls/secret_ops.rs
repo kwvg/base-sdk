@@ -161,6 +161,35 @@ mod tests {
     assertion();
   }
 
+  fn assert_keygen_matches_dashbls<S: BlsSchemeId + BlsScheme>() {
+    // dashbls CoreMPL::KeyGen outputs for fixed seeds (dumped
+    // from libdashbls); both schemes share the EIP-2333 keygen.
+    for (fill, expected) in [
+      (
+        0x02u8,
+        hex!("01433a85a09ef4c9f7a2cd973c007c1150631a35a1d0e199eca4364e051809bb"),
+      ),
+      (
+        0x03,
+        hex!("2e4f3b80ba3072a724add649e0569e24f7ae4ccc20b0eab2506d47746a49c7f7"),
+      ),
+      (
+        0x08,
+        hex!("513756c720421d8b288bc6d053efcdc55c0e4743855464d184a6dd5f36ac6196"),
+      ),
+    ] {
+      let sk = BlsSecretKey::<S>::generate(&[fill; 32]).unwrap();
+      assert_eq!(*sk.to_bytes(), expected, "seed fill 0x{fill:02x}");
+    }
+  }
+
+  #[rstest]
+  #[case::chia(assert_keygen_matches_dashbls::<BlsScChia>)]
+  #[case::ietf(assert_keygen_matches_dashbls::<BlsScIetf>)]
+  fn keygen_matches_dashbls(#[case] assertion: fn()) {
+    assertion();
+  }
+
   fn assert_sk_modulus_neighbourhood<S: BlsSchemeId + BlsScheme>() {
     // Ported from bls-signatures 0.15.0 key.rs test_from_bytes
     // (there in little-endian repr): the smallest integer greater
