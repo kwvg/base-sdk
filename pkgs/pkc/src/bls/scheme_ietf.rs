@@ -216,14 +216,22 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn recover_sig_shares(ids: &[&Hash256], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
+    // Uncompressed serialization round-trips cost an on-curve
+    // check only; the compressed form would pay an Fp2 square
+    // root per share and another on the result. Interpolation
+    // over subgroup points stays in the subgroup, so the result
+    // only needs an infinity check, not a group check.
     let aff_sigs: Vec<blst_p2_affine> = sigs
       .iter()
-      .map(|s| blst_ffi::p2_uncompress(&s.compress()).map_err(|_| BlsError::InvalidSignature))
+      .map(|s| blst_ffi::p2_deserialize(&s.serialize()).map_err(|_| BlsError::InvalidSignature))
       .collect::<Result<_, _>>()?;
 
     let recovered = scheme_ops::recover_sig_shares_affine(ids, &aff_sigs)?;
-    let bytes = blst_ffi::p2_affine_compress(&recovered);
-    Self::sig_from_bytes(&bytes).map_err(|_| BlsError::InvalidSignature)
+    if blst_ffi::p2_affine_is_inf(&recovered) {
+      return Err(BlsError::InvalidSignature);
+    }
+    let ser = blst_ffi::p2_affine_serialize(&recovered);
+    Signature::deserialize(&ser).map_err(|_| BlsError::InvalidSignature)
   }
 
   fn derive_pk_share(master_pks: &[&Self::InnerPk], id: &Hash256) -> Result<Self::InnerPk, BlsError> {

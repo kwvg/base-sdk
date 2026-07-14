@@ -148,36 +148,37 @@ fn interpolate_g2(ids: &[Fr], points: &[blst_p2_affine]) -> blst_p2_affine {
 
 /// Lagrange coefficients at x=0 for the given evaluation points.
 ///
-/// Uses Montgomery batch inversion to replace N field inversions
-/// with a single inversion and 3N multiplications.
+/// Callers guarantee ids are nonzero and pairwise distinct (see
+/// `reduce_share_ids`), so every inverted value is nonzero.
+///
+/// Numerators use the total-product identity
+/// `prod_{j != i} x_j = P / x_i` with `x_i` folded into the
+/// denominator's batch inversion, replacing the O(n^2) numerator
+/// pass with O(n) work. Montgomery batch inversion replaces N
+/// field inversions with a single one plus 3N multiplications.
 fn compute_lagrange_coeffs(ids: &[Fr]) -> Vec<Fr> {
   let n = ids.len();
-  let mut nums = Vec::with_capacity(n);
-  let mut dens = Vec::with_capacity(n);
 
+  let mut total = fr_one();
+  for &id in ids {
+    total = total * id;
+  }
+
+  // dens[i] = x_i * prod_{j != i} (x_j - x_i)
+  let mut dens = Vec::with_capacity(n);
   for i in 0..n {
-    let mut num = fr_one();
-    let mut den = fr_one();
+    let mut den = ids[i];
     for j in 0..n {
       if i == j {
         continue;
       }
-      num = num * ids[j];
-
-      let diff = ids[j] - ids[i];
-      den = den * diff;
+      den = den * (ids[j] - ids[i]);
     }
-    nums.push(num);
     dens.push(den);
   }
 
   let den_invs = batch_invert_fr(&dens);
-
-  let mut coeffs = Vec::with_capacity(n);
-  for i in 0..n {
-    coeffs.push(nums[i] * den_invs[i]);
-  }
-  coeffs
+  den_invs.into_iter().map(|inv| total * inv).collect()
 }
 
 /// Invert a slice of Fr elements using Montgomery's trick.

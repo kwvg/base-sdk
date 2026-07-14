@@ -179,6 +179,19 @@ pub(crate) fn p2_to_affine(point: &blst_p2) -> blst_p2_affine {
   aff
 }
 
+/// Deserialize an uncompressed G2 point. On-curve check only (no
+/// square root and no subgroup check), so this is much cheaper
+/// than `p2_uncompress`.
+pub(crate) fn p2_deserialize(bytes: &[u8; 192]) -> Result<blst_p2_affine, BLST_ERROR> {
+  let mut aff = blst_p2_affine::default();
+  let rc = unsafe { blst_p2_deserialize(&mut aff, bytes.as_ptr()) };
+  if rc == BLST_ERROR::BLST_SUCCESS {
+    Ok(aff)
+  } else {
+    Err(rc)
+  }
+}
+
 pub(crate) fn p2_uncompress(bytes: &[u8; 96]) -> Result<blst_p2_affine, BLST_ERROR> {
   let mut out = blst_p2_affine::default();
   let rc = unsafe { blst_p2_uncompress(&mut out, bytes.as_ptr()) };

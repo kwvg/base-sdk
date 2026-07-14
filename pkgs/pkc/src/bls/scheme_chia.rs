@@ -160,7 +160,12 @@ impl BlsScheme for BlsScChia {
 
   fn recover_sig_shares(ids: &[&Hash256], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
     let sig_vals: Vec<blst_p2_affine> = sigs.iter().map(|s| **s).collect();
-    scheme_ops::recover_sig_shares_affine(ids, &sig_vals)
+    let recovered = scheme_ops::recover_sig_shares_affine(ids, &sig_vals)?;
+    // An infinity result is not a usable signature.
+    if blst_ffi::p2_affine_is_inf(&recovered) {
+      return Err(BlsError::InvalidSignature);
+    }
+    Ok(recovered)
   }
 
   fn derive_pk_share(master_pks: &[&Self::InnerPk], id: &Hash256) -> Result<Self::InnerPk, BlsError> {
