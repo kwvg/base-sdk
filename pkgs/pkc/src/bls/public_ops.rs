@@ -158,6 +158,44 @@ mod tests {
   }
 
   #[rstest]
+  fn first_byte_sweep_rejects_zero_body() {
+    // dashbls test.cpp "Should throw on a bad public key": every
+    // first byte over a zero body must fail to parse. dashbls
+    // itself accepts 0xc0 (canonical infinity) but Dash Core
+    // rejects infinity keys at parse, and so do we.
+    for first in 0..=0xffu16 {
+      let mut b = [0u8; 48];
+      b[0] = first as u8;
+      assert!(
+        BlsPublicKey::<BlsScChia>::from_bytes(&b).is_err(),
+        "chia accepted first byte 0x{first:02x}"
+      );
+      assert!(
+        BlsPublicKey::<BlsScIetf>::from_bytes(&b).is_err(),
+        "ietf accepted first byte 0x{first:02x}"
+      );
+    }
+  }
+
+  fn assert_pk_roundtrip_canonical<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>(corpus: &str) {
+    // CheckMalleable-style property from Dash Core: parsing a
+    // valid encoding and reserializing must reproduce the exact
+    // input bytes for every corpus vector.
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
+    for v in dash_dev::bls_keygen(&f, "derive_pk") {
+      let pk = BlsPublicKey::<S>::from_bytes(&v.pk).unwrap();
+      assert_eq!(pk.to_bytes(), v.pk);
+    }
+  }
+
+  #[rstest]
+  #[case::chia(assert_pk_roundtrip_canonical::<BlsScChia>, "bls_chia_keygen")]
+  #[case::ietf(assert_pk_roundtrip_canonical::<BlsScIetf>, "bls_ietf_keygen")]
+  fn roundtrip_is_canonical_for_corpus_vectors(#[case] assertion: fn(&str), #[case] corpus: &str) {
+    assertion(corpus);
+  }
+
+  #[rstest]
   fn serialization_formats_match_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let vecs = bls_pk_serialization(&corpus, "pk_serialization");

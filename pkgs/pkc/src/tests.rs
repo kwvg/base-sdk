@@ -30,6 +30,10 @@ pub fn hex_to_48(s: &str) -> [u8; 48] {
   <[u8; 48]>::from_hex(s).unwrap()
 }
 
+pub fn hex_to_96(s: &str) -> [u8; 96] {
+  <[u8; 96]>::from_hex(s).unwrap()
+}
+
 pub fn hash_from_hex(s: &str) -> dash_num::Hash256 {
   dash_num::Hash256::from_hex(s).unwrap()
 }

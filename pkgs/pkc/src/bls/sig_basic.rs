@@ -180,6 +180,66 @@ mod tests {
   }
 
   #[rstest]
+  fn first_byte_sweep_rejects_zero_body() {
+    // dashbls test.cpp "Should throw on a bad G2Element": every
+    // first byte over a zero body must fail to parse. dashbls
+    // itself accepts 0xc0 (canonical infinity) but Dash Core
+    // rejects infinity signatures at parse, and so do we.
+    for first in 0..=0xffu16 {
+      let mut b = [0u8; 96];
+      b[0] = first as u8;
+      assert!(
+        BlsSignature::<BlsScChia>::from_bytes(&b).is_err(),
+        "chia accepted first byte 0x{first:02x}"
+      );
+      assert!(
+        BlsSignature::<BlsScIetf>::from_bytes(&b).is_err(),
+        "ietf accepted first byte 0x{first:02x}"
+      );
+    }
+
+    // dashbls also requires the 48th byte to start with 0b000.
+    let mut b = [0u8; 96];
+    b[48] = 0xff;
+    assert!(BlsSignature::<BlsScChia>::from_bytes(&b).is_err());
+  }
+
+  fn assert_sig_roundtrip_canonical<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>(
+    corpus: &str,
+    sign_section: bool,
+  ) {
+    // CheckMalleable-style property from Dash Core: parsing a
+    // valid encoding and reserializing must reproduce the exact
+    // input bytes for every corpus vector.
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), corpus);
+    let sigs: crate::prelude::Vec<[u8; 96]> = if sign_section {
+      dash_dev::bls_sign(&f, "sign").into_iter().map(|v| v.sig).collect()
+    } else {
+      dash_dev::bls_aggregate_sig(&f, "aggregate_sig")
+        .into_iter()
+        .flat_map(|v| v.sigs.into_iter().chain([v.aggregate]))
+        .collect()
+    };
+    for bytes in sigs {
+      let sig = BlsSignature::<S>::from_bytes(&bytes).unwrap();
+      assert_eq!(sig.to_bytes(), bytes);
+    }
+  }
+
+  #[rstest]
+  #[case::chia_sign(assert_sig_roundtrip_canonical::<BlsScChia>, "bls_chia_sign", true)]
+  #[case::ietf_sign(assert_sig_roundtrip_canonical::<BlsScIetf>, "bls_ietf_sign", true)]
+  #[case::chia_aggregate(assert_sig_roundtrip_canonical::<BlsScChia>, "bls_chia_aggregate", false)]
+  #[case::ietf_aggregate(assert_sig_roundtrip_canonical::<BlsScIetf>, "bls_ietf_aggregate", false)]
+  fn roundtrip_is_canonical_for_corpus_vectors(
+    #[case] assertion: fn(&str, bool),
+    #[case] corpus: &str,
+    #[case] sign_section: bool,
+  ) {
+    assertion(corpus, sign_section);
+  }
+
+  #[rstest]
   fn serialization_formats_match_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let vecs = bls_sig_serialization(&corpus, "sig_serialization");

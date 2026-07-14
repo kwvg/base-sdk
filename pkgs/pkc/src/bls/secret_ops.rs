@@ -161,6 +161,23 @@ mod tests {
     assertion();
   }
 
+  fn assert_corrupted_first_byte_rejected<S: BlsSchemeId + BlsScheme>() {
+    // dashbls test.cpp "Should throw on a bad private key":
+    // overwriting the first byte of a valid key with 255 pushes
+    // the scalar past the group order.
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let mut bytes = *sk.to_bytes();
+    bytes[0] = 255;
+    assert!(BlsSecretKey::<S>::from_bytes(&bytes).is_err());
+  }
+
+  #[rstest]
+  #[case::chia(assert_corrupted_first_byte_rejected::<BlsScChia>)]
+  #[case::ietf(assert_corrupted_first_byte_rejected::<BlsScIetf>)]
+  fn rejects_corrupted_first_byte(#[case] assertion: fn()) {
+    assertion();
+  }
+
   #[rstest]
   fn public_key_formats_differ() {
     let chia = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();

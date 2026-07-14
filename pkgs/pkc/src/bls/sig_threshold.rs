@@ -215,4 +215,43 @@ mod tests {
   fn llmq_finalize_aggregated_member_sigs(#[case] corpus: &str, #[case] assertion: fn(&str)) {
     assertion(corpus);
   }
+
+  #[rstest]
+  fn legacy_threshold_kat_matches_dashbls() {
+    // Ported from dashbls test.cpp "Legacy scheme": example data
+    // from https://gist.github.com/xdustinface/318c2c08c36ab12a2b1963caf1f7815c
+    // dashbls byte-reverses the sign hash and the ids (uint256
+    // display order) before use; Hash256::from_hex does the same
+    // reversal, so ids are parsed directly from the corpus hex.
+    let f = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_legacy_threshold");
+    let kat = &f["legacy_threshold"];
+
+    let mut msg = hex_to_32(kat["sign_hash"].as_str().unwrap());
+    msg.reverse();
+    let threshold_pk =
+      BlsPublicKey::<BlsScChia>::from_bytes(&hex_to_48(kat["threshold_pk"].as_str().unwrap())).unwrap();
+    let expected_sig = hex_to_96(kat["threshold_sig"].as_str().unwrap());
+
+    let sig_shares: Vec<BlsSigShare<BlsScChia>> = kat["shares"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .map(|share| {
+        let id = hash_from_hex(share["id"].as_str().unwrap());
+        let sk = BlsSecretKey::<BlsScChia>::from_bytes(&hex_to_32(share["sk"].as_str().unwrap())).unwrap();
+        let sig_share = BlsSkShare::new(id, sk).sign(&msg).unwrap();
+        assert_eq!(
+          sig_share.signature().to_bytes(),
+          hex_to_96(share["sig"].as_str().unwrap()),
+          "signature share does not match the published vector"
+        );
+        sig_share
+      })
+      .collect();
+
+    let share_refs: Vec<&BlsSigShare<BlsScChia>> = sig_shares.iter().collect();
+    let recovered = BlsSignature::<BlsScChia>::recover(&share_refs).unwrap();
+    assert_eq!(recovered.to_bytes(), expected_sig);
+    assert!(recovered.verify(&msg, &threshold_pk).is_ok());
+  }
 }
