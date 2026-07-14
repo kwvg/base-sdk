@@ -171,6 +171,40 @@ mod tests {
   }
 
   #[rstest]
+  fn aug_sign_verify_roundtrip() {
+    // AugSchemeMPL: signs pk || msg under the AUG dst, so the
+    // same message signed by different keys hashes differently
+    // and an aug signature never verifies under basic.
+    use crate::bls::BlsSigId;
+
+    let sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
+    let pk = sk.public_key();
+    let msg = [1u8, 2, 3, 40];
+
+    let sig = sk.sign_with(&msg, BlsSigId::MessageAugmentation).unwrap();
+    assert!(sig.verify_with(&msg, &pk, BlsSigId::MessageAugmentation).is_ok());
+    assert!(sig.verify_with(&msg, &pk, BlsSigId::Basic).is_err());
+    assert!(sig.verify(&msg, &pk).is_err());
+
+    let other = BlsSecretKey::<BlsScIetf>::generate(&crate::tests::SEED_1).unwrap();
+    assert!(sig
+      .verify_with(&msg, &other.public_key(), BlsSigId::MessageAugmentation)
+      .is_err());
+  }
+
+  #[rstest]
+  fn chia_rejects_augmentation_scheme() {
+    use crate::bls::BlsSigId;
+
+    // dashbls LegacySchemeMPL has no augmented variant.
+    let sk = BlsSecretKey::<BlsScChia>::generate(&SEED_0).unwrap();
+    assert_eq!(
+      sk.sign_with(&MSG_DEADBEEF, BlsSigId::MessageAugmentation).unwrap_err(),
+      BlsError::UnsupportedScheme
+    );
+  }
+
+  #[rstest]
   fn ietf_signs_any_message_length() {
     let sk = BlsSecretKey::<BlsScIetf>::generate(&SEED_0).unwrap();
     for msg in [&[][..], &[0x42; 3][..], &[0x42; 64][..]] {

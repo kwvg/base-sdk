@@ -20,6 +20,7 @@ use zeroize::Zeroize;
 
 // IETF domain separation tags.
 pub(crate) const DST_BASIC: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
+pub(crate) const DST_AUG: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_AUG_";
 pub(crate) const DST_POP: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 pub(crate) const DST_POP_PROVE: &[u8] = b"BLS_POP_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
@@ -73,11 +74,13 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: BlsSigId) -> Result<Self::InnerSig, BlsError> {
-    let dst = match scheme {
-      BlsSigId::Basic => DST_BASIC,
-      BlsSigId::ProofOfPossession => DST_POP,
+    let (dst, aug) = match scheme {
+      BlsSigId::Basic => (DST_BASIC, Vec::new()),
+      // AugSchemeMPL signs pk || msg under the AUG dst.
+      BlsSigId::MessageAugmentation => (DST_AUG, sk.sk_to_pk().compress().to_vec()),
+      BlsSigId::ProofOfPossession => (DST_POP, Vec::new()),
     };
-    Ok(sk.sign(msg, dst, &[]))
+    Ok(sk.sign(msg, dst, &aug))
   }
 
   fn verify(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk) -> Result<(), BlsError> {
@@ -93,11 +96,12 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn verify_with(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk, scheme: BlsSigId) -> Result<(), BlsError> {
-    let dst = match scheme {
-      BlsSigId::Basic => DST_BASIC,
-      BlsSigId::ProofOfPossession => DST_POP,
+    let (dst, aug) = match scheme {
+      BlsSigId::Basic => (DST_BASIC, Vec::new()),
+      BlsSigId::MessageAugmentation => (DST_AUG, pk.compress().to_vec()),
+      BlsSigId::ProofOfPossession => (DST_POP, Vec::new()),
     };
-    let result = sig.verify(false, msg, dst, &[], pk, false);
+    let result = sig.verify(false, msg, dst, &aug, pk, false);
     if result == BLST_ERROR::BLST_SUCCESS {
       Ok(())
     } else {

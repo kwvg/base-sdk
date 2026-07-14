@@ -12,6 +12,8 @@
 pub enum BlsSigId {
   /// Basic scheme (NUL augmentation).
   Basic,
+  /// Message augmentation scheme (signs `pk || msg`).
+  MessageAugmentation,
   /// Proof of Possession scheme.
   ProofOfPossession,
 }
