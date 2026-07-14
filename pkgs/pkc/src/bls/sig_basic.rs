@@ -204,6 +204,27 @@ mod tests {
     assert!(BlsSignature::<BlsScChia>::from_bytes(&b).is_err());
   }
 
+  #[rstest]
+  #[case::infinity_tail_nonzero(0xc0, 95, 0x01)]
+  #[case::infinity_body_nonzero(0xc0, 1, 0x80)]
+  #[case::infinity_extra_bit_0x08(0xc8, 0, 0)]
+  #[case::infinity_sign_bit(0xe0, 0, 0)]
+  #[case::infinity_extra_bit_0x10(0xd0, 0, 0)]
+  #[case::zero_x_not_in_group(0x80, 0, 0)]
+  #[case::infinity_without_compression(0x40, 0, 0)]
+  fn ietf_rejects_chia_bls_invalid_g2_patterns(#[case] first: u8, #[case] idx: usize, #[case] val: u8) {
+    // G2 analogues of the chia-bls invalid G1 flag recipes from
+    // public_key.rs test_from_bytes_failures, applied to the
+    // 96-byte IETF signature encoding.
+    let mut bytes = [0u8; 96];
+    bytes[0] = first;
+    bytes[idx] |= val;
+    assert_eq!(
+      BlsSignature::<BlsScIetf>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidSignature
+    );
+  }
+
   fn assert_sig_roundtrip_canonical<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>(
     corpus: &str,
     sign_section: bool,

@@ -177,6 +177,39 @@ mod tests {
     }
   }
 
+  #[rstest]
+  #[case::infinity_tail_nonzero(
+    "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+  )]
+  #[case::infinity_body_nonzero(
+    "c08000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  )]
+  #[case::infinity_extra_bit_0x08(
+    "c80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  )]
+  #[case::infinity_sign_bit(
+    "e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  )]
+  #[case::infinity_extra_bit_0x10(
+    "d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  )]
+  #[case::zero_x_not_in_group(
+    "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  )]
+  #[case::infinity_without_compression(
+    "400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  )]
+  fn ietf_rejects_chia_bls_invalid_g1_vectors(#[case] hex: &str) {
+    // Ported from chia-bls public_key.rs test_from_bytes_failures.
+    // chia-bls classifies these as NotCanonical / InfinityNotZero /
+    // InfinityInvalidBits; all must fail IETF parse here.
+    let bytes = crate::tests::hex_to_48(hex);
+    assert_eq!(
+      BlsPublicKey::<BlsScIetf>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidPublicKey
+    );
+  }
+
   fn assert_pk_roundtrip_canonical<S: crate::bls::BlsSchemeId + crate::bls::scheme_ops::BlsScheme>(corpus: &str) {
     // CheckMalleable-style property from Dash Core: parsing a
     // valid encoding and reserializing must reproduce the exact
