@@ -49,6 +49,42 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
     Zeroizing::new(S::sk_to_bytes(&self.0))
   }
 
+  /// Parse from a 32-byte little-endian scalar.
+  ///
+  /// # Errors
+  ///
+  /// As [`Self::from_bytes`]: rejects zero and values not below
+  /// the group order.
+  pub fn from_le_bytes(bytes: &[u8; 32]) -> Result<Self, BlsError> {
+    let mut be = Zeroizing::new(*bytes);
+    be.reverse();
+    Self::from_bytes(&be)
+  }
+
+  /// Serialize to 32 bytes little-endian; zeroised on drop.
+  pub fn to_le_bytes(&self) -> Zeroizing<[u8; 32]> {
+    let mut bytes = self.to_bytes();
+    bytes.reverse();
+    bytes
+  }
+
+  /// Additively derive a child secret key `self + tweak`, with
+  /// `tweak` a 32-byte big-endian scalar.
+  ///
+  /// This is the secret-side primitive for BIP32-style BLS key
+  /// derivation (child = parent + H(...)); it commutes with
+  /// [`BlsPublicKey::add_tweak`] so that
+  /// `self.add_tweak(t).public_key() == self.public_key().add_tweak(t)`.
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidSecretKey` when `tweak` is zero or not below
+  /// the group order, or when the sum reduces to zero.
+  pub fn add_tweak(&self, tweak: &[u8; 32]) -> Result<Self, BlsError> {
+    let tweak_sk = Self::from_bytes(tweak)?;
+    Self::aggregate(&[self, &tweak_sk])
+  }
+
   /// Derive the corresponding public key.
   pub fn public_key(&self) -> BlsPublicKey<S> {
     BlsPublicKey(S::derive_pk(&self.0))
@@ -103,7 +139,7 @@ mod tests {
   use super::*;
   use crate::bls::tests::{assert_short_ikm_rejected, assert_sk_roundtrip};
   use crate::bls::{BlsScChia, BlsScIetf};
-  use crate::tests::SEED_0;
+  use crate::tests::{SEED_0, SEED_1};
 
   use dash_dev::{bls_keygen, load_corpus_json};
   use hex_literal::hex;
@@ -227,6 +263,47 @@ mod tests {
   #[case::chia(assert_corrupted_first_byte_rejected::<BlsScChia>)]
   #[case::ietf(assert_corrupted_first_byte_rejected::<BlsScIetf>)]
   fn rejects_corrupted_first_byte(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_le_bytes_roundtrip<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    // Little-endian is the byte reversal of big-endian.
+    let le = sk.to_le_bytes();
+    let mut be = *sk.to_bytes();
+    be.reverse();
+    assert_eq!(*le, be);
+    assert_eq!(
+      *BlsSecretKey::<S>::from_le_bytes(&le).unwrap().to_bytes(),
+      *sk.to_bytes()
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_le_bytes_roundtrip::<BlsScChia>)]
+  #[case::ietf(assert_le_bytes_roundtrip::<BlsScIetf>)]
+  fn le_bytes_roundtrip(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_add_tweak<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&SEED_0).unwrap();
+    let tweak = *BlsSecretKey::<S>::generate(&SEED_1).unwrap().to_bytes();
+
+    // add_tweak equals summing the parent with the tweak-as-key.
+    let child = sk.add_tweak(&tweak).unwrap();
+    let manual = BlsSecretKey::aggregate(&[&sk, &BlsSecretKey::<S>::from_bytes(&tweak).unwrap()]).unwrap();
+    assert_eq!(*child.to_bytes(), *manual.to_bytes());
+
+    // Invalid tweaks (zero, >= order) are rejected like from_bytes.
+    assert!(sk.add_tweak(&[0u8; 32]).is_err());
+    assert!(sk.add_tweak(&GROUP_ORDER).is_err());
+  }
+
+  #[rstest]
+  #[case::chia(assert_add_tweak::<BlsScChia>)]
+  #[case::ietf(assert_add_tweak::<BlsScIetf>)]
+  fn add_tweak_matches_aggregate(#[case] assertion: fn()) {
     assertion();
   }
 

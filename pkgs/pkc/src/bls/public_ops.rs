@@ -45,6 +45,23 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
     S::aggregate_pk(&inner_refs).map(Self::from_inner)
   }
 
+  /// Additively derive a child public key `self + tweak * G`,
+  /// with `tweak` a 32-byte big-endian scalar.
+  ///
+  /// This is the public-side primitive for unhardened BIP32-style
+  /// BLS derivation; it commutes with [`BlsSecretKey::add_tweak`]
+  /// so that `sk.add_tweak(t).public_key() == pk.add_tweak(t)`.
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidSecretKey` when `tweak` is zero or not below
+  /// the group order, or `InvalidPublicKey` when the result is
+  /// the point at infinity.
+  pub fn add_tweak(&self, tweak: &[u8; 32]) -> Result<Self, BlsError> {
+    let tweak_pk = BlsSecretKey::<S>::from_bytes(tweak)?.public_key();
+    Self::aggregate(&[self, &tweak_pk])
+  }
+
   pub(crate) fn from_inner(inner: S::InnerPk) -> Self {
     Self(inner)
   }
@@ -123,6 +140,27 @@ mod tests {
   #[case::chia(assert_dh_roundtrip::<BlsScChia>)]
   #[case::ietf(assert_dh_roundtrip::<BlsScIetf>)]
   fn dh_exchange_roundtrip(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_add_tweak_commutes<S: BlsSchemeId + BlsScheme>() {
+    let sk = BlsSecretKey::<S>::generate(&crate::tests::SEED_0).unwrap();
+    let tweak = *BlsSecretKey::<S>::generate(&crate::tests::SEED_1).unwrap().to_bytes();
+
+    // Deriving on the secret side then taking the public key must
+    // equal deriving on the public side (unhardened BIP32 rule).
+    let from_sk = sk.add_tweak(&tweak).unwrap().public_key();
+    let from_pk = sk.public_key().add_tweak(&tweak).unwrap();
+    assert_eq!(from_sk, from_pk);
+
+    // Invalid tweaks are rejected on the public side too.
+    assert!(sk.public_key().add_tweak(&[0u8; 32]).is_err());
+  }
+
+  #[rstest]
+  #[case::chia(assert_add_tweak_commutes::<BlsScChia>)]
+  #[case::ietf(assert_add_tweak_commutes::<BlsScIetf>)]
+  fn add_tweak_commutes_with_secret(#[case] assertion: fn()) {
     assertion();
   }
 
