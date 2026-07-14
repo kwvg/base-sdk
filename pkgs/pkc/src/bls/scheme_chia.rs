@@ -211,6 +211,13 @@ fn chia_deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, BlsError> {
     return Err(BlsError::InvalidPublicKey);
   }
 
+  // In the legacy format only bit 0x80 is a flag; bits 0x40/0x20
+  // belong to x and imply x >= p, which dashbls rejects via the
+  // relic range check. Reject before they reach the flag byte.
+  if bytes[0] & 0x60 != 0 {
+    return Err(BlsError::InvalidPublicKey);
+  }
+
   let sign = (bytes[0] >> 7) & 1;
   let mut ietf = *bytes;
   ietf[0] &= 0x7f;
@@ -256,6 +263,13 @@ fn chia_deser_g2(bytes: &[u8; 96]) -> Result<blst_p2_affine, BlsError> {
   // Dash Core rejects infinity signatures at parse
   // (CBLSWrapper::SetBytes) and requires canonical encodings.
   if bytes[0] & 0xc0 == 0xc0 {
+    return Err(BlsError::InvalidSignature);
+  }
+
+  // Byte 48 is the top byte of x.c1 and lands in the IETF flag
+  // position after swizzling; any of its top 3 bits implies
+  // x.c1 >= p, which dashbls rejects via the relic range check.
+  if bytes[48] & 0xe0 != 0 {
     return Err(BlsError::InvalidSignature);
   }
 
@@ -314,5 +328,29 @@ mod tests {
       let sig = BlsScChia::sig_from_bytes(&v.legacy).unwrap();
       assert_eq!(BlsScChia::sig_to_bytes(&sig), v.legacy);
     }
+  }
+
+  #[rstest]
+  #[case::x_bit_0x40(0x40)]
+  #[case::x_bit_0x20(0x20)]
+  #[case::sign_and_x_bit(0xa0)]
+  fn g1_rejects_stray_flag_bits(#[case] first: u8) {
+    // With bit 0x40 the old translation produced the canonical
+    // IETF infinity encoding, silently accepting an infinity pk.
+    let mut b = [0u8; 48];
+    b[0] = first;
+    assert_eq!(chia_deser_g1(&b).unwrap_err(), BlsError::InvalidPublicKey);
+  }
+
+  #[rstest]
+  #[case::x_c1_bit_0x40(0x40)]
+  #[case::x_c1_bit_0x20(0x20)]
+  #[case::x_c1_bit_0x80(0x80)]
+  fn g2_rejects_stray_x_c1_top_bits(#[case] byte48: u8) {
+    // Byte 48 lands in the IETF flag position after swizzling;
+    // 0x40 there decoded to canonical infinity before the fix.
+    let mut b = [0u8; 96];
+    b[48] = byte48;
+    assert_eq!(chia_deser_g2(&b).unwrap_err(), BlsError::InvalidSignature);
   }
 }
