@@ -251,12 +251,17 @@ fn poly_eval(coeffs: &[Fr], x: Fr) -> Fr {
 
 /// Generate secret key shares from a polynomial with the given
 /// constant term.
+/// Evaluated shares keyed by participant id.
+pub(crate) type RawShares = Vec<(Hash256, [u8; 32])>;
+/// Zeroizing big-endian coefficient scalars.
+pub(crate) type RawCoeffs = Vec<Zeroizing<[u8; 32]>>;
+
 pub(crate) fn generate_shares(
   sk_bytes: &[u8; 32],
   threshold: usize,
   ids: &[Hash256],
   rng: &mut impl CryptoRngCore,
-) -> Result<Vec<(Hash256, [u8; 32])>, ()> {
+) -> Result<(RawShares, RawCoeffs), ()> {
   let mut coeffs = Vec::with_capacity(threshold);
 
   let mut sk_scalar = blst_ffi::scalar_from_bendian(sk_bytes);
@@ -279,14 +284,26 @@ pub(crate) fn generate_shares(
     shares.push((*id, y_bytes));
   }
 
-  // Zeroize secret polynomial coefficients.
+  // The coefficient scalars back the Feldman commitment (the
+  // verification vector); hand them out zeroizing and wipe the
+  // working copies.
+  let coeff_bytes: Vec<Zeroizing<[u8; 32]>> = coeffs
+    .iter()
+    .map(|c| {
+      let mut scalar = c.to_scalar();
+      let bytes = Zeroizing::new(blst_ffi::bendian_from_scalar(&scalar));
+      scalar.zeroize();
+      bytes
+    })
+    .collect();
+
   for coeff in &mut coeffs {
     coeff.zeroize();
   }
   sk_scalar.zeroize();
   sk_fr.zeroize();
 
-  Ok(shares)
+  Ok((shares, coeff_bytes))
 }
 
 /// Compute a SHA256-weighted aggregate of G1 points.

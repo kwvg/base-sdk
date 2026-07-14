@@ -222,7 +222,7 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
     let id_refs: Vec<&Hash256> = ids.iter().collect();
     scheme_ops::reduce_share_ids(&id_refs)?;
 
-    let raw =
+    let (raw, _coeffs) =
       scheme_ops::generate_shares(&self.to_bytes(), threshold, ids, rng).map_err(|()| BlsError::InvalidSecretKey)?;
 
     raw

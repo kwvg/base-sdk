@@ -44,6 +44,7 @@ cfg_if! {
     mod sig_ops;
     mod sig_pop;
     mod sig_threshold;
+    mod vvec_ops;
 
     #[cfg(feature = "test")]
     #[doc(hidden)]
@@ -51,6 +52,7 @@ cfg_if! {
     pub use public_ops::BlsPublicKey;
     pub use secret_ops::BlsSecretKey;
     pub use share_ops::{BlsPkShare, BlsSigShare, BlsSkShare};
+    pub use vvec_ops::BlsVerificationVector;
     pub use sig_basic::BlsSignature;
     pub use sig_ops::BlsSigId;
   }
