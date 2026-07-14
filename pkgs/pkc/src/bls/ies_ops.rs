@@ -17,11 +17,18 @@ use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes256;
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
+use zeroize::Zeroizing;
+
+/// AES-CBC block length in bytes.
+const AES_BLOCK_LEN: usize = 16;
 
 /// Derives the AES-256 key from a DH shared point.
-fn derive_aes_key(shared: &BlsPublicKey<BlsScIetf>) -> [u8; 32] {
-  let bytes = shared.to_bytes();
-  let mut key = [0u8; 32];
+///
+/// Matches Dash Core: the first 32 bytes of the basic-scheme
+/// serialization of the shared public key.
+fn derive_aes_key(shared: &BlsPublicKey<BlsScIetf>) -> Zeroizing<[u8; 32]> {
+  let bytes = Zeroizing::new(shared.to_bytes());
+  let mut key = Zeroizing::new([0u8; 32]);
   key.copy_from_slice(&bytes[..32]);
   key
 }
@@ -33,45 +40,59 @@ fn sha256d(input: &[u8]) -> [u8; 32] {
   second.into()
 }
 
-/// Encrypts plaintext using AES-256-CBC with chained IVs.
-fn aes_cbc_encrypt(key: &[u8; 32], iv_seed: &[u8; BLS_IES_IV_LEN], plaintext: &[u8]) -> Vec<u8> {
+/// Derives the IV for a recipient index.
+///
+/// Matches Dash Core `CBLSIESEncryptedBlob::GetIV`: the seed is
+/// advanced by SHA256d once per index; CBC uses its first 16 bytes.
+fn iv_at_index(iv_seed: &[u8; BLS_IES_IV_LEN], index: usize) -> [u8; BLS_IES_IV_LEN] {
+  let mut iv = *iv_seed;
+  for _ in 0..index {
+    iv = sha256d(&iv);
+  }
+  iv
+}
+
+/// Encrypts plaintext using unpadded AES-256-CBC.
+fn aes_cbc_encrypt(key: &[u8; 32], iv: &[u8; BLS_IES_IV_LEN], plaintext: &[u8]) -> Vec<u8> {
   let cipher = Aes256::new(key.into());
-  let num_blocks = plaintext.len() / 16;
+  let num_blocks = plaintext.len() / AES_BLOCK_LEN;
   let mut output = vec![0u8; plaintext.len()];
-  let mut current_iv = *iv_seed;
+  let mut chain = [0u8; AES_BLOCK_LEN];
+  chain.copy_from_slice(&iv[..AES_BLOCK_LEN]);
 
   for i in 0..num_blocks {
-    let block_start = i * 16;
-    let block_end = block_start + 16;
+    let block_start = i * AES_BLOCK_LEN;
+    let block_end = block_start + AES_BLOCK_LEN;
     let mut block = aes::Block::default();
-    for j in 0..16 {
-      block[j] = plaintext[block_start + j] ^ current_iv[j];
+    for j in 0..AES_BLOCK_LEN {
+      block[j] = plaintext[block_start + j] ^ chain[j];
     }
     cipher.encrypt_block(&mut block);
     output[block_start..block_end].copy_from_slice(&block);
-    current_iv = sha256d(&current_iv);
+    chain.copy_from_slice(&block);
   }
 
   output
 }
 
-/// Decrypts ciphertext using AES-256-CBC with chained IVs.
-fn aes_cbc_decrypt(key: &[u8; 32], iv_seed: &[u8; BLS_IES_IV_LEN], ciphertext: &[u8]) -> Vec<u8> {
+/// Decrypts ciphertext using unpadded AES-256-CBC.
+fn aes_cbc_decrypt(key: &[u8; 32], iv: &[u8; BLS_IES_IV_LEN], ciphertext: &[u8]) -> Vec<u8> {
   let cipher = Aes256::new(key.into());
-  let num_blocks = ciphertext.len() / 16;
+  let num_blocks = ciphertext.len() / AES_BLOCK_LEN;
   let mut output = vec![0u8; ciphertext.len()];
-  let mut current_iv = *iv_seed;
+  let mut chain = [0u8; AES_BLOCK_LEN];
+  chain.copy_from_slice(&iv[..AES_BLOCK_LEN]);
 
   for i in 0..num_blocks {
-    let block_start = i * 16;
-    let block_end = block_start + 16;
+    let block_start = i * AES_BLOCK_LEN;
+    let block_end = block_start + AES_BLOCK_LEN;
     let mut block = aes::Block::default();
     block.copy_from_slice(&ciphertext[block_start..block_end]);
     cipher.decrypt_block(&mut block);
-    for j in 0..16 {
-      output[block_start + j] = block[j] ^ current_iv[j];
+    for j in 0..AES_BLOCK_LEN {
+      output[block_start + j] = block[j] ^ chain[j];
     }
-    current_iv = sha256d(&current_iv);
+    chain.copy_from_slice(&ciphertext[block_start..block_end]);
   }
 
   output
@@ -80,18 +101,20 @@ fn aes_cbc_decrypt(key: &[u8; 32], iv_seed: &[u8; BLS_IES_IV_LEN], ciphertext: &
 impl BlsPublicKey<BlsScIetf> {
   /// Encrypt a single blob for this recipient.
   ///
+  /// The blob decrypts at recipient index 0.
+  ///
   /// # Errors
   ///
   /// Returns `InvalidPlaintextLength` if `plaintext.len()` is
   /// not a multiple of 16.
   pub fn ies_encrypt(&self, plaintext: &[u8], rng: &mut impl RngCore) -> Result<BlsIesBytes, BlsError> {
-    if plaintext.len() % 16 != 0 {
+    if plaintext.len() % AES_BLOCK_LEN != 0 {
       return Err(BlsError::InvalidPlaintextLength);
     }
 
-    let mut ikm = [0u8; 32];
-    rng.fill_bytes(&mut ikm);
-    let eph_sk = BlsSecretKey::<BlsScIetf>::generate(&ikm)?;
+    let mut ikm = Zeroizing::new([0u8; 32]);
+    rng.fill_bytes(ikm.as_mut());
+    let eph_sk = BlsSecretKey::<BlsScIetf>::generate(ikm.as_ref())?;
     let eph_pk = eph_sk.public_key();
 
     let shared = BlsPublicKey::dh_exchange(&eph_sk, self)?;
@@ -107,6 +130,9 @@ impl BlsPublicKey<BlsScIetf> {
 
   /// Encrypt the same plaintext for multiple recipients.
   ///
+  /// Each recipient's blob is encrypted under the IV at its
+  /// index in the SHA256d chain of the shared seed.
+  ///
   /// # Errors
   ///
   /// Returns `InvalidPlaintextLength` if `plaintext.len()` is
@@ -116,24 +142,26 @@ impl BlsPublicKey<BlsScIetf> {
     plaintext: &[u8],
     rng: &mut impl RngCore,
   ) -> Result<BlsIesMultiBytes, BlsError> {
-    if plaintext.len() % 16 != 0 {
+    if plaintext.len() % AES_BLOCK_LEN != 0 {
       return Err(BlsError::InvalidPlaintextLength);
     }
 
-    let mut ikm = [0u8; 32];
-    rng.fill_bytes(&mut ikm);
-    let eph_sk = BlsSecretKey::<BlsScIetf>::generate(&ikm)?;
+    let mut ikm = Zeroizing::new([0u8; 32]);
+    rng.fill_bytes(ikm.as_mut());
+    let eph_sk = BlsSecretKey::<BlsScIetf>::generate(ikm.as_ref())?;
     let eph_pk = eph_sk.public_key();
 
     let mut iv_seed = [0u8; BLS_IES_IV_LEN];
     rng.fill_bytes(&mut iv_seed);
 
+    let mut iv = iv_seed;
     let mut blobs = Vec::with_capacity(recipients.len());
     for &rpk in recipients {
       let shared = BlsPublicKey::dh_exchange(&eph_sk, rpk)?;
       let aes_key = derive_aes_key(&shared);
-      let ct = aes_cbc_encrypt(&aes_key, &iv_seed, plaintext);
+      let ct = aes_cbc_encrypt(&aes_key, &iv, plaintext);
       blobs.push(ct);
+      iv = sha256d(&iv);
     }
 
     Ok(BlsIesMultiBytes::new(eph_pk.to_bytes(), iv_seed, blobs))
@@ -143,21 +171,26 @@ impl BlsPublicKey<BlsScIetf> {
 impl BlsSecretKey<BlsScIetf> {
   /// Decrypt a single BLS-IES blob.
   ///
+  /// `recipient_index` selects the IV in the SHA256d chain; use 0
+  /// for standalone blobs, or the original recipient index for a
+  /// blob extracted from a multi-recipient message.
+  ///
   /// # Errors
   ///
   /// Returns `InvalidPublicKey` if the ephemeral key is invalid,
   /// or `DecryptionFailed` if the ciphertext length is not
   /// aligned.
-  pub fn ies_decrypt(&self, blob: &BlsIesBytes) -> Result<Vec<u8>, BlsError> {
-    if blob.data().len() % 16 != 0 {
+  pub fn ies_decrypt(&self, blob: &BlsIesBytes, recipient_index: usize) -> Result<Vec<u8>, BlsError> {
+    if blob.data().len() % AES_BLOCK_LEN != 0 {
       return Err(BlsError::DecryptionFailed);
     }
 
     let eph_pk = BlsPublicKey::<BlsScIetf>::from_bytes(blob.ephemeral_pk())?;
     let shared = BlsPublicKey::dh_exchange(self, &eph_pk)?;
     let aes_key = derive_aes_key(&shared);
+    let iv = iv_at_index(blob.iv_seed(), recipient_index);
 
-    Ok(aes_cbc_decrypt(&aes_key, blob.iv_seed(), blob.data()))
+    Ok(aes_cbc_decrypt(&aes_key, &iv, blob.data()))
   }
 
   /// Decrypt one recipient's blob from a multi-recipient
@@ -173,22 +206,23 @@ impl BlsSecretKey<BlsScIetf> {
       return Err(BlsError::IndexOutOfRange);
     }
     let ct = &blobs[recipient_index];
-    if ct.len() % 16 != 0 {
+    if ct.len() % AES_BLOCK_LEN != 0 {
       return Err(BlsError::DecryptionFailed);
     }
 
     let eph_pk = BlsPublicKey::<BlsScIetf>::from_bytes(multi.ephemeral_pk())?;
     let shared = BlsPublicKey::dh_exchange(self, &eph_pk)?;
     let aes_key = derive_aes_key(&shared);
+    let iv = iv_at_index(multi.iv_seed(), recipient_index);
 
-    Ok(aes_cbc_decrypt(&aes_key, multi.iv_seed(), ct))
+    Ok(aes_cbc_decrypt(&aes_key, &iv, ct))
   }
 }
 
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use crate::bls::{BlsPublicKey, BlsScIetf, BlsSecretKey};
+  use crate::bls::{BlsIesBytes, BlsPublicKey, BlsScIetf, BlsSecretKey};
 
   use rstest::*;
 
@@ -204,7 +238,7 @@ mod tests {
     let mut rng = rand_core::OsRng;
 
     let blob = pk.ies_encrypt(&plaintext, &mut rng).unwrap();
-    let recovered = sk.ies_decrypt(&blob).unwrap();
+    let recovered = sk.ies_decrypt(&blob, 0).unwrap();
     assert_eq!(recovered.as_slice(), &plaintext);
   }
 
@@ -239,6 +273,52 @@ mod tests {
   }
 
   #[rstest]
+  fn multi_blob_extracts_to_single() {
+    let sk1 = make_sk(13);
+    let sk2 = make_sk(14);
+    let pks = [sk1.public_key(), sk2.public_key()];
+    let pk_refs: alloc::vec::Vec<&BlsPublicKey<BlsScIetf>> = pks.iter().collect();
+    let plaintext = [0x5au8; 32];
+    let mut rng = rand_core::OsRng;
+
+    let multi = BlsPublicKey::ies_encrypt_multi(&pk_refs, &plaintext, &mut rng).unwrap();
+
+    // Mirrors Dash Core `CBLSIESMultiRecipientObjects::Get(idx)`:
+    // an extracted blob keeps the shared seed and decrypts at its
+    // original recipient index.
+    let extracted = BlsIesBytes::new(*multi.ephemeral_pk(), *multi.iv_seed(), multi.blobs()[1].clone());
+    let recovered = sk2.ies_decrypt(&extracted, 1).unwrap();
+    assert_eq!(recovered.as_slice(), &plaintext);
+    assert_ne!(sk2.ies_decrypt(&extracted, 0).unwrap().as_slice(), &plaintext);
+  }
+
+  #[rstest]
+  fn multi_recipient_ciphertexts_differ_by_iv() {
+    let sk = make_sk(15);
+    let pk = sk.public_key();
+    let pk_refs = [&pk, &pk];
+    let plaintext = [0x77u8; 16];
+    let mut rng = rand_core::OsRng;
+
+    // Same recipient twice: same key, different chained IV.
+    let multi = BlsPublicKey::ies_encrypt_multi(&pk_refs, &plaintext, &mut rng).unwrap();
+    assert_ne!(multi.blobs()[0], multi.blobs()[1]);
+  }
+
+  #[rstest]
+  fn cbc_chains_ciphertext_blocks() {
+    let sk = make_sk(16);
+    let pk = sk.public_key();
+    // Two identical plaintext blocks must not produce identical
+    // ciphertext blocks under CBC.
+    let plaintext = [0x11u8; 32];
+    let mut rng = rand_core::OsRng;
+
+    let blob = pk.ies_encrypt(&plaintext, &mut rng).unwrap();
+    assert_ne!(blob.data()[..16], blob.data()[16..32]);
+  }
+
+  #[rstest]
   fn multi_index_out_of_range() {
     let sk = make_sk(20);
     let pk = sk.public_key();
@@ -261,7 +341,7 @@ mod tests {
     let mut rng = rand_core::OsRng;
 
     let blob = pk.ies_encrypt(&plaintext, &mut rng).unwrap();
-    let decrypted = wrong_sk.ies_decrypt(&blob).unwrap();
+    let decrypted = wrong_sk.ies_decrypt(&blob, 0).unwrap();
     assert_ne!(decrypted.as_slice(), &plaintext);
   }
 
@@ -273,7 +353,7 @@ mod tests {
     let mut rng = rand_core::OsRng;
 
     let blob = pk.ies_encrypt(&plaintext, &mut rng).unwrap();
-    let recovered = sk.ies_decrypt(&blob).unwrap();
+    let recovered = sk.ies_decrypt(&blob, 0).unwrap();
     assert!(recovered.is_empty());
   }
 }
