@@ -127,6 +127,37 @@ mod tests {
   }
 
   #[rstest]
+  fn rejects_infinity_public_key() {
+    // Dash Core rejects the point at infinity as a public key at
+    // parse time (CBLSWrapper::SetBytes).
+    let mut inf = [0u8; 48];
+    inf[0] = 0xc0;
+    assert_eq!(
+      BlsPublicKey::<BlsScChia>::from_bytes(&inf).unwrap_err(),
+      BlsError::InvalidPublicKey
+    );
+    assert_eq!(
+      BlsPublicKey::<BlsScIetf>::from_bytes(&inf).unwrap_err(),
+      BlsError::InvalidPublicKey
+    );
+  }
+
+  #[rstest]
+  #[case::low_bits_set({ let mut b = [0u8; 48]; b[0] = 0xc1; b })]
+  #[case::tail_nonzero({ let mut b = [0u8; 48]; b[0] = 0xc0; b[47] = 0x01; b })]
+  #[case::all_ones([0xffu8; 48])]
+  fn rejects_non_canonical_infinity_public_key(#[case] bytes: [u8; 48]) {
+    assert_eq!(
+      BlsPublicKey::<BlsScChia>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidPublicKey
+    );
+    assert_eq!(
+      BlsPublicKey::<BlsScIetf>::from_bytes(&bytes).unwrap_err(),
+      BlsError::InvalidPublicKey
+    );
+  }
+
+  #[rstest]
   fn serialization_formats_match_vectors() {
     let corpus = load_corpus_json(env!("CARGO_MANIFEST_DIR"), "bls_chia_ser_internals");
     let vecs = bls_pk_serialization(&corpus, "pk_serialization");

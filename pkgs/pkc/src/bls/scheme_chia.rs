@@ -188,12 +188,10 @@ fn chia_ser_g1(p: &blst_p1_affine) -> [u8; 48] {
 }
 
 fn chia_deser_g1(bytes: &[u8; 48]) -> Result<blst_p1_affine, BlsError> {
+  // Both tag bits set can only encode infinity, which Dash Core
+  // rejects as a public key at parse (CBLSWrapper::SetBytes).
   if bytes[0] & 0xc0 == 0xc0 {
-    return if let Ok(out) = blst_ffi::p1_uncompress(bytes) {
-      Ok(out)
-    } else {
-      Err(BlsError::InvalidPublicKey)
-    };
+    return Err(BlsError::InvalidPublicKey);
   }
 
   let sign = (bytes[0] >> 7) & 1;

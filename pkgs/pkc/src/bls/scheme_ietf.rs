@@ -45,7 +45,9 @@ impl BlsScheme for BlsScIetf {
   }
 
   fn pk_from_bytes(b: &[u8; 48]) -> Result<Self::InnerPk, BlsError> {
-    PublicKey::from_bytes(b).map_err(|_| BlsError::InvalidPublicKey)
+    // key_validate rejects infinity and non-subgroup points, so
+    // every InnerPk in circulation is a valid G1 group element.
+    PublicKey::key_validate(b).map_err(|_| BlsError::InvalidPublicKey)
   }
 
   fn pk_to_bytes(pk: &Self::InnerPk) -> [u8; 48] {
