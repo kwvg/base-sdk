@@ -1,0 +1,29 @@
+BasedOnStyle: WebKit
+Standard: c++20
+IndentWidth: 2
+AccessModifierOffset: -2
+ColumnLimit: 100
+PointerAlignment: Left
+FixNamespaceComments: true
+SortIncludes: CaseSensitive
+InsertNewlineAtEOF: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: Inline
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterFunction: true
+BreakConstructorInitializers: BeforeComma
+BreakTemplateDeclarations: Yes
+AlignAfterOpenBracket: BlockIndent
+Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
+IncludeBlocks: Preserve
+InsertBraces: true
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: None
+BreakBeforeBinaryOperators: None
+KeepEmptyLinesAtTheStartOfBlocks: false
+AllowShortBlocksOnASingleLine: Empty

@@ -1,5 +1,5 @@
 [package]
-name = "dash-pkc-binds"
+name = "dash-pkc-cxx"
 version = "0.0.0"
 edition = "2021"
 license = "MIT"
@@ -9,11 +9,11 @@ publish = false
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
-dash-num = { version = "0.0.0", path = "../../num" }
-dash-pkc = { version = "0.0.0", path = "..", default-features = false, features = [
+dash-num = { version = "0.0.0", path = "../../../../num" }
+dash-pkc = { version = "0.0.0", path = "../../..", default-features = false, features = [
   "bls",
 ] }
-dash-types = { version = "0.0.0", path = "../../types", default-features = false }
+dash-types = { version = "0.0.0", path = "../../../../types", default-features = false }
 diplomat = "0.15"
 diplomat-runtime = "0.15"
 rand_core = { version = "0.6", default-features = false }

@@ -1,0 +1,2 @@
+include/dashpkc/vendor/** linguist-vendored -diff
+src/diplomat/** linguist-generated

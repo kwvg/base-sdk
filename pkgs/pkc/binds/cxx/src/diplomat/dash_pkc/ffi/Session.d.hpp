@@ -67,8 +67,10 @@ public:
   inline diplomat::result<std::monostate, dash_pkc::ffi::PkcError> verify_aggregated(const dash_pkc::ffi::Signature& sig, const dash_pkc::ffi::MessageVec& msgs, const dash_pkc::ffi::PublicKeyVec& pks, dash_pkc::ffi::Scheme scheme) const;
 
   /**
-   * As `Signature::verify_secure`; cache-accelerated variants
-   * are introduced per technique.
+   * As `Signature::verify_secure`, caching the weighted
+   * aggregate key per ordered key set and reusing the session's
+   * hash-to-G2 cache: repeated verification against the same
+   * quorum degenerates to one pairing.
    */
   inline diplomat::result<std::monostate, dash_pkc::ffi::PkcError> verify_secure(const dash_pkc::ffi::Signature& sig, const dash_pkc::ffi::PublicKeyVec& pks, diplomat::span<const uint8_t> msg, dash_pkc::ffi::Scheme scheme) const;
 
@@ -78,12 +80,15 @@ public:
   inline diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError> aggregate_secure(const dash_pkc::ffi::SignatureVec& sigs, const dash_pkc::ffi::PublicKeyVec& pks, dash_pkc::ffi::Scheme scheme) const;
 
   /**
-   * As `PublicKey::from_bytes`.
+   * As `PublicKey::from_bytes`, caching validated parses so
+   * recurring keys (masternode operator keys) skip the subgroup
+   * check.
    */
   inline diplomat::result<std::unique_ptr<dash_pkc::ffi::PublicKey>, dash_pkc::ffi::PkcError> parse_public_key(diplomat::span<const uint8_t> bytes, dash_pkc::ffi::Scheme scheme) const;
 
   /**
-   * As `Signature::from_bytes`.
+   * As `Signature::from_bytes`, caching validated parses so
+   * duplicate gossip skips the (G2, costliest) subgroup check.
    */
   inline diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError> parse_signature(diplomat::span<const uint8_t> bytes, dash_pkc::ffi::Scheme scheme) const;
 
@@ -93,7 +98,9 @@ public:
   inline diplomat::result<std::unique_ptr<dash_pkc::ffi::PublicKey>, dash_pkc::ffi::PkcError> public_key_share(const dash_pkc::ffi::PublicKeyVec& masters, diplomat::span<const uint8_t> id, dash_pkc::ffi::Scheme scheme) const;
 
   /**
-   * As `Signature::recover`.
+   * As `Signature::recover`, caching Lagrange coefficients per
+   * ordered participant-id set (the same threshold member set
+   * recovers many signatures in an LLMQ signing session).
    */
   inline diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError> recover_signature(const dash_pkc::ffi::SignatureVec& sigs, const dash_pkc::ffi::IdVec& ids, dash_pkc::ffi::Scheme scheme) const;
 
