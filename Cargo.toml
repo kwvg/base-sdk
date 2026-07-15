@@ -5,6 +5,7 @@ members = [
   "pkgs/params",
   "pkgs/p2p_core",
   "pkgs/pkc",
+  "pkgs/pkc/binds",
   "pkgs/pow",
   "pkgs/primitives",
   "pkgs/script",

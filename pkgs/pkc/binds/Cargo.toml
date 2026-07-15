@@ -1,0 +1,31 @@
+[package]
+name = "dash-pkc-binds"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+dash-num = { version = "0.0.0", path = "../../num" }
+dash-pkc = { version = "0.0.0", path = "..", default-features = false, features = [
+  "bls",
+] }
+dash-types = { version = "0.0.0", path = "../../types", default-features = false }
+diplomat = "0.15"
+diplomat-runtime = "0.15"
+rand_core = { version = "0.6", default-features = false }
+
+[features]
+default = []
+# Forwarded to dash-pkc: portable blst backend for distributable
+# x86_64 artifacts (see pkgs/pkc/Cargo.toml).
+bls-portable = ["dash-pkc/bls-portable"]
+
+[lints]
+workspace = true
+
+[package.rust-version]
+workspace = true
