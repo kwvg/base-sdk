@@ -1,15 +1,26 @@
 # Builds the dash_pkc C++ library: the dash-pkc-binds Rust staticlib
 # (BLS features only) plus the header-only C++20 wrapper, installed
 # as one combined package (libdash_pkc.a + headers).
+#
+# Cross builds (e.g. Dash Core's depends system) parameterize the
+# cargo invocation instead of the CMake toolchain: the wrapper is
+# header-only and the Rust artifact is a staticlib (never linked
+# here), so no C/C++ compiler is required unless tests are enabled.
+#   -DDASH_PKC_CARGO=/path/to/cargo   cargo executable
+#   -DDASH_PKC_RUST_TARGET=<triple>   rust target (aarch64-apple-darwin, ...)
+#   -DDASH_PKC_VENDOR_DIR=<dir>       vendored crates; enables --offline
+#   -DDASH_PKC_MACOS_MIN=<ver>        MACOSX_DEPLOYMENT_TARGET for cargo
 cmake_minimum_required(VERSION 3.20)
-project(dash_pkc VERSION 0.0.0 LANGUAGES CXX)
+project(dash_pkc VERSION 0.0.0 LANGUAGES NONE)
 
 option(DASH_PKC_PORTABLE "Use blst's portable backend (no ADX autodetect); required for distributable x86_64 binaries" OFF)
 option(DASH_PKC_BUILD_TESTS "Build the C++ smoke tests" ON)
+set(DASH_PKC_CARGO "cargo" CACHE STRING "cargo executable used to build the Rust staticlib")
+set(DASH_PKC_RUST_TARGET "" CACHE STRING "Rust target triple; empty builds for the build machine")
+set(DASH_PKC_VENDOR_DIR "" CACHE PATH "Directory of vendored crates; enables offline cargo builds")
+set(DASH_PKC_MACOS_MIN "" CACHE STRING "Minimum macOS version exported as MACOSX_DEPLOYMENT_TARGET")
 
 set(DASH_PKC_BINDS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/pkgs/pkc/binds)
-
-find_program(CARGO_EXECUTABLE cargo REQUIRED)
 
 # Rust staticlib. Only the crate's default (bls) features are ever
 # enabled; the workspace release profile adds LTO and panic=abort.
@@ -21,19 +32,35 @@ else()
   set(DASH_PKC_CARGO_PROFILE_DIR release)
   set(DASH_PKC_CARGO_PROFILE_FLAG --release)
 endif()
-set(DASH_PKC_RUST_LIB
-    ${DASH_PKC_CARGO_TARGET_DIR}/${DASH_PKC_CARGO_PROFILE_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}dash_pkc_binds${CMAKE_STATIC_LIBRARY_SUFFIX})
 
-set(DASH_PKC_CARGO_FEATURES "")
-if(DASH_PKC_PORTABLE)
-  set(DASH_PKC_CARGO_FEATURES --features bls-portable)
+set(DASH_PKC_CARGO_ARGS "")
+set(DASH_PKC_RUST_LIB_DIR ${DASH_PKC_CARGO_TARGET_DIR})
+if(DASH_PKC_RUST_TARGET)
+  list(APPEND DASH_PKC_CARGO_ARGS --target ${DASH_PKC_RUST_TARGET})
+  set(DASH_PKC_RUST_LIB_DIR ${DASH_PKC_CARGO_TARGET_DIR}/${DASH_PKC_RUST_TARGET})
 endif()
+if(DASH_PKC_VENDOR_DIR)
+  list(APPEND DASH_PKC_CARGO_ARGS --offline
+       --config "source.crates-io.replace-with='vendored-sources'"
+       --config "source.vendored-sources.directory='${DASH_PKC_VENDOR_DIR}'")
+endif()
+if(DASH_PKC_PORTABLE)
+  list(APPEND DASH_PKC_CARGO_ARGS --features bls-portable)
+endif()
+
+set(DASH_PKC_CARGO_ENV CARGO_TARGET_DIR=${DASH_PKC_CARGO_TARGET_DIR})
+if(DASH_PKC_MACOS_MIN)
+  list(APPEND DASH_PKC_CARGO_ENV MACOSX_DEPLOYMENT_TARGET=${DASH_PKC_MACOS_MIN})
+endif()
+
+set(DASH_PKC_RUST_LIB
+    ${DASH_PKC_RUST_LIB_DIR}/${DASH_PKC_CARGO_PROFILE_DIR}/libdash_pkc_binds.a)
 
 # Always invoke cargo; it is a fast no-op when nothing changed and
 # tracks the Rust source dependencies itself.
-add_custom_target(dash_pkc_cargo
-  COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${DASH_PKC_CARGO_TARGET_DIR}
-          ${CARGO_EXECUTABLE} build ${DASH_PKC_CARGO_PROFILE_FLAG} -p dash-pkc-binds ${DASH_PKC_CARGO_FEATURES}
+add_custom_target(dash_pkc_cargo ALL
+  COMMAND ${CMAKE_COMMAND} -E env ${DASH_PKC_CARGO_ENV}
+          ${DASH_PKC_CARGO} build ${DASH_PKC_CARGO_PROFILE_FLAG} -p dash-pkc-binds ${DASH_PKC_CARGO_ARGS}
   BYPRODUCTS ${DASH_PKC_RUST_LIB}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMENT "cargo build dash-pkc-binds (${DASH_PKC_CARGO_PROFILE_DIR})"
@@ -47,7 +74,6 @@ add_dependencies(dash_pkc_rust dash_pkc_cargo)
 # include paths (wrapper, diplomat-generated, vendored tl::expected)
 # and links the Rust staticlib.
 add_library(dash_pkc INTERFACE)
-target_compile_features(dash_pkc INTERFACE cxx_std_20)
 target_include_directories(dash_pkc INTERFACE
   $<BUILD_INTERFACE:${DASH_PKC_BINDS_DIR}/include>
   $<BUILD_INTERFACE:${DASH_PKC_BINDS_DIR}/gen>
@@ -93,6 +119,8 @@ install(FILES ${CMAKE_BINARY_DIR}/dash_pkc-config.cmake ${CMAKE_BINARY_DIR}/dash
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dash_pkc)
 
 if(DASH_PKC_BUILD_TESTS)
+  enable_language(CXX)
+  target_compile_features(dash_pkc INTERFACE cxx_std_20)
   enable_testing()
   add_executable(dash_pkc_smoke_test ${DASH_PKC_BINDS_DIR}/tests/cpp/smoke_test.cpp)
   target_link_libraries(dash_pkc_smoke_test PRIVATE dash_pkc)
