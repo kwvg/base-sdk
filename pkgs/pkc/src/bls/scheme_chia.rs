@@ -90,6 +90,44 @@ impl BlsScheme for BlsScChia {
     Ok(out)
   }
 
+  fn hash_to_g2_point(msg: &[u8]) -> Result<blst_p2_affine, BlsError> {
+    let msg32: &[u8; 32] = msg.try_into().map_err(|_| BlsError::InvalidMessageLength)?;
+    Ok(blst_ffi::p2_to_affine(&chia_h2c::hash_to_g2(msg32)))
+  }
+
+  fn verify_prehashed(sig: &Self::InnerSig, h: &blst_p2_affine, pk: &Self::InnerPk) -> Result<(), BlsError> {
+    if blst_ffi::p1_affine_is_inf(pk) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    if blst_ffi::p2_affine_is_inf(sig) {
+      return Err(BlsError::InvalidSignature);
+    }
+    if blst_ffi::aggregate_pairings_verify(sig, core::slice::from_ref(h), core::slice::from_ref(pk)) {
+      Ok(())
+    } else {
+      Err(BlsError::VerifyFailed)
+    }
+  }
+
+  fn verify_aggregates_prehashed(
+    sig: &Self::InnerSig,
+    hs: &[blst_p2_affine],
+    pks: &[&Self::InnerPk],
+  ) -> Result<(), BlsError> {
+    if pks.len() != hs.len() {
+      return Err(BlsError::CountMismatch);
+    }
+    if pks.is_empty() {
+      return Err(BlsError::EmptyAggregation);
+    }
+    let points: Vec<blst_p1_affine> = pks.iter().map(|pk| **pk).collect();
+    if blst_ffi::aggregate_pairings_verify(sig, hs, &points) {
+      Ok(())
+    } else {
+      Err(BlsError::VerifyFailed)
+    }
+  }
+
   fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError> {
     debug_assert!(blst_ffi::sk_check(sk), "zero secret key");
     // dashbls signs 32-byte hashes only; the previous double-SHA

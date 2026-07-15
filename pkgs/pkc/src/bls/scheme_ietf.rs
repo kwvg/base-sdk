@@ -98,6 +98,52 @@ impl BlsScheme for BlsScIetf {
     Ok(sk.sign(msg, dst, &aug))
   }
 
+  fn hash_to_g2_point(msg: &[u8]) -> Result<blst_p2_affine, BlsError> {
+    Ok(blst_ffi::hash_to_g2(msg, DST_BASIC))
+  }
+
+  fn verify_prehashed(sig: &Self::InnerSig, h: &blst_p2_affine, pk: &Self::InnerPk) -> Result<(), BlsError> {
+    // blst's high-level types hide their affine points; the
+    // uncompressed round-trip is cheap (no square root, and the
+    // parse-time validation invariant makes rechecks redundant).
+    let sig_aff = blst_ffi::p2_deserialize(&sig.serialize()).map_err(|_| BlsError::InvalidSignature)?;
+    let pk_aff = blst_ffi::p1_deserialize(&pk.serialize()).map_err(|_| BlsError::InvalidPublicKey)?;
+    if blst_ffi::aggregate_pairings_verify(&sig_aff, core::slice::from_ref(h), core::slice::from_ref(&pk_aff)) {
+      Ok(())
+    } else {
+      Err(BlsError::VerifyFailed)
+    }
+  }
+
+  fn verify_aggregates_prehashed(
+    sig: &Self::InnerSig,
+    hs: &[blst_p2_affine],
+    pks: &[&Self::InnerPk],
+  ) -> Result<(), BlsError> {
+    if pks.len() != hs.len() {
+      return Err(BlsError::CountMismatch);
+    }
+    if pks.is_empty() {
+      return Err(BlsError::EmptyAggregation);
+    }
+    // BasicSchemeMPL requires distinct messages; equal messages
+    // hash to equal points, so enforce the rule on the points.
+    let mut seen: alloc::collections::BTreeSet<[u8; 96]> = alloc::collections::BTreeSet::new();
+    if !hs.iter().all(|h| seen.insert(blst_ffi::p2_affine_compress(h))) {
+      return Err(BlsError::DuplicateMessage);
+    }
+    let sig_aff = blst_ffi::p2_deserialize(&sig.serialize()).map_err(|_| BlsError::InvalidSignature)?;
+    let mut points = Vec::with_capacity(pks.len());
+    for pk in pks {
+      points.push(blst_ffi::p1_deserialize(&pk.serialize()).map_err(|_| BlsError::InvalidPublicKey)?);
+    }
+    if blst_ffi::aggregate_pairings_verify(&sig_aff, hs, &points) {
+      Ok(())
+    } else {
+      Err(BlsError::VerifyFailed)
+    }
+  }
+
   fn verify(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk) -> Result<(), BlsError> {
     // Signatures and keys are group-checked at parse (and closed
     // under the operations that produce them), so per-verify

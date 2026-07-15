@@ -118,6 +118,22 @@ pub(crate) fn p2_affine_is_inf(point: &blst_p2_affine) -> bool {
   unsafe { blst_p2_affine_is_inf(point) }
 }
 
+pub(crate) fn hash_to_g2(msg: &[u8], dst: &[u8]) -> blst_p2_affine {
+  let mut p = blst_p2::default();
+  unsafe {
+    blst_hash_to_g2(
+      &mut p,
+      msg.as_ptr(),
+      msg.len(),
+      dst.as_ptr(),
+      dst.len(),
+      core::ptr::null(),
+      0,
+    )
+  };
+  p2_to_affine(&p)
+}
+
 pub(crate) fn p2_affine_compress(point: &blst_p2_affine) -> [u8; 96] {
   let mut out = [0u8; 96];
   unsafe { blst_p2_affine_compress(out.as_mut_ptr(), point) };

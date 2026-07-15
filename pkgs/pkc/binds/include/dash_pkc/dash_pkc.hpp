@@ -16,6 +16,7 @@
 #include "dash_pkc/ies.hpp"
 #include "dash_pkc/privatekey.hpp"
 #include "dash_pkc/schemes.hpp"
+#include "dash_pkc/session.hpp"
 #include "dash_pkc/threshold.hpp"
 
 #endif // DASH_PKC_DASH_PKC_HPP

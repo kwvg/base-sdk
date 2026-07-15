@@ -152,6 +152,91 @@ impl RngCore for SliceRng<'_> {
 /// IKM plus 32-byte IV seed).
 const IES_ENTROPY_LEN: usize = 64;
 
+/// Entropy a session consumes at creation (keyed-hash material).
+const SESSION_ENTROPY_LEN: usize = 32;
+
+/// Bounded FIFO map used for all session caches. All cached values
+/// are pure functions of their keys, so eviction never affects
+/// correctness, only hit rate.
+struct BoundedCache<K: Ord + Clone, V: Clone> {
+  map: alloc::collections::BTreeMap<K, V>,
+  order: alloc::collections::VecDeque<K>,
+  cap: usize,
+}
+
+impl<K: Ord + Clone, V: Clone> BoundedCache<K, V> {
+  fn new(cap: usize) -> Self {
+    Self {
+      map: alloc::collections::BTreeMap::new(),
+      order: alloc::collections::VecDeque::new(),
+      cap,
+    }
+  }
+
+  fn get(&self, key: &K) -> Option<V> {
+    self.map.get(key).cloned()
+  }
+
+  fn insert(&mut self, key: K, value: V) {
+    if self.map.insert(key.clone(), value).is_none() {
+      self.order.push_back(key);
+      if self.order.len() > self.cap {
+        if let Some(evicted) = self.order.pop_front() {
+          self.map.remove(&evicted);
+        }
+      }
+    }
+  }
+}
+
+type MsgPointLegacy = dash_pkc::bls::BlsMessagePoint<BlsScChia>;
+type MsgPointBasic = dash_pkc::bls::BlsMessagePoint<BlsScIetf>;
+
+/// Program-lifetime cache state owned by the embedding application
+/// (Dash Core's `g_bls_session`); see `ffi::Session`.
+pub(crate) struct SessionState {
+  // Keyed-hash material for content-addressed caches; consumed
+  // once the verification-result cache lands.
+  #[expect(dead_code, reason = "reserved for keyed result caching")]
+  entropy: [u8; SESSION_ENTROPY_LEN],
+  msg_points_legacy: spin::Mutex<BoundedCache<[u8; 32], MsgPointLegacy>>,
+  msg_points_basic: spin::Mutex<BoundedCache<[u8; 32], MsgPointBasic>>,
+}
+
+impl SessionState {
+  fn new(entropy: [u8; SESSION_ENTROPY_LEN]) -> Self {
+    Self {
+      entropy,
+      msg_points_legacy: spin::Mutex::new(BoundedCache::new(4096)),
+      msg_points_basic: spin::Mutex::new(BoundedCache::new(4096)),
+    }
+  }
+
+  fn msg_point_legacy(&self, msg32: &[u8; 32]) -> Result<MsgPointLegacy, BlsError> {
+    if let Some(mp) = self.msg_points_legacy.lock().get(msg32) {
+      return Ok(mp);
+    }
+    let mp = MsgPointLegacy::hash(msg32)?;
+    self.msg_points_legacy.lock().insert(*msg32, mp.clone());
+    Ok(mp)
+  }
+
+  fn msg_point_basic(&self, msg32: &[u8; 32]) -> Result<MsgPointBasic, BlsError> {
+    if let Some(mp) = self.msg_points_basic.lock().get(msg32) {
+      return Ok(mp);
+    }
+    let mp = MsgPointBasic::hash(msg32)?;
+    self.msg_points_basic.lock().insert(*msg32, mp.clone());
+    Ok(mp)
+  }
+}
+
+impl core::fmt::Debug for SessionState {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    write!(f, "SessionState(..)")
+  }
+}
+
 impl From<BlsError> for ffi::PkcError {
   fn from(err: BlsError) -> Self {
     match err {
@@ -182,7 +267,7 @@ impl From<BlsError> for ffi::PkcError {
 pub mod ffi {
   use super::{
     id_from_slice, pks_to_basic, pks_to_legacy, sigs_to_basic, sigs_to_legacy, ChiaPk, ChiaSig, IetfPk, IetfSig,
-    IetfSk, PkImpl, SigImpl, SliceRng, IES_ENTROPY_LEN,
+    IetfSk, PkImpl, SessionState, SigImpl, SliceRng, IES_ENTROPY_LEN, SESSION_ENTROPY_LEN,
   };
 
   use alloc::boxed::Box;
@@ -916,6 +1001,134 @@ pub mod ffi {
     /// Ciphertext (= plaintext) length of one recipient slot.
     pub fn data_len_at(&self, index: usize) -> Result<usize, PkcError> {
       self.0.blobs().get(index).map(Vec::len).ok_or(PkcError::IndexOutOfRange)
+    }
+  }
+
+  /// Program-lifetime crypto context (libsecp256k1-style): owns all
+  /// runtime caches and the keyed-hash entropy. Create once at
+  /// application init with strong entropy; operations routed
+  /// through a session use its caches, plain operations never do.
+  #[diplomat::opaque]
+  #[diplomat::attr(auto, namespace = "dash_pkc::ffi")]
+  #[derive(Debug)]
+  pub struct Session(pub(crate) SessionState);
+
+  impl Session {
+    /// Create a session from at least 32 bytes of entropy.
+    pub fn create(entropy: &[u8]) -> Result<Box<Session>, PkcError> {
+      let arr: [u8; SESSION_ENTROPY_LEN] = entropy
+        .get(..SESSION_ENTROPY_LEN)
+        .and_then(|s| s.try_into().ok())
+        .ok_or(PkcError::InsufficientEntropy)?;
+      Ok(Box::new(Session(SessionState::new(arr))))
+    }
+
+    /// As `Signature::verify`, using the session's hash-to-G2
+    /// cache for 32-byte messages.
+    pub fn verify(&self, sig: &Signature, msg: &[u8], pk: &PublicKey, scheme: Scheme) -> Result<(), PkcError> {
+      if let Ok(msg32) = <&[u8; 32]>::try_from(msg) {
+        return match scheme {
+          Scheme::Legacy => {
+            let mp = self.0.msg_point_legacy(msg32)?;
+            Ok(sig.0.as_legacy()?.verify_prehashed(&mp, pk.0.as_legacy()?.as_ref())?)
+          }
+          Scheme::Basic => {
+            let mp = self.0.msg_point_basic(msg32)?;
+            Ok(sig.0.as_basic()?.verify_prehashed(&mp, pk.0.as_basic()?.as_ref())?)
+          }
+        };
+      }
+      sig.verify(msg, pk, scheme)
+    }
+
+    /// As `Signature::verify_aggregated`, using the session's
+    /// hash-to-G2 cache when all messages are 32 bytes.
+    pub fn verify_aggregated(
+      &self,
+      sig: &Signature,
+      msgs: &MessageVec,
+      pks: &PublicKeyVec,
+      scheme: Scheme,
+    ) -> Result<(), PkcError> {
+      if msgs.0.iter().all(|m| m.len() == 32) {
+        match scheme {
+          Scheme::Legacy => {
+            let mut points = Vec::with_capacity(msgs.0.len());
+            for msg in &msgs.0 {
+              let msg32: &[u8; 32] = msg.as_slice().try_into().map_err(|_| PkcError::InvalidLength)?;
+              points.push(self.0.msg_point_legacy(msg32)?);
+            }
+            let point_refs: Vec<_> = points.iter().collect();
+            let owned = pks_to_legacy(&pks.0)?;
+            let refs: Vec<&ChiaPk> = owned.iter().map(|c| &**c).collect();
+            return Ok(sig.0.as_legacy()?.verify_aggregates_prehashed(&point_refs, &refs)?);
+          }
+          Scheme::Basic => {
+            let mut points = Vec::with_capacity(msgs.0.len());
+            for msg in &msgs.0 {
+              let msg32: &[u8; 32] = msg.as_slice().try_into().map_err(|_| PkcError::InvalidLength)?;
+              points.push(self.0.msg_point_basic(msg32)?);
+            }
+            let point_refs: Vec<_> = points.iter().collect();
+            let owned = pks_to_basic(&pks.0)?;
+            let refs: Vec<&IetfPk> = owned.iter().map(|c| &**c).collect();
+            return Ok(sig.0.as_basic()?.verify_aggregates_prehashed(&point_refs, &refs)?);
+          }
+        }
+      }
+      sig.verify_aggregated(msgs, pks, scheme)
+    }
+
+    /// As `Signature::verify_secure`; cache-accelerated variants
+    /// are introduced per technique.
+    pub fn verify_secure(
+      &self,
+      sig: &Signature,
+      pks: &PublicKeyVec,
+      msg: &[u8],
+      scheme: Scheme,
+    ) -> Result<(), PkcError> {
+      sig.verify_secure(pks, msg, scheme)
+    }
+
+    /// As `Signature::aggregate_secure`.
+    pub fn aggregate_secure(
+      &self,
+      sigs: &SignatureVec,
+      pks: &PublicKeyVec,
+      scheme: Scheme,
+    ) -> Result<Box<Signature>, PkcError> {
+      Signature::aggregate_secure(sigs, pks, scheme)
+    }
+
+    /// As `PublicKey::from_bytes`.
+    pub fn parse_public_key(&self, bytes: &[u8], scheme: Scheme) -> Result<Box<PublicKey>, PkcError> {
+      PublicKey::from_bytes(bytes, scheme)
+    }
+
+    /// As `Signature::from_bytes`.
+    pub fn parse_signature(&self, bytes: &[u8], scheme: Scheme) -> Result<Box<Signature>, PkcError> {
+      Signature::from_bytes(bytes, scheme)
+    }
+
+    /// As `PublicKey::derive_share`.
+    pub fn public_key_share(
+      &self,
+      masters: &PublicKeyVec,
+      id: &[u8],
+      scheme: Scheme,
+    ) -> Result<Box<PublicKey>, PkcError> {
+      PublicKey::derive_share(masters, id, scheme)
+    }
+
+    /// As `Signature::recover`.
+    pub fn recover_signature(
+      &self,
+      sigs: &SignatureVec,
+      ids: &IdVec,
+      scheme: Scheme,
+    ) -> Result<Box<Signature>, PkcError> {
+      Signature::recover(sigs, ids, scheme)
     }
   }
 }

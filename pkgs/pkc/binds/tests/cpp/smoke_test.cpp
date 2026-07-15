@@ -335,6 +335,50 @@ void TestDhExchange()
 
 } // namespace
 
+void TestSession()
+{
+    const auto entropy = Seq(32, 0xE0);
+    auto session = dash_pkc::Session::Create(entropy);
+    CHECK(session.has_value());
+    CHECK(!dash_pkc::Session::Create(Seq(16, 0)).has_value());
+
+    auto sk = dash_pkc::PrivateKey::KeyGen(Seq(32, 0x91));
+    CHECK(sk.has_value());
+    const auto hash = Seq(32, 0x92);
+
+    for (const bool legacy : {false, true}) {
+        auto pk = sk->GetG1Element(legacy);
+        auto sig = sk->Sign(hash, legacy);
+        CHECK(pk.has_value() && sig.has_value());
+
+        // Repeated session verifies hit the hash-to-G2 cache and
+        // must agree with the uncached path.
+        for (int rep = 0; rep < 3; ++rep) {
+            CHECK(session->Verify(*pk, hash, *sig, legacy));
+        }
+        CHECK(!session->Verify(*pk, Seq(32, 0x93), *sig, legacy));
+        CHECK(session->Verify(*pk, hash, *sig, legacy) ==
+              dash_pkc::CoreMPL(legacy).Verify(*pk, hash, *sig));
+
+        // Aggregated verification through the session.
+        auto sk2 = dash_pkc::PrivateKey::KeyGen(Seq(32, 0x94));
+        const auto hash2 = Seq(32, 0x95);
+        auto sig2 = sk2->Sign(hash2, legacy);
+        auto agg = dash_pkc::CoreMPL(legacy).Aggregate({*sig, *sig2});
+        CHECK(agg.has_value());
+        const std::vector<dash_pkc::G1Element> pks{*pk, *sk2->GetG1Element(legacy)};
+        const std::vector<std::vector<uint8_t>> msgs{hash, hash2};
+        for (int rep = 0; rep < 2; ++rep) {
+            CHECK(session->VerifyAggregated(pks, msgs, *agg, legacy));
+        }
+        CHECK(!session->VerifyAggregated(pks, {hash2, hash}, *agg, legacy));
+
+        // Pass-through paths agree with their plain equivalents.
+        CHECK(session->ParsePublicKey(pk->SerializeToArray(legacy), legacy).has_value());
+        CHECK(session->ParseSignature(sig->SerializeToArray(legacy), legacy).has_value());
+    }
+}
+
 int main()
 {
     TestSignVerifyBothSchemes();
@@ -344,6 +388,7 @@ int main()
     TestLegacyKat();
     TestIes();
     TestDhExchange();
+    TestSession();
 
     if (g_failures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", g_failures);

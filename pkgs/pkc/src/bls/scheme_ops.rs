@@ -57,6 +57,18 @@ pub trait BlsScheme: BlsSchemeId {
   /// `sig_from_bytes`.
   fn sig_from_ietf_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError>;
 
+  /// Hash a message onto G2 under this scheme's hash-to-curve.
+  fn hash_to_g2_point(msg: &[u8]) -> Result<blst_p2_affine, BlsError>;
+  /// Verify against a precomputed hash-to-G2 point.
+  fn verify_prehashed(sig: &Self::InnerSig, h: &blst_p2_affine, pk: &Self::InnerPk) -> Result<(), BlsError>;
+  /// Aggregate verification over precomputed hash points; the
+  /// basic scheme's distinct message rule is enforced on points.
+  fn verify_aggregates_prehashed(
+    sig: &Self::InnerSig,
+    hs: &[blst_p2_affine],
+    pks: &[&Self::InnerPk],
+  ) -> Result<(), BlsError>;
+
   fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError>;
   fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: BlsSigId) -> Result<Self::InnerSig, BlsError>;
   fn verify(sig: &Self::InnerSig, msg: &[u8], pk: &Self::InnerPk) -> Result<(), BlsError>;
