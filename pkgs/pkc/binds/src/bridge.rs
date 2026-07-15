@@ -195,12 +195,24 @@ type MsgPointBasic = dash_pkc::bls::BlsMessagePoint<BlsScIetf>;
 /// Program-lifetime cache state owned by the embedding application
 /// (Dash Core's `g_bls_session`); see `ffi::Session`.
 pub(crate) struct SessionState {
-  // Keyed-hash material for content-addressed caches; consumed
-  // once the verification-result cache lands.
-  #[expect(dead_code, reason = "reserved for keyed result caching")]
+  // Keyed-hash material for content-addressed caches.
   entropy: [u8; SESSION_ENTROPY_LEN],
   msg_points_legacy: spin::Mutex<BoundedCache<[u8; 32], MsgPointLegacy>>,
   msg_points_basic: spin::Mutex<BoundedCache<[u8; 32], MsgPointBasic>>,
+  // Validated-parse caches: bytes -> already-subgroup-checked
+  // handle. Keys are scheme-prefixed serializations.
+  pk_parse: spin::Mutex<BoundedCache<[u8; 49], PkImpl>>,
+  sig_parse: spin::Mutex<BoundedCache<[u8; 97], SigImpl>>,
+  // Weighted (delinearized) aggregate public key per ordered key
+  // set; keyed by scheme-prefixed concatenated serializations.
+  agg_secure_pk: spin::Mutex<BoundedCache<Vec<u8>, PkImpl>>,
+  // Lagrange coefficients per ordered participant-id set (scheme
+  // independent scalar math).
+  lagrange: spin::Mutex<BoundedCache<Vec<u8>, dash_pkc::bls::BlsLagrangeCoefficients>>,
+  // Successful verification results, content-addressed by a keyed
+  // digest over all inputs (sigcache analog; only successes are
+  // stored, so a hit can never upgrade an invalid signature).
+  results: spin::Mutex<BoundedCache<[u8; 32], ()>>,
 }
 
 impl SessionState {
@@ -209,11 +221,43 @@ impl SessionState {
       entropy,
       msg_points_legacy: spin::Mutex::new(BoundedCache::new(4096)),
       msg_points_basic: spin::Mutex::new(BoundedCache::new(4096)),
+      pk_parse: spin::Mutex::new(BoundedCache::new(8192)),
+      sig_parse: spin::Mutex::new(BoundedCache::new(8192)),
+      agg_secure_pk: spin::Mutex::new(BoundedCache::new(256)),
+      lagrange: spin::Mutex::new(BoundedCache::new(256)),
+      results: spin::Mutex::new(BoundedCache::new(16384)),
     }
   }
 
+  /// Keyed digest over verification inputs. The session entropy
+  /// prevents cross-process key prediction; sha256d makes key
+  /// collisions infeasible.
+  fn result_key(&self, scheme_byte: u8, parts: &[&[u8]]) -> [u8; 32] {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(self.entropy);
+    hasher.update([scheme_byte]);
+    for part in parts {
+      hasher.update((part.len() as u64).to_le_bytes());
+      hasher.update(part);
+    }
+    let first = hasher.finalize();
+    let mut second = sha2::Sha256::new();
+    second.update(first);
+    second.finalize().into()
+  }
+
+  fn result_hit(&self, key: &[u8; 32]) -> bool {
+    self.results.lock().get(key).is_some()
+  }
+
+  fn result_store(&self, key: [u8; 32]) {
+    self.results.lock().insert(key, ());
+  }
+
   fn msg_point_legacy(&self, msg32: &[u8; 32]) -> Result<MsgPointLegacy, BlsError> {
-    if let Some(mp) = self.msg_points_legacy.lock().get(msg32) {
+    let cached = self.msg_points_legacy.lock().get(msg32);
+    if let Some(mp) = cached {
       return Ok(mp);
     }
     let mp = MsgPointLegacy::hash(msg32)?;
@@ -222,7 +266,8 @@ impl SessionState {
   }
 
   fn msg_point_basic(&self, msg32: &[u8; 32]) -> Result<MsgPointBasic, BlsError> {
-    if let Some(mp) = self.msg_points_basic.lock().get(msg32) {
+    let cached = self.msg_points_basic.lock().get(msg32);
+    if let Some(mp) = cached {
       return Ok(mp);
     }
     let mp = MsgPointBasic::hash(msg32)?;
@@ -1026,6 +1071,34 @@ pub mod ffi {
     /// As `Signature::verify`, using the session's hash-to-G2
     /// cache for 32-byte messages.
     pub fn verify(&self, sig: &Signature, msg: &[u8], pk: &PublicKey, scheme: Scheme) -> Result<(), PkcError> {
+      let scheme_byte: u8 = match scheme {
+        Scheme::Legacy => 0,
+        Scheme::Basic => 1,
+      };
+      let sig_bytes = match &sig.0 {
+        SigImpl::Legacy(s) => s.to_bytes(),
+        SigImpl::Basic(s) => s.to_bytes(),
+      };
+      let pk_bytes = match &pk.0 {
+        PkImpl::Legacy(p) => p.to_bytes(),
+        PkImpl::Basic(p) => p.to_bytes(),
+      };
+      let result_key = self.0.result_key(scheme_byte, &[&sig_bytes, &pk_bytes, msg]);
+      if self.0.result_hit(&result_key) {
+        return Ok(());
+      }
+      self.verify_uncached_inner(sig, msg, pk, scheme)?;
+      self.0.result_store(result_key);
+      Ok(())
+    }
+
+    fn verify_uncached_inner(
+      &self,
+      sig: &Signature,
+      msg: &[u8],
+      pk: &PublicKey,
+      scheme: Scheme,
+    ) -> Result<(), PkcError> {
       if let Ok(msg32) = <&[u8; 32]>::try_from(msg) {
         return match scheme {
           Scheme::Legacy => {
@@ -1044,6 +1117,42 @@ pub mod ffi {
     /// As `Signature::verify_aggregated`, using the session's
     /// hash-to-G2 cache when all messages are 32 bytes.
     pub fn verify_aggregated(
+      &self,
+      sig: &Signature,
+      msgs: &MessageVec,
+      pks: &PublicKeyVec,
+      scheme: Scheme,
+    ) -> Result<(), PkcError> {
+      let scheme_byte: u8 = match scheme {
+        Scheme::Legacy => 0,
+        Scheme::Basic => 1,
+      };
+      let sig_bytes = match &sig.0 {
+        SigImpl::Legacy(s) => s.to_bytes(),
+        SigImpl::Basic(s) => s.to_bytes(),
+      };
+      let mut body = Vec::with_capacity(96 + pks.0.len() * 48 + msgs.0.len() * 33);
+      body.extend_from_slice(&sig_bytes);
+      for pk in &pks.0 {
+        match pk {
+          PkImpl::Legacy(p) => body.extend_from_slice(&p.to_bytes()),
+          PkImpl::Basic(p) => body.extend_from_slice(&p.to_bytes()),
+        }
+      }
+      for msg in &msgs.0 {
+        body.extend_from_slice(&(msg.len() as u64).to_le_bytes());
+        body.extend_from_slice(msg);
+      }
+      let result_key = self.0.result_key(scheme_byte, &[&body]);
+      if self.0.result_hit(&result_key) {
+        return Ok(());
+      }
+      self.verify_aggregated_uncached_inner(sig, msgs, pks, scheme)?;
+      self.0.result_store(result_key);
+      Ok(())
+    }
+
+    fn verify_aggregated_uncached_inner(
       &self,
       sig: &Signature,
       msgs: &MessageVec,
@@ -1079,8 +1188,10 @@ pub mod ffi {
       sig.verify_aggregated(msgs, pks, scheme)
     }
 
-    /// As `Signature::verify_secure`; cache-accelerated variants
-    /// are introduced per technique.
+    /// As `Signature::verify_secure`, caching the weighted
+    /// aggregate key per ordered key set and reusing the session's
+    /// hash-to-G2 cache: repeated verification against the same
+    /// quorum degenerates to one pairing.
     pub fn verify_secure(
       &self,
       sig: &Signature,
@@ -1088,7 +1199,41 @@ pub mod ffi {
       msg: &[u8],
       scheme: Scheme,
     ) -> Result<(), PkcError> {
-      sig.verify_secure(pks, msg, scheme)
+      let scheme_byte: u8 = match scheme {
+        Scheme::Legacy => 0,
+        Scheme::Basic => 1,
+      };
+      let mut key = Vec::with_capacity(1 + pks.0.len() * 48);
+      key.push(scheme_byte);
+      for pk in &pks.0 {
+        match pk {
+          PkImpl::Legacy(p) => key.extend_from_slice(&p.to_bytes()),
+          PkImpl::Basic(p) => key.extend_from_slice(&p.to_bytes()),
+        }
+      }
+
+      let cached = self.0.agg_secure_pk.lock().get(&key);
+      let agg = if let Some(agg) = cached {
+        agg
+      } else {
+        let agg = match scheme {
+          Scheme::Legacy => {
+            let owned = pks_to_legacy(&pks.0)?;
+            let refs: Vec<&ChiaPk> = owned.iter().map(|c| &**c).collect();
+            PkImpl::Legacy(ChiaPk::aggregate_secure(&refs)?)
+          }
+          Scheme::Basic => {
+            let owned = pks_to_basic(&pks.0)?;
+            let refs: Vec<&IetfPk> = owned.iter().map(|c| &**c).collect();
+            PkImpl::Basic(IetfPk::aggregate_secure(&refs)?)
+          }
+        };
+        self.0.agg_secure_pk.lock().insert(key, agg.clone());
+        agg
+      };
+
+      let agg_pk = PublicKey(agg);
+      self.verify(sig, msg, &agg_pk, scheme)
     }
 
     /// As `Signature::aggregate_secure`.
@@ -1101,14 +1246,43 @@ pub mod ffi {
       Signature::aggregate_secure(sigs, pks, scheme)
     }
 
-    /// As `PublicKey::from_bytes`.
+    /// As `PublicKey::from_bytes`, caching validated parses so
+    /// recurring keys (masternode operator keys) skip the subgroup
+    /// check.
     pub fn parse_public_key(&self, bytes: &[u8], scheme: Scheme) -> Result<Box<PublicKey>, PkcError> {
-      PublicKey::from_bytes(bytes, scheme)
+      let mut key = [0u8; 49];
+      key[0] = match scheme {
+        Scheme::Legacy => 0,
+        Scheme::Basic => 1,
+      };
+      let body: &[u8; 48] = bytes.try_into().map_err(|_| PkcError::InvalidLength)?;
+      key[1..].copy_from_slice(body);
+
+      if let Some(pk) = self.0.pk_parse.lock().get(&key) {
+        return Ok(Box::new(PublicKey(pk)));
+      }
+      let parsed = PublicKey::from_bytes(bytes, scheme)?;
+      self.0.pk_parse.lock().insert(key, parsed.0.clone());
+      Ok(parsed)
     }
 
-    /// As `Signature::from_bytes`.
+    /// As `Signature::from_bytes`, caching validated parses so
+    /// duplicate gossip skips the (G2, costliest) subgroup check.
     pub fn parse_signature(&self, bytes: &[u8], scheme: Scheme) -> Result<Box<Signature>, PkcError> {
-      Signature::from_bytes(bytes, scheme)
+      let mut key = [0u8; 97];
+      key[0] = match scheme {
+        Scheme::Legacy => 0,
+        Scheme::Basic => 1,
+      };
+      let body: &[u8; 96] = bytes.try_into().map_err(|_| PkcError::InvalidLength)?;
+      key[1..].copy_from_slice(body);
+
+      if let Some(sig) = self.0.sig_parse.lock().get(&key) {
+        return Ok(Box::new(Signature(sig)));
+      }
+      let parsed = Signature::from_bytes(bytes, scheme)?;
+      self.0.sig_parse.lock().insert(key, parsed.0.clone());
+      Ok(parsed)
     }
 
     /// As `PublicKey::derive_share`.
@@ -1121,14 +1295,46 @@ pub mod ffi {
       PublicKey::derive_share(masters, id, scheme)
     }
 
-    /// As `Signature::recover`.
+    /// As `Signature::recover`, caching Lagrange coefficients per
+    /// ordered participant-id set (the same threshold member set
+    /// recovers many signatures in an LLMQ signing session).
     pub fn recover_signature(
       &self,
       sigs: &SignatureVec,
       ids: &IdVec,
       scheme: Scheme,
     ) -> Result<Box<Signature>, PkcError> {
-      Signature::recover(sigs, ids, scheme)
+      if sigs.0.len() != ids.0.len() {
+        return Err(PkcError::CountMismatch);
+      }
+      let mut key = Vec::with_capacity(ids.0.len() * 32);
+      for id in &ids.0 {
+        key.extend_from_slice(id.as_bytes());
+      }
+
+      let cached = self.0.lagrange.lock().get(&key);
+      let coeffs = if let Some(coeffs) = cached {
+        coeffs
+      } else {
+        let id_refs: Vec<&Hash256> = ids.0.iter().collect();
+        let coeffs = dash_pkc::bls::BlsLagrangeCoefficients::new(&id_refs)?;
+        self.0.lagrange.lock().insert(key, coeffs.clone());
+        coeffs
+      };
+
+      let sig = match scheme {
+        Scheme::Legacy => {
+          let owned = sigs_to_legacy(&sigs.0)?;
+          let refs: Vec<&ChiaSig> = owned.iter().map(|c| &**c).collect();
+          SigImpl::Legacy(ChiaSig::recover_with_coefficients(&coeffs, &refs)?)
+        }
+        Scheme::Basic => {
+          let owned = sigs_to_basic(&sigs.0)?;
+          let refs: Vec<&IetfSig> = owned.iter().map(|c| &**c).collect();
+          SigImpl::Basic(IetfSig::recover_with_coefficients(&coeffs, &refs)?)
+        }
+      };
+      Ok(Box::new(Signature(sig)))
     }
   }
 }

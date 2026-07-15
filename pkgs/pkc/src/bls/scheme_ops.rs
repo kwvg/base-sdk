@@ -61,8 +61,6 @@ pub trait BlsScheme: BlsSchemeId {
   fn hash_to_g2_point(msg: &[u8]) -> Result<blst_p2_affine, BlsError>;
   /// Verify against a precomputed hash-to-G2 point.
   fn verify_prehashed(sig: &Self::InnerSig, h: &blst_p2_affine, pk: &Self::InnerPk) -> Result<(), BlsError>;
-  /// Aggregate verification over precomputed hash points; the
-  /// basic scheme's distinct message rule is enforced on points.
   fn verify_aggregates_prehashed(
     sig: &Self::InnerSig,
     hs: &[blst_p2_affine],
@@ -125,6 +123,13 @@ pub trait BlsScheme: BlsSchemeId {
   }
 
   fn aggregate_sig_secure(pks: &[&Self::InnerPk], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError>;
+  /// Weighted (delinearized) public key aggregation; the secure
+  /// counterpart of `aggregate_pk`, matching `secure_verify_aggregates`.
+  fn aggregate_pk_secure(pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError>;
+  /// The signature as a raw affine point.
+  fn sig_to_affine(sig: &Self::InnerSig) -> Result<blst_p2_affine, BlsError>;
+  /// A signature from a raw affine point; rejects infinity.
+  fn sig_from_affine(aff: blst_p2_affine) -> Result<Self::InnerSig, BlsError>;
   fn sub_sig(a: &Self::InnerSig, b: &Self::InnerSig) -> Result<Self::InnerSig, BlsError>;
 
   fn zeroize_sk(sk: &mut Self::InnerSk);
@@ -191,12 +196,15 @@ fn append_fr_scalar_bytes(out: &mut Vec<u8>, fr: Fr) {
 /// Recover a G2 point from shares via Lagrange interpolation at
 /// x=0.
 fn interpolate_g2(ids: &[Fr], points: &[blst_p2_affine]) -> blst_p2_affine {
-  let n = ids.len();
-  debug_assert_eq!(n, points.len());
+  debug_assert_eq!(ids.len(), points.len());
+  interpolate_g2_with_coeffs(&compute_lagrange_coeffs(ids), points)
+}
 
-  let coeffs = compute_lagrange_coeffs(ids);
-  let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(n * 32));
-  for &coeff in &coeffs {
+/// Interpolation with precomputed Lagrange coefficients.
+pub(crate) fn interpolate_g2_with_coeffs(coeffs: &[Fr], points: &[blst_p2_affine]) -> blst_p2_affine {
+  debug_assert_eq!(coeffs.len(), points.len());
+  let mut scalar_bytes = zeroize::Zeroizing::new(Vec::with_capacity(coeffs.len() * 32));
+  for &coeff in coeffs {
     append_fr_scalar_bytes(&mut scalar_bytes, coeff);
   }
 
@@ -213,7 +221,7 @@ fn interpolate_g2(ids: &[Fr], points: &[blst_p2_affine]) -> blst_p2_affine {
 /// denominator's batch inversion, replacing the O(n^2) numerator
 /// pass with O(n) work. Montgomery batch inversion replaces N
 /// field inversions with a single one plus 3N multiplications.
-fn compute_lagrange_coeffs(ids: &[Fr]) -> Vec<Fr> {
+pub(crate) fn compute_lagrange_coeffs(ids: &[Fr]) -> Vec<Fr> {
   let n = ids.len();
 
   let mut total = fr_one();

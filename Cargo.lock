@@ -477,6 +477,7 @@ dependencies = [
  "diplomat",
  "diplomat-runtime",
  "rand_core",
+ "sha2",
  "spin",
 ]
 

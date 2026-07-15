@@ -33,6 +33,7 @@ cfg_if! {
     mod blst_ffi;
     mod chia_h2c;
     mod ies_ops;
+    mod lagrange;
     mod msg_point;
     mod public_ops;
     mod scheme_chia;
@@ -54,6 +55,7 @@ cfg_if! {
     pub use secret_ops::BlsSecretKey;
     pub use share_ops::{BlsPkShare, BlsSigShare, BlsSkShare};
     pub use vvec_ops::BlsVerificationVector;
+    pub use lagrange::BlsLagrangeCoefficients;
     pub use msg_point::BlsMessagePoint;
     pub use sig_basic::BlsSignature;
     pub use sig_ops::BlsSigId;

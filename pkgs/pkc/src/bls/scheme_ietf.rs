@@ -343,6 +343,36 @@ impl BlsScheme for BlsScIetf {
     Self::verify(sig, msg, &agg_pk)
   }
 
+  fn aggregate_pk_secure(pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError> {
+    if pks.is_empty() {
+      return Err(BlsError::EmptyAggregation);
+    }
+    let mut sorted: Vec<([u8; 48], blst_p1_affine)> = pks
+      .iter()
+      .map(|pk| {
+        let aff = blst_ffi::p1_deserialize(&pk.serialize()).map_err(|_| BlsError::InvalidPublicKey)?;
+        Ok((pk.compress(), aff))
+      })
+      .collect::<Result<_, BlsError>>()?;
+    sorted.sort_by_key(|pair| pair.0);
+    let agg = scheme_ops::weighted_g1_aggregate(&sorted)?;
+    if blst_ffi::p1_affine_is_inf(&agg) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    PublicKey::deserialize(&blst_ffi::p1_affine_serialize(&agg)).map_err(|_| BlsError::InvalidPublicKey)
+  }
+
+  fn sig_to_affine(sig: &Self::InnerSig) -> Result<blst_p2_affine, BlsError> {
+    blst_ffi::p2_deserialize(&sig.serialize()).map_err(|_| BlsError::InvalidSignature)
+  }
+
+  fn sig_from_affine(aff: blst_p2_affine) -> Result<Self::InnerSig, BlsError> {
+    if blst_ffi::p2_affine_is_inf(&aff) {
+      return Err(BlsError::InvalidSignature);
+    }
+    Signature::deserialize(&blst_ffi::p2_affine_serialize(&aff)).map_err(|_| BlsError::InvalidSignature)
+  }
+
   fn recover_sig_shares(ids: &[&Hash256], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
     // Uncompressed serialization round-trips cost an on-curve
     // check only; the compressed form would pay an Fp2 square

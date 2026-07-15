@@ -45,6 +45,20 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
     S::aggregate_pk(&inner_refs).map(Self::from_inner)
   }
 
+  /// Weighted (delinearized) aggregation over the key set; a
+  /// signature passing [`BlsSignature::secure_verify_aggregates`]
+  /// for `keys` verifies against this key with plain
+  /// [`BlsSignature::verify`].
+  ///
+  /// # Errors
+  ///
+  /// Returns `EmptyAggregation` for an empty set, or
+  /// `InvalidPublicKey` when the weighted sum is infinity.
+  pub fn aggregate_secure(keys: &[&Self]) -> Result<Self, BlsError> {
+    let inner_refs: Vec<&S::InnerPk> = keys.iter().map(|k| &k.0).collect();
+    S::aggregate_pk_secure(&inner_refs).map(Self::from_inner)
+  }
+
   /// Additively derive a child public key `self + tweak * G`,
   /// with `tweak` a 32-byte big-endian scalar.
   ///

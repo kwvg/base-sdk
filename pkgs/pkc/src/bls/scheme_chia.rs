@@ -242,6 +242,30 @@ impl BlsScheme for BlsScChia {
     Self::verify(sig, msg, &agg_pk)
   }
 
+  fn aggregate_pk_secure(pks: &[&Self::InnerPk]) -> Result<Self::InnerPk, BlsError> {
+    if pks.is_empty() {
+      return Err(BlsError::EmptyAggregation);
+    }
+    let mut sorted: Vec<([u8; 48], blst_p1_affine)> = pks.iter().map(|pk| (Self::pk_to_bytes(pk), **pk)).collect();
+    sorted.sort_by_key(|pair| pair.0);
+    let agg = scheme_ops::weighted_g1_aggregate(&sorted)?;
+    if blst_ffi::p1_affine_is_inf(&agg) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    Ok(agg)
+  }
+
+  fn sig_to_affine(sig: &Self::InnerSig) -> Result<blst_p2_affine, BlsError> {
+    Ok(*sig)
+  }
+
+  fn sig_from_affine(aff: blst_p2_affine) -> Result<Self::InnerSig, BlsError> {
+    if blst_ffi::p2_affine_is_inf(&aff) {
+      return Err(BlsError::InvalidSignature);
+    }
+    Ok(aff)
+  }
+
   fn recover_sig_shares(ids: &[&Hash256], sigs: &[&Self::InnerSig]) -> Result<Self::InnerSig, BlsError> {
     let sig_vals: Vec<blst_p2_affine> = sigs.iter().map(|s| **s).collect();
     let recovered = scheme_ops::recover_sig_shares_affine(ids, &sig_vals)?;
