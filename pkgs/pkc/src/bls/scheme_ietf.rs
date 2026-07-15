@@ -62,6 +62,10 @@ impl BlsScheme for BlsScIetf {
     pk.compress()
   }
 
+  fn pk_from_ietf_bytes(b: &[u8; 48]) -> Result<Self::InnerPk, BlsError> {
+    Self::pk_from_bytes(b)
+  }
+
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
     // sig_validate rejects infinity and non-subgroup points, so
     // every InnerSig in circulation is a valid G2 group element.
@@ -70,6 +74,14 @@ impl BlsScheme for BlsScIetf {
 
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96] {
     sig.compress()
+  }
+
+  fn sig_to_ietf_bytes(sig: &Self::InnerSig) -> [u8; 96] {
+    sig.compress()
+  }
+
+  fn sig_from_ietf_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
+    Self::sig_from_bytes(b)
   }
 
   fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError> {

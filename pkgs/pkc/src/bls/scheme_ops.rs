@@ -43,8 +43,19 @@ pub trait BlsScheme: BlsSchemeId {
   /// the scheme's native format. BLS-IES derives its AES key from
   /// this form in Dash Core (`ToByteVector(false)`) in both modes.
   fn pk_to_ietf_bytes(pk: &Self::InnerPk) -> [u8; 48];
+  /// Parse a basic-scheme (IETF compressed) public key regardless
+  /// of the scheme's native format. Interchange point for
+  /// cross-scheme conversion; validation matches `pk_from_bytes`.
+  fn pk_from_ietf_bytes(b: &[u8; 48]) -> Result<Self::InnerPk, BlsError>;
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError>;
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96];
+  /// Basic-scheme (IETF compressed) signature serialization
+  /// regardless of the scheme's native format.
+  fn sig_to_ietf_bytes(sig: &Self::InnerSig) -> [u8; 96];
+  /// Parse a basic-scheme (IETF compressed) signature regardless
+  /// of the scheme's native format; validation matches
+  /// `sig_from_bytes`.
+  fn sig_from_ietf_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError>;
 
   fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError>;
   fn sign_with(sk: &Self::InnerSk, msg: &[u8], scheme: BlsSigId) -> Result<Self::InnerSig, BlsError>;
@@ -88,6 +99,16 @@ pub trait BlsScheme: BlsSchemeId {
   fn recover_sk_shares(ids: &[&Hash256], sks: &[&Self::InnerSk]) -> Result<Self::InnerSk, BlsError> {
     let byte_vecs = Zeroizing::new(sks.iter().map(|k| Self::sk_to_bytes(k)).collect::<Vec<[u8; 32]>>());
     let out_bytes = recover_sk_shares(ids, &byte_vecs)?;
+    Self::sk_from_bytes(&out_bytes).map_err(|_| BlsError::InvalidSecretKey)
+  }
+  fn derive_sk_share(master_sks: &[&Self::InnerSk], id: &Hash256) -> Result<Self::InnerSk, BlsError> {
+    let byte_vecs = Zeroizing::new(
+      master_sks
+        .iter()
+        .map(|k| Self::sk_to_bytes(k))
+        .collect::<Vec<[u8; 32]>>(),
+    );
+    let out_bytes = derive_sk_share(&byte_vecs, id)?;
     Self::sk_from_bytes(&out_bytes).map_err(|_| BlsError::InvalidSecretKey)
   }
 
@@ -431,6 +452,39 @@ pub(crate) fn recover_sk_shares(ids: &[&Hash256], sk_bytes: &[[u8; 32]]) -> Resu
   let out = Zeroizing::new(blst_ffi::bendian_from_scalar(&acc_scalar));
   acc.zeroize();
   acc_scalar.zeroize();
+  Ok(out)
+}
+
+/// Derive a secret key share by evaluating a secret polynomial at
+/// the given participant ID (dashbls `Threshold::PrivateKeyShare`).
+pub(crate) fn derive_sk_share(sk_bytes: &[[u8; 32]], id: &Hash256) -> Result<Zeroizing<[u8; 32]>, BlsError> {
+  // dashbls Poly::Evaluate requires at least 2 coefficients; a
+  // shorter polynomial is malformed.
+  if sk_bytes.len() < 2 {
+    return Err(BlsError::InsufficientShares);
+  }
+
+  let x = fr_from_hash(id);
+  if x == Fr::default() {
+    return Err(BlsError::InvalidShareId);
+  }
+
+  let mut coeffs = Vec::with_capacity(sk_bytes.len());
+  for bytes in sk_bytes {
+    let mut scalar = blst_ffi::scalar_from_bendian(bytes);
+    coeffs.push(Fr::from_scalar(&scalar));
+    scalar.zeroize();
+  }
+
+  let mut result = poly_eval(&coeffs, x);
+  for coeff in coeffs.iter_mut() {
+    coeff.zeroize();
+  }
+
+  let mut result_scalar = result.to_scalar();
+  let out = Zeroizing::new(blst_ffi::bendian_from_scalar(&result_scalar));
+  result.zeroize();
+  result_scalar.zeroize();
   Ok(out)
 }
 

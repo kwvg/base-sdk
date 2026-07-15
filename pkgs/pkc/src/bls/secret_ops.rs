@@ -116,6 +116,19 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
     S::aggregate_sk(&inner_refs).map(Self::from_inner)
   }
 
+  /// Re-type this key under scheme `T`.
+  ///
+  /// Secret scalars are scheme independent; the key is re-parsed
+  /// from its 32-byte form so it can be used with `T`'s
+  /// operations.
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidSecretKey` if re-parsing fails.
+  pub fn convert<T: BlsSchemeId + BlsScheme>(&self) -> Result<BlsSecretKey<T>, BlsError> {
+    BlsSecretKey::<T>::from_bytes(&self.to_bytes())
+  }
+
   pub(crate) fn from_inner(inner: S::InnerSk) -> Self {
     Self(inner)
   }

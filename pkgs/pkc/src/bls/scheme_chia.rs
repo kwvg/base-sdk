@@ -62,12 +62,32 @@ impl BlsScheme for BlsScChia {
     blst_ffi::p1_affine_compress(pk)
   }
 
+  fn pk_from_ietf_bytes(b: &[u8; 48]) -> Result<Self::InnerPk, BlsError> {
+    let out = blst_ffi::p1_uncompress(b).map_err(|_| BlsError::InvalidPublicKey)?;
+    if blst_ffi::p1_affine_is_inf(&out) || !blst_ffi::p1_affine_in_g1(&out) {
+      return Err(BlsError::InvalidPublicKey);
+    }
+    Ok(out)
+  }
+
   fn sig_from_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
     chia_deser_g2(b)
   }
 
   fn sig_to_bytes(sig: &Self::InnerSig) -> [u8; 96] {
     chia_ser_g2(sig)
+  }
+
+  fn sig_to_ietf_bytes(sig: &Self::InnerSig) -> [u8; 96] {
+    blst_ffi::p2_affine_compress(sig)
+  }
+
+  fn sig_from_ietf_bytes(b: &[u8; 96]) -> Result<Self::InnerSig, BlsError> {
+    let out = blst_ffi::p2_uncompress(b).map_err(|_| BlsError::InvalidSignature)?;
+    if blst_ffi::p2_affine_is_inf(&out) || !blst_ffi::p2_affine_in_g2(&out) {
+      return Err(BlsError::InvalidSignature);
+    }
+    Ok(out)
   }
 
   fn sign(sk: &Self::InnerSk, msg: &[u8]) -> Result<Self::InnerSig, BlsError> {

@@ -233,6 +233,20 @@ impl<S: BlsSchemeId + BlsScheme> BlsSecretKey<S> {
       })
       .collect()
   }
+
+  /// Derive a secret key share by evaluating the master secret
+  /// polynomial at the given participant id (dashbls
+  /// `Threshold::PrivateKeyShare`).
+  ///
+  /// # Errors
+  ///
+  /// Returns `InsufficientShares` with fewer than 2 master keys,
+  /// `InvalidShareId` if `id` reduces to zero in the scalar
+  /// field, or `InvalidSecretKey` if the evaluated share is zero.
+  pub fn derive_share(master_sks: &[&Self], id: &Hash256) -> Result<Self, BlsError> {
+    let inner_refs: Vec<&S::InnerSk> = master_sks.iter().map(|sk| &sk.0).collect();
+    S::derive_sk_share(&inner_refs, id).map(Self::from_inner)
+  }
 }
 
 impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
@@ -352,6 +366,48 @@ mod tests {
   #[case::chia(assert_sk_and_pk_recover::<BlsScChia>)]
   #[case::ietf(assert_sk_and_pk_recover::<BlsScIetf>)]
   fn sk_and_pk_recover(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_sk_derive_share_consistent<S: BlsSchemeId + BlsScheme>() {
+    let sks: Vec<BlsSecretKey<S>> = (1u8..=3).map(|i| BlsSecretKey::generate(&[i; 32]).unwrap()).collect();
+    let sk_refs: Vec<&BlsSecretKey<S>> = sks.iter().collect();
+    let pks: Vec<BlsPublicKey<S>> = sks.iter().map(BlsSecretKey::public_key).collect();
+    let pk_refs: Vec<&BlsPublicKey<S>> = pks.iter().collect();
+
+    // The secret-side polynomial evaluation must commute with the
+    // public-side one (dashbls PrivateKeyShare vs PublicKeyShare).
+    let ids = sequential_ids(4);
+    for id in &ids {
+      let sk_share = BlsSecretKey::derive_share(&sk_refs, id).unwrap();
+      let pk_share = BlsPublicKey::derive_share(&pk_refs, id).unwrap();
+      assert_eq!(sk_share.public_key(), pk_share);
+    }
+
+    // Recovering from threshold-many derived shares yields the
+    // polynomial's constant term (the master key).
+    let shares: Vec<super::BlsSkShare<S>> = ids[..3]
+      .iter()
+      .map(|id| super::BlsSkShare::new(*id, BlsSecretKey::derive_share(&sk_refs, id).unwrap()))
+      .collect();
+    let share_refs: Vec<&super::BlsSkShare<S>> = shares.iter().collect();
+    let recovered = BlsSecretKey::recover(&share_refs).unwrap();
+    assert_eq!(*recovered.to_bytes(), *sks[0].to_bytes());
+
+    assert_eq!(
+      BlsSecretKey::derive_share(&sk_refs[..1], &ids[0]).unwrap_err(),
+      crate::bls::BlsError::InsufficientShares
+    );
+    assert_eq!(
+      BlsSecretKey::derive_share(&sk_refs, &Hash256::from_bytes([0u8; 32])).unwrap_err(),
+      crate::bls::BlsError::InvalidShareId
+    );
+  }
+
+  #[rstest]
+  #[case::chia(assert_sk_derive_share_consistent::<BlsScChia>)]
+  #[case::ietf(assert_sk_derive_share_consistent::<BlsScIetf>)]
+  fn sk_derive_share_consistent(#[case] assertion: fn()) {
     assertion();
   }
 

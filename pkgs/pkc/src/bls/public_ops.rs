@@ -62,6 +62,19 @@ impl<S: BlsSchemeId + BlsScheme> BlsPublicKey<S> {
     Self::aggregate(&[self, &tweak_pk])
   }
 
+  /// Re-encode this key under scheme `T`.
+  ///
+  /// The group element is unchanged; only the serialization
+  /// convention differs. The IETF compressed form is the
+  /// interchange encoding and the result is fully revalidated.
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidPublicKey` if revalidation fails.
+  pub fn convert<T: BlsSchemeId + BlsScheme>(&self) -> Result<BlsPublicKey<T>, BlsError> {
+    T::pk_from_ietf_bytes(&S::pk_to_ietf_bytes(&self.0)).map(BlsPublicKey::from_inner)
+  }
+
   pub(crate) fn from_inner(inner: S::InnerPk) -> Self {
     Self(inner)
   }
@@ -141,6 +154,28 @@ mod tests {
   #[case::ietf(assert_dh_roundtrip::<BlsScIetf>)]
   fn dh_exchange_roundtrip(#[case] assertion: fn()) {
     assertion();
+  }
+
+  #[test]
+  fn convert_roundtrips_across_schemes() {
+    use crate::bls::BlsSignature;
+
+    let sk = BlsSecretKey::<BlsScChia>::generate(&crate::tests::SEED_0).unwrap();
+    let sk_ietf: BlsSecretKey<BlsScIetf> = sk.convert().unwrap();
+    assert_eq!(*sk.to_bytes(), *sk_ietf.to_bytes());
+
+    // Conversion commutes with public key derivation and
+    // round-trips back to the identical group element.
+    let pk = sk.public_key();
+    let pk_ietf: BlsPublicKey<BlsScIetf> = pk.convert().unwrap();
+    assert_eq!(pk_ietf, sk_ietf.public_key());
+    let pk_back: BlsPublicKey<BlsScChia> = pk_ietf.convert().unwrap();
+    assert_eq!(pk, pk_back);
+
+    let sig = sk.sign(&crate::tests::MSG_DEADBEEF).unwrap();
+    let sig_ietf: BlsSignature<BlsScIetf> = sig.convert().unwrap();
+    let sig_back: BlsSignature<BlsScChia> = sig_ietf.convert().unwrap();
+    assert_eq!(sig, sig_back);
   }
 
   fn assert_add_tweak_commutes<S: BlsSchemeId + BlsScheme>() {

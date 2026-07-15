@@ -118,6 +118,12 @@ pub(crate) fn p2_affine_is_inf(point: &blst_p2_affine) -> bool {
   unsafe { blst_p2_affine_is_inf(point) }
 }
 
+pub(crate) fn p2_affine_compress(point: &blst_p2_affine) -> [u8; 96] {
+  let mut out = [0u8; 96];
+  unsafe { blst_p2_affine_compress(out.as_mut_ptr(), point) };
+  out
+}
+
 pub(crate) fn p2_affine_serialize(point: &blst_p2_affine) -> [u8; 192] {
   let mut out = [0u8; 192];
   unsafe { blst_p2_affine_serialize(out.as_mut_ptr(), point) };

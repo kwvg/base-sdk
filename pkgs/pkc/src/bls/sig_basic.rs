@@ -47,6 +47,19 @@ impl<S: BlsSchemeId + BlsScheme> BlsSignature<S> {
     S::verify_with(&self.0, msg, &pk.0, scheme)
   }
 
+  /// Re-encode this signature under scheme `T`.
+  ///
+  /// The group element is unchanged; only the serialization
+  /// convention differs. The IETF compressed form is the
+  /// interchange encoding and the result is fully revalidated.
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidSignature` if revalidation fails.
+  pub fn convert<T: BlsSchemeId + BlsScheme>(&self) -> Result<BlsSignature<T>, BlsError> {
+    T::sig_from_ietf_bytes(&S::sig_to_ietf_bytes(&self.0)).map(BlsSignature::from_inner)
+  }
+
   pub(crate) fn from_inner(inner: S::InnerSig) -> Self {
     Self(inner)
   }
