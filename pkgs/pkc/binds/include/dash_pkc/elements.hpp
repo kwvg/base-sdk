@@ -32,16 +32,22 @@ class G1Element {
 public:
     static constexpr size_t SIZE = 48;
 
-    G1Element(const G1Element& other) : impl_(other.impl_->clone()) {}
+    // A default-constructed element is null ("reset" in Dash Core
+    // terms): serialization yields zeros, operations fail, and it
+    // only compares equal to another null element.
+    G1Element() noexcept = default;
+    G1Element(const G1Element& other) : impl_(other.impl_ ? other.impl_->clone() : nullptr) {}
     G1Element(G1Element&&) noexcept = default;
     G1Element& operator=(const G1Element& other)
     {
         if (this != &other) {
-            impl_ = other.impl_->clone();
+            impl_ = other.impl_ ? other.impl_->clone() : nullptr;
         }
         return *this;
     }
     G1Element& operator=(G1Element&&) noexcept = default;
+
+    bool IsNull() const noexcept { return impl_ == nullptr; }
 
     static Expected<G1Element> FromBytes(std::span<const uint8_t> bytes, bool fLegacy = false)
     {
@@ -60,7 +66,9 @@ public:
     std::array<uint8_t, SIZE> SerializeToArray(bool fLegacy = false) const
     {
         std::array<uint8_t, SIZE> out{};
-        (void)impl_->to_bytes(std::span<uint8_t>(out.data(), out.size()), detail::ToScheme(fLegacy));
+        if (impl_) {
+            (void)impl_->to_bytes(std::span<uint8_t>(out.data(), out.size()), detail::ToScheme(fLegacy));
+        }
         return out;
     }
 
@@ -72,13 +80,20 @@ public:
 
     // True when the element currently holds the legacy (Chia)
     // representation; serialization accepts either flag regardless.
-    bool IsLegacy() const { return impl_->scheme() == ffi::Scheme::Legacy; }
+    bool IsLegacy() const { return impl_ && impl_->scheme() == ffi::Scheme::Legacy; }
 
-    friend bool operator==(const G1Element& a, const G1Element& b) { return a.impl_->eq(*b.impl_); }
+    friend bool operator==(const G1Element& a, const G1Element& b)
+    {
+        if (!a.impl_ || !b.impl_) {
+            return a.impl_ == b.impl_;
+        }
+        return a.impl_->eq(*b.impl_);
+    }
     friend bool operator!=(const G1Element& a, const G1Element& b) { return !(a == b); }
 
     // Internal: wrap an FFI handle (must be non-null).
     explicit G1Element(std::unique_ptr<ffi::PublicKey> impl) noexcept : impl_(std::move(impl)) {}
+    // Internal: requires !IsNull().
     const ffi::PublicKey& Impl() const { return *impl_; }
 
 private:
@@ -91,16 +106,22 @@ class G2Element {
 public:
     static constexpr size_t SIZE = 96;
 
-    G2Element(const G2Element& other) : impl_(other.impl_->clone()) {}
+    // A default-constructed element is null ("reset" in Dash Core
+    // terms): serialization yields zeros, operations fail, and it
+    // only compares equal to another null element.
+    G2Element() noexcept = default;
+    G2Element(const G2Element& other) : impl_(other.impl_ ? other.impl_->clone() : nullptr) {}
     G2Element(G2Element&&) noexcept = default;
     G2Element& operator=(const G2Element& other)
     {
         if (this != &other) {
-            impl_ = other.impl_->clone();
+            impl_ = other.impl_ ? other.impl_->clone() : nullptr;
         }
         return *this;
     }
     G2Element& operator=(G2Element&&) noexcept = default;
+
+    bool IsNull() const noexcept { return impl_ == nullptr; }
 
     static Expected<G2Element> FromBytes(std::span<const uint8_t> bytes, bool fLegacy = false)
     {
@@ -115,7 +136,9 @@ public:
     std::array<uint8_t, SIZE> SerializeToArray(bool fLegacy = false) const
     {
         std::array<uint8_t, SIZE> out{};
-        (void)impl_->to_bytes(std::span<uint8_t>(out.data(), out.size()), detail::ToScheme(fLegacy));
+        if (impl_) {
+            (void)impl_->to_bytes(std::span<uint8_t>(out.data(), out.size()), detail::ToScheme(fLegacy));
+        }
         return out;
     }
 
@@ -125,20 +148,30 @@ public:
         return std::vector<uint8_t>(arr.begin(), arr.end());
     }
 
-    bool IsLegacy() const { return impl_->scheme() == ffi::Scheme::Legacy; }
+    bool IsLegacy() const { return impl_ && impl_->scheme() == ffi::Scheme::Legacy; }
 
     // Aggregate subtraction `self + (-other)`, Dash Core's
     // CBLSSignature::SubInsecure (there via operator+ and Negate).
     Expected<G2Element> SubInsecure(const G2Element& other) const
     {
+        if (!impl_ || !other.impl_) {
+            return tl::unexpected(Error::InvalidSignature);
+        }
         return detail::WrapPtr<G2Element>(impl_->sub_insecure(*other.impl_));
     }
 
-    friend bool operator==(const G2Element& a, const G2Element& b) { return a.impl_->eq(*b.impl_); }
+    friend bool operator==(const G2Element& a, const G2Element& b)
+    {
+        if (!a.impl_ || !b.impl_) {
+            return a.impl_ == b.impl_;
+        }
+        return a.impl_->eq(*b.impl_);
+    }
     friend bool operator!=(const G2Element& a, const G2Element& b) { return !(a == b); }
 
     // Internal: wrap an FFI handle (must be non-null).
     explicit G2Element(std::unique_ptr<ffi::Signature> impl) noexcept : impl_(std::move(impl)) {}
+    // Internal: requires !IsNull().
     const ffi::Signature& Impl() const { return *impl_; }
 
 private:

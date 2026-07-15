@@ -30,6 +30,9 @@ inline Expected<PrivateKey> PrivateKeyShare(const std::vector<PrivateKey>& sks, 
 {
     auto vec = ffi::SecretKeyVec::new_();
     for (const auto& sk : sks) {
+        if (sk.IsNull()) {
+            return tl::unexpected(Error::InvalidSecretKey);
+        }
         vec->push(sk.Impl());
     }
     return detail::WrapPtr<PrivateKey>(ffi::SecretKey::derive_share(*vec, id));
@@ -39,8 +42,12 @@ inline Expected<PrivateKey> PrivateKeyShare(const std::vector<PrivateKey>& sks, 
 // `id` (dashbls Threshold::PublicKeyShare).
 inline Expected<G1Element> PublicKeyShare(const std::vector<G1Element>& pks, std::span<const uint8_t> id)
 {
+    const auto vec = detail::MakeVec(pks);
+    if (!vec) {
+        return tl::unexpected(Error::InvalidPublicKey);
+    }
     const ffi::Scheme scheme = pks.empty() ? ffi::Scheme(ffi::Scheme::Basic) : pks.front().Impl().scheme();
-    return detail::WrapPtr<G1Element>(ffi::PublicKey::derive_share(*detail::MakeVec(pks), id, scheme));
+    return detail::WrapPtr<G1Element>(ffi::PublicKey::derive_share(*vec, id, scheme));
 }
 
 // Recover a threshold signature from shares and their 32-byte ids
@@ -55,8 +62,12 @@ inline Expected<G2Element> SignatureRecover(const std::vector<G2Element>& sigs,
             return tl::unexpected(FromFfi(*std::move(pushed).err()));
         }
     }
+    const auto vec = detail::MakeVec(sigs);
+    if (!vec) {
+        return tl::unexpected(Error::InvalidSignature);
+    }
     const ffi::Scheme scheme = sigs.empty() ? ffi::Scheme(ffi::Scheme::Basic) : sigs.front().Impl().scheme();
-    return detail::WrapPtr<G2Element>(ffi::Signature::recover(*detail::MakeVec(sigs), *id_vec, scheme));
+    return detail::WrapPtr<G2Element>(ffi::Signature::recover(*vec, *id_vec, scheme));
 }
 
 } // namespace dash_pkc::Threshold

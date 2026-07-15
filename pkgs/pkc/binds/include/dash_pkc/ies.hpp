@@ -38,6 +38,9 @@ public:
                                      std::span<const uint8_t> plaintext,
                                      std::span<const uint8_t> entropy)
     {
+        if (recipient.IsNull()) {
+            return tl::unexpected(Error::InvalidPublicKey);
+        }
         return detail::WrapPtr<IESBlob>(recipient.Impl().ies_encrypt(plaintext, entropy));
     }
 
@@ -47,6 +50,9 @@ public:
     // the blob was encrypted under.
     Expected<std::vector<uint8_t>> Decrypt(const PrivateKey& sk, size_t index = 0, bool fLegacy = false) const
     {
+        if (sk.IsNull()) {
+            return tl::unexpected(Error::InvalidSecretKey);
+        }
         std::vector<uint8_t> plain(impl_->data_len());
         auto res = sk.Impl().ies_decrypt(*impl_, index, detail::ToScheme(fLegacy),
                                          std::span<uint8_t>(plain.data(), plain.size()));
@@ -86,10 +92,13 @@ public:
                                           const std::vector<std::vector<uint8_t>>& plaintexts,
                                           std::span<const uint8_t> entropy)
     {
+        const auto vec = detail::MakeVec(recipients);
+        if (!vec) {
+            return tl::unexpected(Error::InvalidPublicKey);
+        }
         const ffi::Scheme scheme = recipients.empty() ? ffi::Scheme(ffi::Scheme::Basic) : recipients.front().Impl().scheme();
         return detail::WrapPtr<IESMultiBlob>(
-            ffi::PublicKey::ies_encrypt_multi(*detail::MakeVec(recipients), *detail::MakeVec(plaintexts),
-                                              entropy, scheme));
+            ffi::PublicKey::ies_encrypt_multi(*vec, *detail::MakeVec(plaintexts), entropy, scheme));
     }
 
     Expected<std::vector<uint8_t>> Decrypt(size_t index, const PrivateKey& sk, bool fLegacy = false) const
@@ -97,6 +106,9 @@ public:
         auto len = impl_->data_len_at(index);
         if (!len.is_ok()) {
             return tl::unexpected(FromFfi(*std::move(len).err()));
+        }
+        if (sk.IsNull()) {
+            return tl::unexpected(Error::InvalidSecretKey);
         }
         std::vector<uint8_t> plain(*std::move(len).ok());
         auto res = sk.Impl().ies_decrypt_multi(*impl_, index, detail::ToScheme(fLegacy),

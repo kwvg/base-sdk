@@ -85,7 +85,20 @@ void TestSerializationRoundTrips()
     const auto sk_bytes = sk->SerializeToArray();
     auto sk2 = dash_pkc::PrivateKey::FromBytes(sk_bytes);
     CHECK(sk2.has_value() && *sk2 == *sk);
-    CHECK(!dash_pkc::PrivateKey::FromBytes(sk_bytes, /*modOrder=*/true).has_value());
+    // modOrder is tolerated (ignored) for dashbls call compatibility.
+    CHECK(dash_pkc::PrivateKey::FromBytes(sk_bytes, /*modOrder=*/true).has_value());
+
+    // Null (default-constructed) objects: zero serialization, null
+    // equality, failing operations.
+    dash_pkc::PrivateKey null_sk;
+    dash_pkc::G1Element null_pk;
+    CHECK(null_sk.IsNull() && null_pk.IsNull());
+    CHECK(null_pk == dash_pkc::G1Element{});
+    CHECK(null_pk != *sk->GetG1Element(false));
+    const auto null_ser = null_pk.SerializeToArray(false);
+    CHECK(std::all_of(null_ser.begin(), null_ser.end(), [](uint8_t c) { return c == 0; }));
+    CHECK(!null_sk.Sign(sk_bytes, false).has_value());
+    CHECK(!dash_pkc::DHKeyExchange(null_sk, null_pk).has_value());
 
     // The same group element serializes differently per scheme but
     // parses back equal: the fork-transition reserialization path.

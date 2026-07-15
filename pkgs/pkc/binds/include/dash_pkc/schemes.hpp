@@ -26,10 +26,15 @@ namespace dash_pkc {
 
 namespace detail {
 
+// Null elements yield a null vec; callers translate that to an
+// error instead of dereferencing a null handle.
 inline std::unique_ptr<ffi::PublicKeyVec> MakeVec(const std::vector<G1Element>& pks)
 {
     auto vec = ffi::PublicKeyVec::new_();
     for (const auto& pk : pks) {
+        if (pk.IsNull()) {
+            return nullptr;
+        }
         vec->push(pk.Impl());
     }
     return vec;
@@ -39,6 +44,9 @@ inline std::unique_ptr<ffi::SignatureVec> MakeVec(const std::vector<G2Element>& 
 {
     auto vec = ffi::SignatureVec::new_();
     for (const auto& sig : sigs) {
+        if (sig.IsNull()) {
+            return nullptr;
+        }
         vec->push(sig.Impl());
     }
     return vec;
@@ -72,17 +80,28 @@ public:
 
     bool Verify(const G1Element& pk, std::span<const uint8_t> msg, const G2Element& sig) const
     {
+        if (pk.IsNull() || sig.IsNull()) {
+            return false;
+        }
         return sig.Impl().verify(msg, pk.Impl(), detail::ToScheme(fLegacy_)).is_ok();
     }
 
     Expected<G1Element> Aggregate(const std::vector<G1Element>& pks) const
     {
-        return detail::WrapPtr<G1Element>(ffi::PublicKey::aggregate(*detail::MakeVec(pks), detail::ToScheme(fLegacy_)));
+        const auto vec = detail::MakeVec(pks);
+        if (!vec) {
+            return tl::unexpected(Error::InvalidPublicKey);
+        }
+        return detail::WrapPtr<G1Element>(ffi::PublicKey::aggregate(*vec, detail::ToScheme(fLegacy_)));
     }
 
     Expected<G2Element> Aggregate(const std::vector<G2Element>& sigs) const
     {
-        return detail::WrapPtr<G2Element>(ffi::Signature::aggregate(*detail::MakeVec(sigs), detail::ToScheme(fLegacy_)));
+        const auto vec = detail::MakeVec(sigs);
+        if (!vec) {
+            return tl::unexpected(Error::InvalidSignature);
+        }
+        return detail::WrapPtr<G2Element>(ffi::Signature::aggregate(*vec, detail::ToScheme(fLegacy_)));
     }
 
     // Public-key-weighted aggregation of same-message signatures
@@ -92,14 +111,22 @@ public:
                                         std::span<const uint8_t> msg) const
     {
         (void)msg; // weights depend only on the sorted public keys
+        const auto sig_vec = detail::MakeVec(sigs);
+        const auto pk_vec = detail::MakeVec(pks);
+        if (!sig_vec || !pk_vec) {
+            return tl::unexpected(Error::InvalidSignature);
+        }
         return detail::WrapPtr<G2Element>(
-            ffi::Signature::aggregate_secure(*detail::MakeVec(sigs), *detail::MakeVec(pks),
-                                             detail::ToScheme(fLegacy_)));
+            ffi::Signature::aggregate_secure(*sig_vec, *pk_vec, detail::ToScheme(fLegacy_)));
     }
 
     bool VerifySecure(const std::vector<G1Element>& pks, const G2Element& sig, std::span<const uint8_t> msg) const
     {
-        return sig.Impl().verify_secure(*detail::MakeVec(pks), msg, detail::ToScheme(fLegacy_)).is_ok();
+        const auto vec = detail::MakeVec(pks);
+        if (!vec || sig.IsNull()) {
+            return false;
+        }
+        return sig.Impl().verify_secure(*vec, msg, detail::ToScheme(fLegacy_)).is_ok();
     }
 
     // Aggregate verification over per-signer messages (dashbls
@@ -109,9 +136,11 @@ public:
                          const std::vector<std::vector<uint8_t>>& msgs,
                          const G2Element& sig) const
     {
-        return sig.Impl()
-            .verify_aggregated(*detail::MakeVec(msgs), *detail::MakeVec(pks), detail::ToScheme(fLegacy_))
-            .is_ok();
+        const auto vec = detail::MakeVec(pks);
+        if (!vec || sig.IsNull()) {
+            return false;
+        }
+        return sig.Impl().verify_aggregated(*detail::MakeVec(msgs), *vec, detail::ToScheme(fLegacy_)).is_ok();
     }
 
     bool IsLegacy() const noexcept { return fLegacy_; }

@@ -34,24 +34,28 @@ class PrivateKey {
 public:
     static constexpr size_t PRIVATE_KEY_SIZE = 32;
 
-    PrivateKey(const PrivateKey& other) : impl_(other.impl_->clone()) {}
+    // A default-constructed key is null ("reset" in Dash Core
+    // terms): serialization yields zeros and operations fail.
+    PrivateKey() noexcept = default;
+    PrivateKey(const PrivateKey& other) : impl_(other.impl_ ? other.impl_->clone() : nullptr) {}
     PrivateKey(PrivateKey&&) noexcept = default;
     PrivateKey& operator=(const PrivateKey& other)
     {
         if (this != &other) {
-            impl_ = other.impl_->clone();
+            impl_ = other.impl_ ? other.impl_->clone() : nullptr;
         }
         return *this;
     }
     PrivateKey& operator=(PrivateKey&&) noexcept = default;
 
-    // Parse a 32-byte big-endian scalar. `modOrder` reduction is
-    // unsupported (Error::UnsupportedScheme) by design.
+    bool IsNull() const noexcept { return impl_ == nullptr; }
+
+    // Parse a 32-byte big-endian scalar. `modOrder` is accepted for
+    // dashbls signature compatibility but ignored: out-of-range
+    // scalars are always rejected rather than reduced.
     static Expected<PrivateKey> FromBytes(std::span<const uint8_t> bytes, bool modOrder = false)
     {
-        if (modOrder) {
-            return tl::unexpected(Error::UnsupportedScheme);
-        }
+        (void)modOrder;
         return detail::WrapPtr<PrivateKey>(ffi::SecretKey::from_bytes(bytes));
     }
 
@@ -72,6 +76,9 @@ public:
     {
         auto vec = ffi::SecretKeyVec::new_();
         for (const auto& key : keys) {
+            if (key.IsNull()) {
+                return tl::unexpected(Error::InvalidSecretKey);
+            }
             vec->push(key.Impl());
         }
         return detail::WrapPtr<PrivateKey>(ffi::SecretKey::aggregate(*vec));
@@ -79,6 +86,9 @@ public:
 
     Expected<G1Element> GetG1Element(bool fLegacy = false) const
     {
+        if (!impl_) {
+            return tl::unexpected(Error::InvalidSecretKey);
+        }
         return detail::WrapPtr<G1Element>(impl_->public_key(detail::ToScheme(fLegacy)));
     }
 
@@ -86,15 +96,28 @@ public:
     // 32-byte message (a hash), matching dashbls.
     Expected<G2Element> Sign(std::span<const uint8_t> msg, bool fLegacy = false) const
     {
+        if (!impl_) {
+            return tl::unexpected(Error::InvalidSecretKey);
+        }
         return detail::WrapPtr<G2Element>(impl_->sign(msg, detail::ToScheme(fLegacy)));
     }
 
-    // The caller owns wiping the returned secret bytes.
+    // The caller owns wiping the returned secret bytes. Secret
+    // scalars are scheme invariant; the flag overload exists for
+    // generic wrappers that pass one.
     std::array<uint8_t, PRIVATE_KEY_SIZE> SerializeToArray() const
     {
         std::array<uint8_t, PRIVATE_KEY_SIZE> out{};
-        (void)impl_->to_bytes(std::span<uint8_t>(out.data(), out.size()));
+        if (impl_) {
+            (void)impl_->to_bytes(std::span<uint8_t>(out.data(), out.size()));
+        }
         return out;
+    }
+
+    std::array<uint8_t, PRIVATE_KEY_SIZE> SerializeToArray(bool fLegacy) const
+    {
+        (void)fLegacy;
+        return SerializeToArray();
     }
 
     std::vector<uint8_t> Serialize(bool fLegacy = false) const
@@ -104,12 +127,19 @@ public:
         return std::vector<uint8_t>(arr.begin(), arr.end());
     }
 
-    // Constant-time comparison.
-    friend bool operator==(const PrivateKey& a, const PrivateKey& b) { return a.impl_->eq(*b.impl_); }
+    // Constant-time comparison (null keys compare equal to null).
+    friend bool operator==(const PrivateKey& a, const PrivateKey& b)
+    {
+        if (!a.impl_ || !b.impl_) {
+            return a.impl_ == b.impl_;
+        }
+        return a.impl_->eq(*b.impl_);
+    }
     friend bool operator!=(const PrivateKey& a, const PrivateKey& b) { return !(a == b); }
 
     // Internal: wrap an FFI handle (must be non-null).
     explicit PrivateKey(std::unique_ptr<ffi::SecretKey> impl) noexcept : impl_(std::move(impl)) {}
+    // Internal: requires !IsNull().
     const ffi::SecretKey& Impl() const { return *impl_; }
 
 private:
@@ -121,6 +151,9 @@ private:
 // carries the peer key's scheme tag.
 inline Expected<G1Element> DHKeyExchange(const PrivateKey& sk, const G1Element& pk)
 {
+    if (sk.IsNull() || pk.IsNull()) {
+        return tl::unexpected(Error::InvalidPublicKey);
+    }
     return detail::WrapPtr<G1Element>(sk.Impl().dh_exchange(pk.Impl()));
 }
 
