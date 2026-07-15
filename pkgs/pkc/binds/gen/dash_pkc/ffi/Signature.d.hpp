@@ -78,6 +78,12 @@ public:
   inline diplomat::result<std::monostate, dash_pkc::ffi::PkcError> verify(diplomat::span<const uint8_t> msg, const dash_pkc::ffi::PublicKey& pk, dash_pkc::ffi::Scheme scheme) const;
 
   /**
+   * Sum this signature with one other (the hot
+   * pairwise-accumulate path of Dash Core's AggregateInsecure).
+   */
+  inline diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError> aggregate_with(const dash_pkc::ffi::Signature& other, dash_pkc::ffi::Scheme scheme) const;
+
+  /**
    * Sum the collected signatures (dashbls
    * `CoreMPL::Aggregate`).
    */

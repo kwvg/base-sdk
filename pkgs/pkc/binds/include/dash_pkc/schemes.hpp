@@ -86,6 +86,23 @@ public:
         return sig.Impl().verify(msg, pk.Impl(), detail::ToScheme(fLegacy_)).is_ok();
     }
 
+    // Pairwise fast path: no collection handle, no element copies.
+    Expected<G1Element> Aggregate(const G1Element& a, const G1Element& b) const
+    {
+        if (a.IsNull() || b.IsNull()) {
+            return tl::unexpected(Error::InvalidPublicKey);
+        }
+        return detail::WrapPtr<G1Element>(a.Impl().aggregate_with(b.Impl(), detail::ToScheme(fLegacy_)));
+    }
+
+    Expected<G2Element> Aggregate(const G2Element& a, const G2Element& b) const
+    {
+        if (a.IsNull() || b.IsNull()) {
+            return tl::unexpected(Error::InvalidSignature);
+        }
+        return detail::WrapPtr<G2Element>(a.Impl().aggregate_with(b.Impl(), detail::ToScheme(fLegacy_)));
+    }
+
     Expected<G1Element> Aggregate(const std::vector<G1Element>& pks) const
     {
         const auto vec = detail::MakeVec(pks);

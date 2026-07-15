@@ -70,6 +70,12 @@ public:
   inline bool eq(const dash_pkc::ffi::PublicKey& other) const;
 
   /**
+   * Sum this key with one other (the hot pairwise-accumulate
+   * path of Dash Core's AggregateInsecure member).
+   */
+  inline diplomat::result<std::unique_ptr<dash_pkc::ffi::PublicKey>, dash_pkc::ffi::PkcError> aggregate_with(const dash_pkc::ffi::PublicKey& other, dash_pkc::ffi::Scheme scheme) const;
+
+  /**
    * Sum the collected keys (dashbls `CoreMPL::Aggregate`).
    */
   inline static diplomat::result<std::unique_ptr<dash_pkc::ffi::PublicKey>, dash_pkc::ffi::PkcError> aggregate(const dash_pkc::ffi::PublicKeyVec& keys, dash_pkc::ffi::Scheme scheme);

@@ -6,6 +6,7 @@
 
 //! Runtime scheme dispatch over dash-pkc's compile-time BLS types.
 
+use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
 use dash_num::Hash256;
@@ -28,17 +29,17 @@ pub(crate) enum PkImpl {
 }
 
 impl PkImpl {
-  fn to_legacy(&self) -> Result<ChiaPk, BlsError> {
+  fn as_legacy(&self) -> Result<Cow<'_, ChiaPk>, BlsError> {
     match self {
-      PkImpl::Legacy(pk) => Ok(pk.clone()),
-      PkImpl::Basic(pk) => pk.convert(),
+      PkImpl::Legacy(pk) => Ok(Cow::Borrowed(pk)),
+      PkImpl::Basic(pk) => Ok(Cow::Owned(pk.convert()?)),
     }
   }
 
-  fn to_basic(&self) -> Result<IetfPk, BlsError> {
+  fn as_basic(&self) -> Result<Cow<'_, IetfPk>, BlsError> {
     match self {
-      PkImpl::Legacy(pk) => pk.convert(),
-      PkImpl::Basic(pk) => Ok(pk.clone()),
+      PkImpl::Legacy(pk) => Ok(Cow::Owned(pk.convert()?)),
+      PkImpl::Basic(pk) => Ok(Cow::Borrowed(pk)),
     }
   }
 }
@@ -60,17 +61,17 @@ pub(crate) enum SigImpl {
 }
 
 impl SigImpl {
-  fn to_legacy(&self) -> Result<ChiaSig, BlsError> {
+  fn as_legacy(&self) -> Result<Cow<'_, ChiaSig>, BlsError> {
     match self {
-      SigImpl::Legacy(sig) => Ok(sig.clone()),
-      SigImpl::Basic(sig) => sig.convert(),
+      SigImpl::Legacy(sig) => Ok(Cow::Borrowed(sig)),
+      SigImpl::Basic(sig) => Ok(Cow::Owned(sig.convert()?)),
     }
   }
 
-  fn to_basic(&self) -> Result<IetfSig, BlsError> {
+  fn as_basic(&self) -> Result<Cow<'_, IetfSig>, BlsError> {
     match self {
-      SigImpl::Legacy(sig) => sig.convert(),
-      SigImpl::Basic(sig) => Ok(sig.clone()),
+      SigImpl::Legacy(sig) => Ok(Cow::Owned(sig.convert()?)),
+      SigImpl::Basic(sig) => Ok(Cow::Borrowed(sig)),
     }
   }
 }
@@ -84,20 +85,22 @@ impl Clone for SigImpl {
   }
 }
 
-fn pks_to_legacy(pks: &[PkImpl]) -> Result<Vec<ChiaPk>, BlsError> {
-  pks.iter().map(PkImpl::to_legacy).collect()
+// Borrow elements already in the requested representation and
+// convert only mismatched ones; hot paths never clone.
+fn pks_to_legacy(pks: &[PkImpl]) -> Result<Vec<Cow<'_, ChiaPk>>, BlsError> {
+  pks.iter().map(PkImpl::as_legacy).collect()
 }
 
-fn pks_to_basic(pks: &[PkImpl]) -> Result<Vec<IetfPk>, BlsError> {
-  pks.iter().map(PkImpl::to_basic).collect()
+fn pks_to_basic(pks: &[PkImpl]) -> Result<Vec<Cow<'_, IetfPk>>, BlsError> {
+  pks.iter().map(PkImpl::as_basic).collect()
 }
 
-fn sigs_to_legacy(sigs: &[SigImpl]) -> Result<Vec<ChiaSig>, BlsError> {
-  sigs.iter().map(SigImpl::to_legacy).collect()
+fn sigs_to_legacy(sigs: &[SigImpl]) -> Result<Vec<Cow<'_, ChiaSig>>, BlsError> {
+  sigs.iter().map(SigImpl::as_legacy).collect()
 }
 
-fn sigs_to_basic(sigs: &[SigImpl]) -> Result<Vec<IetfSig>, BlsError> {
-  sigs.iter().map(SigImpl::to_basic).collect()
+fn sigs_to_basic(sigs: &[SigImpl]) -> Result<Vec<Cow<'_, IetfSig>>, BlsError> {
+  sigs.iter().map(SigImpl::as_basic).collect()
 }
 
 fn id_from_slice(bytes: &[u8]) -> Result<Hash256, ffi::PkcError> {
@@ -428,8 +431,8 @@ pub mod ffi {
         return Err(PkcError::InvalidLength);
       }
       let bytes = match scheme {
-        Scheme::Legacy => self.0.to_legacy()?.to_bytes(),
-        Scheme::Basic => self.0.to_basic()?.to_bytes(),
+        Scheme::Legacy => self.0.as_legacy()?.to_bytes(),
+        Scheme::Basic => self.0.as_basic()?.to_bytes(),
       };
       out.copy_from_slice(&bytes);
       Ok(())
@@ -454,11 +457,29 @@ pub mod ffi {
       match (&self.0, &other.0) {
         (PkImpl::Legacy(a), PkImpl::Legacy(b)) => a == b,
         (PkImpl::Basic(a), PkImpl::Basic(b)) => a == b,
-        _ => match (self.0.to_basic(), other.0.to_basic()) {
+        _ => match (self.0.as_basic(), other.0.as_basic()) {
           (Ok(a), Ok(b)) => a == b,
           _ => false,
         },
       }
+    }
+
+    /// Sum this key with one other (the hot pairwise-accumulate
+    /// path of Dash Core's AggregateInsecure member).
+    pub fn aggregate_with(&self, other: &PublicKey, scheme: Scheme) -> Result<Box<PublicKey>, PkcError> {
+      let pk = match scheme {
+        Scheme::Legacy => {
+          let a = self.0.as_legacy()?;
+          let b = other.0.as_legacy()?;
+          PkImpl::Legacy(ChiaPk::aggregate(&[&a, &b])?)
+        }
+        Scheme::Basic => {
+          let a = self.0.as_basic()?;
+          let b = other.0.as_basic()?;
+          PkImpl::Basic(IetfPk::aggregate(&[&a, &b])?)
+        }
+      };
+      Ok(Box::new(PublicKey(pk)))
     }
 
     /// Sum the collected keys (dashbls `CoreMPL::Aggregate`).
@@ -466,12 +487,12 @@ pub mod ffi {
       let pk = match scheme {
         Scheme::Legacy => {
           let owned = pks_to_legacy(&keys.0)?;
-          let refs: Vec<&ChiaPk> = owned.iter().collect();
+          let refs: Vec<&ChiaPk> = owned.iter().map(|c| &**c).collect();
           PkImpl::Legacy(ChiaPk::aggregate(&refs)?)
         }
         Scheme::Basic => {
           let owned = pks_to_basic(&keys.0)?;
-          let refs: Vec<&IetfPk> = owned.iter().collect();
+          let refs: Vec<&IetfPk> = owned.iter().map(|c| &**c).collect();
           PkImpl::Basic(IetfPk::aggregate(&refs)?)
         }
       };
@@ -485,12 +506,12 @@ pub mod ffi {
       let pk = match scheme {
         Scheme::Legacy => {
           let owned = pks_to_legacy(&masters.0)?;
-          let refs: Vec<&ChiaPk> = owned.iter().collect();
+          let refs: Vec<&ChiaPk> = owned.iter().map(|c| &**c).collect();
           PkImpl::Legacy(ChiaPk::derive_share(&refs, &id)?)
         }
         Scheme::Basic => {
           let owned = pks_to_basic(&masters.0)?;
-          let refs: Vec<&IetfPk> = owned.iter().collect();
+          let refs: Vec<&IetfPk> = owned.iter().map(|c| &**c).collect();
           PkImpl::Basic(IetfPk::derive_share(&refs, &id)?)
         }
       };
@@ -531,12 +552,12 @@ pub mod ffi {
       let blob = match scheme {
         Scheme::Legacy => {
           let owned = pks_to_legacy(&recipients.0)?;
-          let refs: Vec<&ChiaPk> = owned.iter().collect();
+          let refs: Vec<&ChiaPk> = owned.iter().map(|c| &**c).collect();
           ChiaPk::ies_encrypt_multi(&refs, &plain_refs, &mut rng)?
         }
         Scheme::Basic => {
           let owned = pks_to_basic(&recipients.0)?;
-          let refs: Vec<&IetfPk> = owned.iter().collect();
+          let refs: Vec<&IetfPk> = owned.iter().map(|c| &**c).collect();
           IetfPk::ies_encrypt_multi(&refs, &plain_refs, &mut rng)?
         }
       };
@@ -566,8 +587,8 @@ pub mod ffi {
         return Err(PkcError::InvalidLength);
       }
       let bytes = match scheme {
-        Scheme::Legacy => self.0.to_legacy()?.to_bytes(),
-        Scheme::Basic => self.0.to_basic()?.to_bytes(),
+        Scheme::Legacy => self.0.as_legacy()?.to_bytes(),
+        Scheme::Basic => self.0.as_basic()?.to_bytes(),
       };
       out.copy_from_slice(&bytes);
       Ok(())
@@ -592,7 +613,7 @@ pub mod ffi {
       match (&self.0, &other.0) {
         (SigImpl::Legacy(a), SigImpl::Legacy(b)) => a == b,
         (SigImpl::Basic(a), SigImpl::Basic(b)) => a == b,
-        _ => match (self.0.to_basic(), other.0.to_basic()) {
+        _ => match (self.0.as_basic(), other.0.as_basic()) {
           (Ok(a), Ok(b)) => a == b,
           _ => false,
         },
@@ -603,9 +624,27 @@ pub mod ffi {
     /// (dashbls `CoreMPL::Verify`).
     pub fn verify(&self, msg: &[u8], pk: &PublicKey, scheme: Scheme) -> Result<(), PkcError> {
       match scheme {
-        Scheme::Legacy => Ok(self.0.to_legacy()?.verify(msg, &pk.0.to_legacy()?)?),
-        Scheme::Basic => Ok(self.0.to_basic()?.verify(msg, &pk.0.to_basic()?)?),
+        Scheme::Legacy => Ok(self.0.as_legacy()?.verify(msg, pk.0.as_legacy()?.as_ref())?),
+        Scheme::Basic => Ok(self.0.as_basic()?.verify(msg, pk.0.as_basic()?.as_ref())?),
       }
+    }
+
+    /// Sum this signature with one other (the hot
+    /// pairwise-accumulate path of Dash Core's AggregateInsecure).
+    pub fn aggregate_with(&self, other: &Signature, scheme: Scheme) -> Result<Box<Signature>, PkcError> {
+      let sig = match scheme {
+        Scheme::Legacy => {
+          let a = self.0.as_legacy()?;
+          let b = other.0.as_legacy()?;
+          SigImpl::Legacy(ChiaSig::aggregate(&[&a, &b])?)
+        }
+        Scheme::Basic => {
+          let a = self.0.as_basic()?;
+          let b = other.0.as_basic()?;
+          SigImpl::Basic(IetfSig::aggregate(&[&a, &b])?)
+        }
+      };
+      Ok(Box::new(Signature(sig)))
     }
 
     /// Sum the collected signatures (dashbls
@@ -614,12 +653,12 @@ pub mod ffi {
       let sig = match scheme {
         Scheme::Legacy => {
           let owned = sigs_to_legacy(&sigs.0)?;
-          let refs: Vec<&ChiaSig> = owned.iter().collect();
+          let refs: Vec<&ChiaSig> = owned.iter().map(|c| &**c).collect();
           SigImpl::Legacy(ChiaSig::aggregate(&refs)?)
         }
         Scheme::Basic => {
           let owned = sigs_to_basic(&sigs.0)?;
-          let refs: Vec<&IetfSig> = owned.iter().collect();
+          let refs: Vec<&IetfSig> = owned.iter().map(|c| &**c).collect();
           SigImpl::Basic(IetfSig::aggregate(&refs)?)
         }
       };
@@ -637,15 +676,15 @@ pub mod ffi {
         Scheme::Legacy => {
           let owned_sigs = sigs_to_legacy(&sigs.0)?;
           let owned_pks = pks_to_legacy(&pks.0)?;
-          let sig_refs: Vec<&ChiaSig> = owned_sigs.iter().collect();
-          let pk_refs: Vec<&ChiaPk> = owned_pks.iter().collect();
+          let sig_refs: Vec<&ChiaSig> = owned_sigs.iter().map(|c| &**c).collect();
+          let pk_refs: Vec<&ChiaPk> = owned_pks.iter().map(|c| &**c).collect();
           SigImpl::Legacy(ChiaSig::aggregate_secure(&sig_refs, &pk_refs)?)
         }
         Scheme::Basic => {
           let owned_sigs = sigs_to_basic(&sigs.0)?;
           let owned_pks = pks_to_basic(&pks.0)?;
-          let sig_refs: Vec<&IetfSig> = owned_sigs.iter().collect();
-          let pk_refs: Vec<&IetfPk> = owned_pks.iter().collect();
+          let sig_refs: Vec<&IetfSig> = owned_sigs.iter().map(|c| &**c).collect();
+          let pk_refs: Vec<&IetfPk> = owned_pks.iter().map(|c| &**c).collect();
           SigImpl::Basic(IetfSig::aggregate_secure(&sig_refs, &pk_refs)?)
         }
       };
@@ -658,13 +697,13 @@ pub mod ffi {
       match scheme {
         Scheme::Legacy => {
           let owned = pks_to_legacy(&pks.0)?;
-          let refs: Vec<&ChiaPk> = owned.iter().collect();
-          Ok(self.0.to_legacy()?.secure_verify_aggregates(msg, &refs)?)
+          let refs: Vec<&ChiaPk> = owned.iter().map(|c| &**c).collect();
+          Ok(self.0.as_legacy()?.secure_verify_aggregates(msg, &refs)?)
         }
         Scheme::Basic => {
           let owned = pks_to_basic(&pks.0)?;
-          let refs: Vec<&IetfPk> = owned.iter().collect();
-          Ok(self.0.to_basic()?.secure_verify_aggregates(msg, &refs)?)
+          let refs: Vec<&IetfPk> = owned.iter().map(|c| &**c).collect();
+          Ok(self.0.as_basic()?.secure_verify_aggregates(msg, &refs)?)
         }
       }
     }
@@ -677,13 +716,13 @@ pub mod ffi {
       match scheme {
         Scheme::Legacy => {
           let owned = pks_to_legacy(&pks.0)?;
-          let refs: Vec<&ChiaPk> = owned.iter().collect();
-          Ok(self.0.to_legacy()?.verify_aggregates(&msg_refs, &refs)?)
+          let refs: Vec<&ChiaPk> = owned.iter().map(|c| &**c).collect();
+          Ok(self.0.as_legacy()?.verify_aggregates(&msg_refs, &refs)?)
         }
         Scheme::Basic => {
           let owned = pks_to_basic(&pks.0)?;
-          let refs: Vec<&IetfPk> = owned.iter().collect();
-          Ok(self.0.to_basic()?.verify_aggregates(&msg_refs, &refs)?)
+          let refs: Vec<&IetfPk> = owned.iter().map(|c| &**c).collect();
+          Ok(self.0.as_basic()?.verify_aggregates(&msg_refs, &refs)?)
         }
       }
     }
@@ -692,8 +731,8 @@ pub mod ffi {
     /// (Dash Core `CBLSSignature::SubInsecure`).
     pub fn sub_insecure(&self, other: &Signature) -> Result<Box<Signature>, PkcError> {
       let sig = match &self.0 {
-        SigImpl::Legacy(sig) => SigImpl::Legacy(sig.sub_insecure(&other.0.to_legacy()?)?),
-        SigImpl::Basic(sig) => SigImpl::Basic(sig.sub_insecure(&other.0.to_basic()?)?),
+        SigImpl::Legacy(sig) => SigImpl::Legacy(sig.sub_insecure(other.0.as_legacy()?.as_ref())?),
+        SigImpl::Basic(sig) => SigImpl::Basic(sig.sub_insecure(other.0.as_basic()?.as_ref())?),
       };
       Ok(Box::new(Signature(sig)))
     }
@@ -711,7 +750,7 @@ pub mod ffi {
           let shares: Vec<BlsSigShare<BlsScChia>> = owned
             .into_iter()
             .zip(ids.0.iter())
-            .map(|(sig, id)| BlsSigShare::new(*id, sig))
+            .map(|(sig, id)| BlsSigShare::new(*id, sig.into_owned()))
             .collect();
           let refs: Vec<&BlsSigShare<BlsScChia>> = shares.iter().collect();
           SigImpl::Legacy(ChiaSig::recover(&refs)?)
@@ -721,7 +760,7 @@ pub mod ffi {
           let shares: Vec<BlsSigShare<BlsScIetf>> = owned
             .into_iter()
             .zip(ids.0.iter())
-            .map(|(sig, id)| BlsSigShare::new(*id, sig))
+            .map(|(sig, id)| BlsSigShare::new(*id, sig.into_owned()))
             .collect();
           let refs: Vec<&BlsSigShare<BlsScIetf>> = shares.iter().collect();
           SigImpl::Basic(IetfSig::recover(&refs)?)

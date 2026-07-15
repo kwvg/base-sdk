@@ -40,6 +40,9 @@ namespace capi {
     typedef struct Signature_verify_result {union { dash_pkc::ffi::capi::PkcError err;}; bool is_ok;} Signature_verify_result;
     Signature_verify_result Signature_verify(const dash_pkc::ffi::capi::Signature* self, diplomat::capi::DiplomatU8View msg, const dash_pkc::ffi::capi::PublicKey* pk, dash_pkc::ffi::capi::Scheme scheme);
 
+    typedef struct Signature_aggregate_with_result {union {dash_pkc::ffi::capi::Signature* ok; dash_pkc::ffi::capi::PkcError err;}; bool is_ok;} Signature_aggregate_with_result;
+    Signature_aggregate_with_result Signature_aggregate_with(const dash_pkc::ffi::capi::Signature* self, const dash_pkc::ffi::capi::Signature* other, dash_pkc::ffi::capi::Scheme scheme);
+
     typedef struct Signature_aggregate_result {union {dash_pkc::ffi::capi::Signature* ok; dash_pkc::ffi::capi::PkcError err;}; bool is_ok;} Signature_aggregate_result;
     Signature_aggregate_result Signature_aggregate(const dash_pkc::ffi::capi::SignatureVec* sigs, dash_pkc::ffi::capi::Scheme scheme);
 
@@ -99,6 +102,13 @@ inline diplomat::result<std::monostate, dash_pkc::ffi::PkcError> dash_pkc::ffi::
         pk.AsFFI(),
         scheme.AsFFI());
     return result.is_ok ? diplomat::result<std::monostate, dash_pkc::ffi::PkcError>(diplomat::Ok<std::monostate>()) : diplomat::result<std::monostate, dash_pkc::ffi::PkcError>(diplomat::Err<dash_pkc::ffi::PkcError>(dash_pkc::ffi::PkcError::FromFFI(result.err)));
+}
+
+inline diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError> dash_pkc::ffi::Signature::aggregate_with(const dash_pkc::ffi::Signature& other, dash_pkc::ffi::Scheme scheme) const {
+    auto result = dash_pkc::ffi::capi::Signature_aggregate_with(this->AsFFI(),
+        other.AsFFI(),
+        scheme.AsFFI());
+    return result.is_ok ? diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError>(diplomat::Ok<std::unique_ptr<dash_pkc::ffi::Signature>>(std::unique_ptr<dash_pkc::ffi::Signature>(dash_pkc::ffi::Signature::FromFFI(result.ok)))) : diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError>(diplomat::Err<dash_pkc::ffi::PkcError>(dash_pkc::ffi::PkcError::FromFFI(result.err)));
 }
 
 inline diplomat::result<std::unique_ptr<dash_pkc::ffi::Signature>, dash_pkc::ffi::PkcError> dash_pkc::ffi::Signature::aggregate(const dash_pkc::ffi::SignatureVec& sigs, dash_pkc::ffi::Scheme scheme) {
