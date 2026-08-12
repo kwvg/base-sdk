@@ -124,11 +124,28 @@ def _print_csv_diagnostics(results_path: Path) -> int:
   return count
 
 
-def _search_suite(parser: argparse.ArgumentParser, name: str) -> str:
+def _locked_version(lock_file: Path, pack: str) -> str:
+  """Return the version pinned for *pack* in *lock_file*."""
+  text = lock_file.read_text(encoding="latin-1")
+  match = re.search(
+    rf"^\s+{re.escape(pack)}:\s*$\n\s+version:\s*(\S+)\s*$",
+    text,
+    re.MULTILINE,
+  )
+  if not match:
+    raise ValueError(f"no pinned version for {pack} in {lock_file}")
+  return match.group(1)
+
+
+def _search_suite(
+  parser: argparse.ArgumentParser,
+  name: str,
+  version: str,
+) -> str:
   """Validate CodeQL suite *name* and return its query-suite reference."""
   if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
     parser.error(f"invalid --with-suite name: {name!r}")
-  return f"codeql/rust-queries:codeql-suites/{name}.qls"
+  return f"codeql/rust-queries@{version}:codeql-suites/{name}.qls"
 
 
 @contextlib.contextmanager
@@ -182,7 +199,9 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     help=("run a 'codeql/rust-queries' suite by name (default: none)"),
   )
   args = parser.parse_args(argv)
-  args.suites = [_search_suite(parser, name) for name in args.suites]
+  lock_file = root_dir() / "contrib" / "codeql" / "codeql-pack.lock.yml"
+  version = _locked_version(lock_file, "codeql/rust-queries")
+  args.suites = [_search_suite(parser, name, version) for name in args.suites]
   return args
 
 

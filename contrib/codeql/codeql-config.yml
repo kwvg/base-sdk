@@ -1,2 +1,5 @@
+disable-default-queries: true
 paths-ignore:
   - public
+queries:
+  - uses: ./contrib/codeql
