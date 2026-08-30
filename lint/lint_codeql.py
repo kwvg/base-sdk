@@ -42,6 +42,16 @@ _SOURCE_KEYWORDS = (
 )
 
 
+# The pack this harness analyses, as a directory under `lint/codeql`. One
+# per language, because a CodeQL pack targets exactly one: its `qlpack.yml`
+# names that language's libraries, and queries written against Rust cannot
+# be evaluated over a database built from anything else.
+#
+# Rust is the only one here today. A second language arrives as a sibling
+# directory and a second value, not as more queries beside these.
+LANG_DIR = "rust"
+
+
 def _discover_queries(query_dir: Path) -> list[Path]:
   """Return all .ql files in *query_dir*, sorted by name."""
   return sorted(query_dir.glob("*.ql"))
@@ -127,7 +137,7 @@ def _print_csv_diagnostics(results_path: Path) -> int:
 
 def _locked_pack(pack: str) -> str:
   """Return *pack* pinned to the version the lock file records."""
-  lock_file = root_dir() / "lint" / "codeql" / "codeql-pack.lock.yml"
+  lock_file = root_dir() / "lint" / "codeql" / LANG_DIR / "codeql-pack.lock.yml"
   if not lock_file.is_file():
     raise ValueError(f"missing lock file {lock_file}")
   text = lock_file.read_text(encoding="latin-1")
@@ -222,11 +232,11 @@ def main(argv: list[str] | None = None) -> int:
     return RETCODE_SKIP
 
   repo_root = root_dir()
-  query_dir = repo_root / "lint" / "codeql"
+  query_dir = repo_root / "lint" / "codeql" / LANG_DIR
   queries = _discover_queries(query_dir)
 
   if not queries:
-    raise FileNotFoundError("no .ql queries found in lint/codeql/")
+    raise FileNotFoundError("no .ql queries found in lint/codeql/rust/")
 
   # Generate source-line data for queries that need raw text.
   source_dirs = [
