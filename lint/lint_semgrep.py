@@ -26,7 +26,7 @@ def main() -> int:
   semgrep_bin = require_bin("semgrep")
 
   repo_root = root_dir()
-  config_dir = repo_root / "contrib" / "semgrep"
+  config_dir = repo_root / "lint" / "semgrep"
   target_dirs = [
     repo_root / "pkgs",
     repo_root / "contrib" / "samples",
@@ -38,7 +38,7 @@ def main() -> int:
 
   if not configs:
     raise FileNotFoundError(
-      "no semgrep configs found in contrib/semgrep/",
+      "no semgrep configs found in lint/semgrep/",
     )
 
   result = subprocess.run(  # noqa: S603

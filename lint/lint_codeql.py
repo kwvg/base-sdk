@@ -127,7 +127,7 @@ def _print_csv_diagnostics(results_path: Path) -> int:
 
 def _locked_pack(pack: str) -> str:
   """Return *pack* pinned to the version the lock file records."""
-  lock_file = root_dir() / "contrib" / "codeql" / "codeql-pack.lock.yml"
+  lock_file = root_dir() / "lint" / "codeql" / "codeql-pack.lock.yml"
   if not lock_file.is_file():
     raise ValueError(f"missing lock file {lock_file}")
   text = lock_file.read_text(encoding="latin-1")
@@ -222,11 +222,11 @@ def main(argv: list[str] | None = None) -> int:
     return RETCODE_SKIP
 
   repo_root = root_dir()
-  query_dir = repo_root / "contrib" / "codeql"
+  query_dir = repo_root / "lint" / "codeql"
   queries = _discover_queries(query_dir)
 
   if not queries:
-    raise FileNotFoundError("no .ql queries found in contrib/codeql/")
+    raise FileNotFoundError("no .ql queries found in lint/codeql/")
 
   # Generate source-line data for queries that need raw text.
   source_dirs = [

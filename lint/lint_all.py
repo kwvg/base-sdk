@@ -55,7 +55,13 @@ def _print_stream(prefix: str, line: str, *, is_stderr: bool) -> None:
 
 
 def _discover_linters(lint_dir: Path) -> list[Path]:
-  return sorted(lint_dir.glob("lint_*.py"))
+  # The driver lives among the linters and matches the same glob, so it has
+  # to take itself out. Left in, it would discover and run itself, and each
+  # copy would do so again.
+  driver = Path(__file__).resolve()
+  return sorted(
+    path for path in lint_dir.glob("lint_*.py") if path.resolve() != driver
+  )
 
 
 async def _read_stream(
@@ -76,7 +82,7 @@ async def _read_stream(
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
   parser = declare_verbs(
-    "Run contrib/lint/lint_*.py concurrently.",
+    "Run lint/lint_*.py concurrently.",
     {"run": "run every linter and summarise the results"},
   )
   parser.add_argument(
@@ -132,8 +138,9 @@ async def _run_linter(script: Path) -> LintResult:
 
 async def _main() -> int:
   args = _parse_args(sys.argv[1:])
-  contrib_dir = Path(__file__).resolve().parent
-  lint_dir = contrib_dir / "lint"
+  # The driver sits among the linters it runs, so the directory to scan is
+  # its own.
+  lint_dir = Path(__file__).resolve().parent
   excluded = set(args.exclude)
   scripts = [s for s in _discover_linters(lint_dir) if s.stem not in excluded]
 
