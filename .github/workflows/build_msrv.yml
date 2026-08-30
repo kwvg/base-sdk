@@ -82,22 +82,22 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.codeql
-          key: codeql-packs-${{ hashFiles('contrib/codeql/codeql-pack.lock.yml') }}
+          key: codeql-packs-${{ hashFiles('maint/codeql/codeql-pack.lock.yml') }}
 
       - name: Run linters
-        run: python3 contrib/lint_all.py --exclude lint_codeql
+        run: python3 maint/lint_all.py --exclude lint_codeql
         env:
           RUSTUP_TOOLCHAIN: 1.85.0
 
       - name: Run CodeQL
-        run: python3 contrib/lint/lint_codeql.py --with-suite=rust-security-and-quality
+        run: python3 maint/lint/lint_codeql.py --with-suite=rust-security-and-quality
         env:
           RUSTUP_TOOLCHAIN: 1.85.0
 
       - name: Check PR commit messages
         if: github.event_name == 'pull_request'
         run: >
-          python3 contrib/lint/lint_unconv.py
+          python3 maint/lint/lint_unconv.py
           -r "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
 
   build:

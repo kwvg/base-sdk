@@ -77,7 +77,7 @@ async def _read_stream(
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
   parser = declare_verbs(
-    "Run contrib/lint/lint_*.py concurrently.",
+    "Run maint/lint/lint_*.py concurrently.",
     {"run": "run every linter and summarise the results"},
   )
   parser.add_argument(
@@ -133,8 +133,7 @@ async def _run_linter(script: Path) -> LintResult:
 
 async def _main() -> int:
   args = _parse_args(sys.argv[1:])
-  contrib_dir = Path(__file__).resolve().parent
-  lint_dir = contrib_dir / "lint"
+  lint_dir = Path(__file__).resolve().parent / "lint"
   excluded = set(args.exclude)
   scripts = [s for s in _discover_linters(lint_dir) if s.stem not in excluded]
 

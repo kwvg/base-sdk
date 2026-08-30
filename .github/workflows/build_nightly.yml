@@ -88,7 +88,7 @@ jobs:
 
       - name: Check formatting
         if: matrix.config.name == 'full'
-        run: python contrib/lint/lint_rust.py
+        run: python maint/lint/lint_rust.py
 
       - name: Test package (with coverage)
         if: matrix.config.name == 'full'

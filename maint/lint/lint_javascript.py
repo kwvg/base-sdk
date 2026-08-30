@@ -26,7 +26,7 @@ def main() -> int:
   npx_bin = require_bin("npx")
 
   repo_root = root_dir()
-  config_path = repo_root / "contrib" / "js" / "eslint.config.mjs"
+  config_path = repo_root / "maint" / "js" / "eslint.config.mjs"
 
   if not config_path.is_file():
     raise FileNotFoundError(f"error: eslint config not found: {config_path}")

@@ -95,7 +95,7 @@ def _check_format(
   if result.returncode != 0:
     if not fix:
       print(
-        f"hint: run 'python3 contrib/lint/{SCRIPT}.py apply-all' to rewrite",
+        f"hint: run 'python3 maint/lint/{SCRIPT}.py apply-all' to rewrite",
         file=sys.stderr,
       )
     return RETCODE_ERR
