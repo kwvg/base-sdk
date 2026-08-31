@@ -1,0 +1,84 @@
+# Two services on purpose. Nix owns /nix as root, but a container that writes
+# to a bind mount as root leaves root-owned files in your tree, so the store
+# belongs to a root daemon and the shell runs as you and asks it to build.
+#
+# Set HOST_UID and HOST_GID to your own, or the defaults below apply:
+#
+#   HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose run --rm nix_shell
+
+name: 'base-sdk'
+
+services:
+  nix_daemon:
+    build:
+      context: '.'
+      dockerfile: './Dockerfile'
+    container_name: base_sdk_nix_daemon
+    entrypoint: ['/usr/local/bin/daemon']
+    environment:
+      HOST_UID: '${HOST_UID:-1000}'
+      HOST_GID: '${HOST_GID:-1000}'
+
+    # Docker's own init as PID 1, so the daemon's build children are reaped
+    # and a stop signal reaches it rather than being ignored.
+    init: true
+
+    # What the shell waits on, rather than the shell polling for it. Ten
+    # seconds is a socket being opened, not a build.
+    healthcheck:
+      test: ['CMD-SHELL', 'test -S /nix/var/nix/daemon-socket/socket']
+      interval: '1s'
+      timeout: '2s'
+      retries: 10
+
+    restart: 'unless-stopped'
+    volumes:
+      # The store is the expensive part: the shell runs to gigabytes realised,
+      # and without this every container starts by rebuilding it.
+      - type: volume
+        source: 'nix_store'
+        target: '/nix'
+
+      - type: volume
+        source: 'build_cache'
+        target: '/build'
+
+  nix_shell:
+    build:
+      context: '.'
+      dockerfile: './Dockerfile'
+    depends_on:
+      nix_daemon:
+        # Not just started: the socket has to exist before nix is run.
+        condition: 'service_healthy'
+
+    init: true
+
+    # No store access of its own; every build goes through the daemon.
+    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    environment:
+      NIX_REMOTE: 'daemon'
+      # This user is not in /etc/passwd, so nothing can look a home up.
+      HOME: '/build/home'
+      # Where the entrypoint resolves the flake from.
+      WORKSPACE_PATH: '/src/base-sdk'
+    stdin_open: true  # Equivalent to -i
+    tty: true         # Equivalent to -t
+    volumes:
+      - type: bind
+        source: '../..'
+        target: '/src/base-sdk'
+
+      - type: volume
+        source: 'nix_store'
+        target: '/nix'
+
+      # Keeps build artifacts out of the bind mount, and keeps the registry
+      # and target dir between runs. See CARGO_* in the Dockerfile.
+      - type: volume
+        source: 'build_cache'
+        target: '/build'
+
+volumes:
+  nix_store:
+  build_cache:

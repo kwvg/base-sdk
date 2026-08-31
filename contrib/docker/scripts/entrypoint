@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# A way into the devshell and nothing else. No arguments means an interactive
+# one; arguments mean run them in it.
+
+set -eo pipefail
+
+SOCKET="/nix/var/nix/daemon-socket/socket"
+
+# compose gates this service on the daemon's healthcheck, so reaching here
+# without a socket means the shell was started on its own.
+if [[ ! -S "${SOCKET}" ]]; then
+  echo "${0##*/}: no nix daemon at ${SOCKET}; start the nix_daemon service" >&2
+  exit 1
+fi
+
+# The bind mount belongs to whoever owns it on the host, and git refuses to
+# read a tree it does not trust. Nix needs git to resolve the flake.
+git config --global --get-all safe.directory | grep -qxF "${WORKSPACE_PATH}" ||
+  git config --global --add safe.directory "${WORKSPACE_PATH}"
+
+cd "${WORKSPACE_PATH}"
+
+if (( $# > 0 )); then
+  exec nix develop ./contrib/nix#ci --command "$@"
+fi
+
+exec nix develop ./contrib/nix#ci

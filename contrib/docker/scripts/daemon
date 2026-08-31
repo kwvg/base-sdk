@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# Run the Nix build daemon. This is the only container that is root, and the
+# only one that owns the store; the shell talks to it over the socket.
+
+set -eo pipefail
+
+# Both volumes arrive root-owned. The shell runs as the host's user, so it
+# needs these handed over before it can write a target dir or a git config.
+install -d -m 0755 -o "${HOST_UID}" -g "${HOST_GID}" \
+  /build \
+  /build/cargo \
+  /build/home \
+  /build/target
+
+exec nix-daemon
