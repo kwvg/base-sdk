@@ -1,8 +1,8 @@
-# Everything the shells share: the mods and the assembler
+# Everything both shells share: the mods, the target policy, the assembler
 
-# A shell is a list of mods, and which flake input each one takes is settled
-# once here, so a second shell cannot be given something different from what
-# the first was.
+# ci and dev need the same ingredients built the same way, so which flake
+# input a mod takes is settled once here, and dev cannot drift from what ci
+# was given.
 
 {
   pkgs,
@@ -12,6 +12,29 @@
 }:
 
 let
+  cxx = import ../mods/cxx.nix {
+    inherit pkgs lib;
+    xcodeSdk = import ../mods/xcode_sdk.nix { inherit pkgs; };
+  };
+
+  # Targets that are not a platform anyone here runs, so no host is ever
+  # excluded from them.
+  constants = [ "wasm32-unknown-unknown" ];
+
+  # The C driver table minus the host's own, which the stdenv already
+  # compiles for. Windows stays in because no host is Windows.
+  #
+  # rustcTarget, not hostPlatform.config: the table is keyed by Rust triples,
+  # and the two disagree on aarch64-darwin, where config is arm64-apple-darwin.
+  hostTriple = pkgs.stdenv.hostPlatform.rust.rustcTarget;
+  crossTargets = lib.filter (t: t != hostTriple) cxx.knownTargets;
+
+  nightlyWith =
+    extra:
+    (pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml")).override {
+      targets = constants ++ extra;
+    };
+
   # Folds mods into the arguments mkShell takes. A mod contributes packages,
   # environment, a shell hook and at most one stdenv; two mods setting the
   # same variable throws rather than letting list order pick a winner.
@@ -47,20 +70,24 @@ in
   inherit
     pkgs
     lib
+    cxx
+    crossTargets
+    nightlyWith
     compose
     ;
 
   mods = {
     # Both channels in one shell: nightly as rust-toolchain.toml names it,
-    # and the fixed floor Cargo.toml declares, which lint_cargo.py holds
-    # equal. stable is absent on purpose; being a moving target it stays on
-    # dtolnay, outside this substrate.
+    # and the floor Cargo.toml declares, which lint_cargo.py holds equal.
+    # stable is a moving target, so it stays on dtolnay outside this shell.
     rust = import ../mods/rust.nix {
       inherit pkgs lib;
       default = "nightly";
       toolchains = {
-        nightly = pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml");
-        msrv = pkgs.rust-bin.stable."1.85.0".default;
+        nightly = nightlyWith [ ];
+        # minimal: the MSRV job builds and tests and nothing lints against
+        # it, so the .default profile's docs are dead weight.
+        msrv = pkgs.rust-bin.stable."1.85.0".minimal;
       };
     };
 
@@ -74,7 +101,9 @@ in
 
     codeql = import ../mods/codeql.nix { inherit pkgs lib; };
 
-    cxx = import ../mods/cxx.nix { inherit pkgs lib; };
+    # The compiler alone. Cross drivers are `cxx.forTargets`, which only
+    # dev.nix calls, so no shell picks up a target by being on this list.
+    cxx = cxx.compiler;
 
     nixpkgs = import ../mods/nixpkgs.nix { inherit pkgs; };
   };

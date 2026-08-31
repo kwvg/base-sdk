@@ -56,9 +56,9 @@ docker compose down
 ### First run is slow
 
 `docker compose build` is quick, because the image is only Nix and two scripts.
-Entering a shell is not: it leaves the store volume around 11 GiB. That is
-cached there afterwards, so the cost is paid once and survives
-`docker compose down`.
+Entering a shell is not: `#dev` leaves the store volume around 11 GiB and a
+sysroot per cross target on top. That is cached there afterwards, so the cost
+is paid once and survives `docker compose down`.
 
 To reclaim that space:
 
