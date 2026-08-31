@@ -44,6 +44,12 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
 
+      # No cache key: this proxies a Nix binary cache into the Actions cache
+      # and addresses each store path by its own hash, so nothing here churns
+      # on an unrelated edit. Paths already in cache.nixos.org are skipped.
+      - name: Cache the devshell
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
       - name: Restore cargo registry
         uses: actions/cache/restore@v5
         with:
@@ -101,6 +107,12 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
+
+      # No cache key: this proxies a Nix binary cache into the Actions cache
+      # and addresses each store path by its own hash, so nothing here churns
+      # on an unrelated edit. Paths already in cache.nixos.org are skipped.
+      - name: Cache the devshell
+        uses: DeterminateSystems/magic-nix-cache-action@v14
 
       - name: Restore cargo registry
         uses: actions/cache/restore@v5
