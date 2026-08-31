@@ -13,8 +13,8 @@
 
 let
   # Folds mods into the arguments mkShell takes. A mod contributes packages,
-  # environment and at most one stdenv; two mods setting the same variable
-  # throws rather than letting list order pick a winner.
+  # environment, a shell hook and at most one stdenv; two mods setting the
+  # same variable throws rather than letting list order pick a winner.
   compose =
     mods:
     let
@@ -35,7 +35,11 @@ let
       throw "mods set the same variable twice: ${lib.concatStringsSep ", " clashes}"
     else
       mkShell (
-        { packages = lib.concatMap (m: m.packages or [ ]) mods; } // lib.foldl' (a: b: a // b) { } envs
+        {
+          packages = lib.concatMap (m: m.packages or [ ]) mods;
+          shellHook = lib.concatStringsSep "\n" (lib.filter (h: h != "") (map (m: m.shellHook or "") mods));
+        }
+        // lib.foldl' (a: b: a // b) { } envs
       );
 in
 
@@ -47,9 +51,17 @@ in
     ;
 
   mods = {
+    # Both channels in one shell: nightly as rust-toolchain.toml names it,
+    # and the fixed floor Cargo.toml declares, which lint_cargo.py holds
+    # equal. stable is absent on purpose; being a moving target it stays on
+    # dtolnay, outside this substrate.
     rust = import ../mods/rust.nix {
-      inherit pkgs;
-      toolchainFile = root + "/rust-toolchain.toml";
+      inherit pkgs lib;
+      default = "nightly";
+      toolchains = {
+        nightly = pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml");
+        msrv = pkgs.rust-bin.stable."1.85.0".default;
+      };
     };
 
     python = import ../mods/python.nix {

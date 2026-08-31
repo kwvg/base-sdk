@@ -13,9 +13,16 @@ permissions:
   contents: read
 
 jobs:
+  # x86_64, not aarch64: CodeQL publishes no arm64 Linux build, and though
+  # the devshell can emulate its extractors it costs about four times the
+  # analysis time. Every other linter is arch-neutral, so they ride along.
   lint:
     name: Lint
     runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
 
     steps:
       - name: Checkout
@@ -34,32 +41,8 @@ jobs:
             exit 1
           fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.85.0
-        with:
-          components: rustfmt
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: pyproject.toml
-
-      - name: Install Python dependencies
-        run: pip install ".[dev]"
-
-      - name: Install CodeQL
-        id: setup-codeql
-        uses: github/codeql-action/setup-codeql@v4.37.1
-        with:
-          tools: linked
-
-      - name: Setup CodeQL
-        run: echo "$(dirname '${{ steps.setup-codeql.outputs.codeql-path }}')" >> "$GITHUB_PATH"
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Restore cargo registry
         uses: actions/cache/restore@v5
@@ -70,14 +53,6 @@ jobs:
           key: cargo-deps-${{ hashFiles('Cargo.lock', 'docs/samples/Cargo.lock') }}
           restore-keys: cargo-deps-
 
-      - name: Restore build artifacts
-        uses: actions/cache/restore@v5
-        with:
-          path: target
-          key: cargo-build-msrv-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
-          restore-keys: |
-            cargo-build-msrv-${{ runner.os }}-${{ runner.arch }}-
-
       - name: Manage CodeQL packs
         uses: actions/cache@v5
         with:
@@ -86,13 +61,9 @@ jobs:
 
       - name: Run linters
         run: python3 maint/lint_all.py --exclude lint_codeql
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
 
       - name: Run CodeQL
         run: python3 maint/lint/lint_codeql.py --with-suite=rust-security-and-quality
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
 
       - name: Check PR commit messages
         if: github.event_name == 'pull_request'
@@ -103,6 +74,13 @@ jobs:
   build:
     name: Build and test
     runs-on: ubuntu-24.04-arm
+
+    # The same shell the linters use. `cargo` in it is the nightly, so the
+    # floor is asked for by path through TOOLCHAIN_MSRV; `lint_cargo.py` holds
+    # that version equal to the Cargo.toml floor.
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
 
     steps:
       - name: Checkout
@@ -121,8 +99,8 @@ jobs:
             exit 1
           fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Restore cargo registry
         uses: actions/cache/restore@v5
@@ -143,14 +121,10 @@ jobs:
 
       - name: Build workspace
         run: |
-          cargo build --workspace --exclude dash-pow --features full
-          cargo build -p dash-pow --features std,aes_hw
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
+          "$TOOLCHAIN_MSRV/bin/cargo" build --workspace --exclude dash-pow --features full
+          "$TOOLCHAIN_MSRV/bin/cargo" build -p dash-pow --features std,aes_hw
 
       - name: Test workspace
         run: |
-          cargo test --workspace --exclude dash-pow --features full
-          cargo test -p dash-pow --features std,aes_hw
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
+          "$TOOLCHAIN_MSRV/bin/cargo" test --workspace --exclude dash-pow --features full
+          "$TOOLCHAIN_MSRV/bin/cargo" test -p dash-pow --features std,aes_hw

@@ -108,8 +108,11 @@ def _build_wasm_samples(root: Path, wasm_pack: str, cfg: Config) -> None:
     "CARGO_TARGET_DIR": str(root / "target" / "samples"),
     "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS":
       "-C target-feature=+simd128",
-    "RUSTUP_TOOLCHAIN": channel,
   }
+  # Only where nothing chose already, and only rustup reads it: the devshell
+  # has no rustup and its cargo ignores this, while a caller outside one may
+  # have several toolchains and a reason to have picked between them.
+  env.setdefault("RUSTUP_TOOLCHAIN", channel)
 
   for cargo_toml in samples:
     crate_dir = cargo_toml.parent

@@ -20,10 +20,6 @@ permissions:
 
 jobs:
   nightly:
-    name: ubuntu-24.04-arm (nightly, ${{ matrix.config.name }})
-    runs-on: ubuntu-24.04-arm
-    env:
-      RUSTFLAGS: -D warnings
     strategy:
       fail-fast: false
       matrix:
@@ -32,12 +28,23 @@ jobs:
           - { name: min, args: "--no-default-features" }
           - { name: std, args: "--features std" }
 
+    name: ubuntu-24.04-arm (nightly, ${{ matrix.config.name }})
+    runs-on: ubuntu-24.04-arm
+
+    # Every step below runs inside the devshell, so the toolchain, the
+    # compiler and the Python tools are the ones `contrib/nix` pins rather
+    # than whatever the runner image carries.
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
+      # Before Nix exists, so this one names its own shell.
       - name: Run pull request checks
         if: github.event_name == 'pull_request'
         shell: bash
@@ -49,11 +56,8 @@ jobs:
             exit 1
           fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-2026-02-01
-          components: clippy, llvm-tools, rustfmt
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Manage cargo registry
         uses: actions/cache@v5
@@ -82,27 +86,21 @@ jobs:
         if: matrix.config.name != 'full'
         run: cargo test -p ${{ inputs.package }} ${{ matrix.config.args }}
 
-      - name: Install cargo-llvm-cov
-        if: matrix.config.name == 'full'
-        uses: taiki-e/install-action@cargo-llvm-cov
-
       - name: Check formatting
         if: matrix.config.name == 'full'
-        run: python maint/lint/lint_rust.py
+        run: python3 maint/lint/lint_rust.py
 
       - name: Test package (with coverage)
         if: matrix.config.name == 'full'
         run: cargo llvm-cov ${{ matrix.config.args }} --package ${{ inputs.package }} --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
-        if: matrix.config.name == 'full' && env.HAS_CODECOV == 'true'
+        if: matrix.config.name == 'full'
         uses: codecov/codecov-action@v5
         with:
           files: lcov.info
-          flags: ${{ inputs.package }}
-        env:
-          HAS_CODECOV: ${{ secrets.CODECOV_TOKEN != '' }}
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ inputs.package_dir }}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Sanity check benchmarks
         run: cargo bench ${{ matrix.config.args }} --package ${{ inputs.package }} --no-run

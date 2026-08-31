@@ -20,6 +20,10 @@ permissions:
 jobs:
   build:
     name: Build site
+
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -29,22 +33,8 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-2026-02-01
-          targets: wasm32-unknown-unknown
-
-      - name: Install wasm-pack
-        run: cargo install wasm-pack@0.15.0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: pyproject.toml
-
-      - name: Install Python dependencies
-        run: pip install ".[dev]"
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Test documentation tooling
         run: pytest
@@ -59,7 +49,7 @@ jobs:
           restore-keys: cargo-deps-
 
       - name: Build documentation
-        run: python docs/build_docs.py build
+        run: python3 docs/build_docs.py build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

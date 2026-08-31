@@ -1,5 +1,10 @@
 [toolchain]
 channel = "nightly-2026-02-01"
-components = ["clippy", "rust-analyzer", "rustfmt"]
+# llvm-tools is what cargo-llvm-cov drives; without it the coverage step
+# fails asking for llvm-tools-preview.
+components = ["clippy", "llvm-tools", "rust-analyzer", "rustfmt"]
+# wasm32 is not a cross target in the C sense: no toolchain wires a compiler
+# for it, and `docs/build_docs.py` builds the samples with rustc alone.
+targets = ["wasm32-unknown-unknown"]
 # minimal, not default: default adds rust-docs, 623 MiB no job reads.
 profile = "minimal"

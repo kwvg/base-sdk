@@ -11,6 +11,9 @@ on:
       - .github/workflows/pkg_script.yml
       - .github/workflows/build_stable.yml
       - .github/workflows/build_nightly.yml
+      - contrib/nix/**
+      - rust-toolchain.toml
+      - uv.lock
   pull_request:
     paths:
       - pkgs/script/**
@@ -20,6 +23,9 @@ on:
       - .github/workflows/pkg_script.yml
       - .github/workflows/build_stable.yml
       - .github/workflows/build_nightly.yml
+      - contrib/nix/**
+      - rust-toolchain.toml
+      - uv.lock
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

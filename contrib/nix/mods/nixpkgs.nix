@@ -29,5 +29,12 @@
     # LTS line; 22 has been maintenance-only since October 2025.
     pkgs.nodejs_24
     pkgs.pnpm
+
+    # What the nightly job uploads coverage from. The llvm-tools it drives
+    # come from the toolchain rather than from here.
+    pkgs.cargo-llvm-cov
+
+    # What docs/build_docs.py compiles the sample crates with.
+    pkgs.wasm-pack
   ];
 }
