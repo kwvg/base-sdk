@@ -22,7 +22,7 @@ git config --global --get-all safe.directory | grep -qxF "${WORKSPACE_PATH}" ||
 cd "${WORKSPACE_PATH}"
 
 if (( $# > 0 )); then
-  exec nix develop ./contrib/nix#ci --command "$@"
+  exec nix develop ./contrib/nix#dev --command "$@"
 fi
 
-exec nix develop ./contrib/nix#ci
+exec nix develop ./contrib/nix#dev

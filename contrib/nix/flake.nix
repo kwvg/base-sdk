@@ -73,9 +73,11 @@
             inherit pkgs lib inputs;
             root = ../..;
           };
+          ci = import ./shell/ci.nix ctx;
         in
         {
-          ci = import ./shell/ci.nix ctx;
+          inherit ci;
+          dev = import ./shell/dev.nix (ctx // { inherit ci; });
         }
       );
 

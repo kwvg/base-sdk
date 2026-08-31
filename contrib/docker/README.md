@@ -21,7 +21,9 @@ them.
 
 That is the whole interface: it drops you straight into the devshell. There
 is nothing to run once you are in, and nothing to learn, and no choice to
-make: which shell it enters is the shell this container is for.
+make. It enters `#dev`, the broadest shell the flake offers, because a
+container for checking that things work should be checking the widest surface
+there is.
 
 Arguments run in the shell rather than replacing it, so a script asks for what
 it wants without an interactive step:
