@@ -1,4 +1,5 @@
 [toolchain]
 channel = "nightly-2026-02-01"
 components = ["clippy", "rust-analyzer", "rustfmt"]
-profile = "default"
+# minimal, not default: default adds rust-docs, 623 MiB no job reads.
+profile = "minimal"

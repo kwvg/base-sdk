@@ -102,6 +102,7 @@ specified at runtime. Verbs may accept arguments of their own, for more informat
 | [`lint_codeql.py`](./lint/lint_codeql.py) | Query Rust sources against [`contrib/codeql/*.ql`](./codeql) | `run` | `codeql`, `rustc` |
 | [`lint_javascript.py`](./lint/lint_javascript.py) | Lint Javascript sources against [`eslint.config.mjs`](js/eslint.config.mjs) | *None* | `npx` (part of Node.js), `eslint` (auto-retrieved by script) |
 | [`lint_markdown.py`](./lint/lint_markdown.py) | Lint Markdown [documentation](../docs/dev/about_docs.md) | *None* | `pymarkdownlnt` |
+| [`lint_nix.py`](./lint/lint_nix.py) | Lint Nix sources against `nixfmt`'s RFC 166 style | `check`, `apply`, `apply-all` | `nixfmt` (ships in the devshell), `git` |
 | [`lint_python.py`](./lint/lint_python.py) | Lint Python sources against `[tool.ruff]` options in [`pyproject.toml`](../pyproject.toml) | *None* | `ruff` |
 | [`lint_rust.py`](./lint/lint_rust.py) | Lint Rust sources against [`rustfmt.toml`](../rustfmt.toml) | *None* | `cargo`, `rustfmt` |
 | [`lint_semgrep.py`](./lint/lint_semgrep.py) | Lint Rust sources against [`contrib/semgrep/*.yml`](./semgrep) | *None* | `semgrep` |
