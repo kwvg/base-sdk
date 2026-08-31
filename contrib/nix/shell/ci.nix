@@ -10,4 +10,5 @@ compose [
   mods.cxx
   mods.python
   mods.nixpkgs
+  mods.codeql
 ]

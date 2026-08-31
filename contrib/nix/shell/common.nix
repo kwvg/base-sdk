@@ -60,6 +60,8 @@ in
       python = pkgs.python311;
     };
 
+    codeql = import ../mods/codeql.nix { inherit pkgs lib; };
+
     cxx = import ../mods/cxx.nix { inherit pkgs lib; };
 
     nixpkgs = import ../mods/nixpkgs.nix { inherit pkgs; };

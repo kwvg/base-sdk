@@ -58,6 +58,9 @@
             import nixpkgs {
               inherit system;
               overlays = [ rust-overlay.overlays.default ];
+              # CodeQL's CLI is unfree; allowed by name so anything else
+              # unfree a later edit reaches for still has to argue for it.
+              config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "codeql" ];
             }
           )
         );
