@@ -7,6 +7,7 @@
 
 compose [
   mods.rust
+  mods.cxx
   mods.python
   mods.nixpkgs
 ]

@@ -12,20 +12,29 @@
 }:
 
 let
-  # Folds mods into the arguments mkShell takes. A mod contributes packages
-  # and environment; two mods setting the same variable throws rather than
-  # letting list order pick a winner.
+  # Folds mods into the arguments mkShell takes. A mod contributes packages,
+  # environment and at most one stdenv; two mods setting the same variable
+  # throws rather than letting list order pick a winner.
   compose =
     mods:
     let
       envs = map (m: m.env or { }) mods;
       names = lib.concatMap lib.attrNames envs;
       clashes = lib.unique (lib.subtractLists (lib.unique names) names);
+
+      stdenvs = lib.filter (s: s != null) (map (m: m.stdenv or null) mods);
+      mkShell =
+        if stdenvs == [ ] then
+          pkgs.mkShell
+        else if lib.length stdenvs == 1 then
+          pkgs.mkShell.override { stdenv = lib.head stdenvs; }
+        else
+          throw "more than one mod chose a stdenv";
     in
     if clashes != [ ] then
       throw "mods set the same variable twice: ${lib.concatStringsSep ", " clashes}"
     else
-      pkgs.mkShell (
+      mkShell (
         { packages = lib.concatMap (m: m.packages or [ ]) mods; } // lib.foldl' (a: b: a // b) { } envs
       );
 in
@@ -50,6 +59,8 @@ in
       # Oldest interpreter requires-python admits.
       python = pkgs.python311;
     };
+
+    cxx = import ../mods/cxx.nix { inherit pkgs lib; };
 
     nixpkgs = import ../mods/nixpkgs.nix { inherit pkgs; };
   };

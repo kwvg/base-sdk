@@ -6,8 +6,18 @@
 
 { pkgs, toolchainFile }:
 
+let
+  # rust-overlay propagates a cc wrapper, which on Linux is GCC and would
+  # shadow the compiler cxx.nix chose. cargo links with the stdenv's cc.
+  toolchain = (pkgs.rust-bin.fromRustupToolchainFile toolchainFile).overrideAttrs (_: {
+    propagatedBuildInputs = [ ];
+    depsHostHostPropagated = [ ];
+    depsTargetTargetPropagated = [ ];
+  });
+in
+
 {
-  packages = [ (pkgs.rust-bin.fromRustupToolchainFile toolchainFile) ];
+  packages = [ toolchain ];
 
   env = {
     CARGO_TERM_COLOR = "always";
