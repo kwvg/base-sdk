@@ -4,12 +4,15 @@ version = "0.0.0"
 requires-python = ">=3.11"
 
 [project.optional-dependencies]
-dev = [
+dev = ["dash-base-sdk[tools,lib]"]
+lib = [
   "Markdown>=3.7",
-  "pymarkdownlnt>=0.9.37",
   "pygments-styles>=0.3.0",
+  "pymarkdownlnt>=0.9.37",
   "pytest>=8",
   "rjsmin>=1.2",
+]
+tools = [
   "ruff>=0.9",
   "semgrep>=1.118.0",
   "taplo>=0.9.3; sys_platform != 'linux' or platform_machine != 'aarch64'",

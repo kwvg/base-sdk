@@ -121,4 +121,17 @@ cargo test --all-targets --features full &&
 ./contrib/lint_all.py'
 ```
 
+## Generating lockfiles
+
+> [!NOTE]
+> Lockfiles should only be generated with `uv`. Using other Python package managers like `poetry` are unsupported.
+
+If [`pyproject.toml`](../pyproject.toml) has been modified, it is recommended to regenerate the lockfile to ensure
+dependencies are pinned.
+
+```bash
+# After modifying pyproject.toml
+uv lock
+```
+
 <!-- --8<-- [end:setup] -->
