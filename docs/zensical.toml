@@ -18,6 +18,8 @@ nav = [
   { "Home" = "README.md" },
   { "Contributing" = [
     { "Getting Started" = "dev/getting_started.md" },
+    { "Development Shell" = "dev/devshell.md" },
+    { "Cross Compilation" = "dev/cross_compilation.md" },
     { "Documentation" = "dev/about_docs.md" },
     { "Style Guide (Rust)" = "dev/guide_rust.md" },
   ] },

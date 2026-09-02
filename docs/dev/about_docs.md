@@ -12,6 +12,10 @@ This guide is generated using [Zensical](https://pypi.org/project/zensical/) (a 
 The documentation comes bundled with web-ready demos, which are powered by WebAssembly. Preparing them for
 distribution relies on [`wasm-pack`](https://github.com/wasm-bindgen/wasm-pack), which is installed as a binary crate.
 
+> [!TIP]
+> The [development shell](./devshell.md) already carries `wasm-pack`, so this step can be skipped if you are working
+> in one.
+
 ```bash
 cargo install wasm-pack
 ```

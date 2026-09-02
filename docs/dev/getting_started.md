@@ -1,5 +1,9 @@
 # Getting Started
 
+> [!TIP]
+> If you would rather not manage a toolchain yourself, the repository ships a
+> [development shell](./devshell.md) carrying the same one CI uses, reachable through either Nix or Docker.
+
 ## Installing Rust
 
 > [!WARNING]
