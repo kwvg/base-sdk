@@ -157,6 +157,69 @@ def git_out(cwd: Path | str, *args: str) -> str:
   return result.stdout.strip()
 
 
+# Every formatter had grown this body independently, so the hint, the
+# phrasing and the empty-list case were copies free to drift apart.
+def formatted(
+  script: str,
+  noun: str,
+  sources: list[Path] | None,
+  command: Callable[[list[Path]], list[str]],
+  *,
+  fix: bool,
+  scoped: bool,
+  cwd: Path | None = None,
+  output: Callable[[str, str], None] | None = None,
+) -> int:
+  """Hold *sources* to a formatter, or rewrite them, and say which happened.
+
+  *command* is handed the paths and returns the argv to run. *output* is
+  handed what the tool wrote, as stdout and stderr, by a caller that has to
+  post-process it; left out, the tool writes to this process's own streams.
+
+  *sources* is None where the tool finds its own files, which is the one
+  case a count cannot be reported for.
+  """
+  if sources is not None and not sources:
+    print(f"{script}: no {noun} was touched")
+    return RETCODE_PASS
+
+  result = subprocess.run(  # noqa: S603
+    command(sources or []),
+    capture_output=output is not None,
+    check=False,
+    cwd=None if cwd is None else str(cwd),
+    text=True,
+  )
+  if output is not None:
+    output(result.stdout, result.stderr)
+
+  if result.returncode != 0:
+    if not fix:
+      print(
+        f"hint: run 'python3 maint/lint/{script}.py apply-all' to rewrite",
+        file=sys.stderr,
+      )
+    return RETCODE_ERR
+
+  if scoped:
+    scope = f"{len(sources or [])} touched {noun}(s)"
+  elif sources is None:
+    scope = f"every {noun}"
+  else:
+    scope = f"every {noun} ({len(sources)})"
+  print(f"{script}: rewrote {scope}" if fix else f"{script}: {scope} conforms")
+  return RETCODE_PASS
+
+
+def format_verbs(noun: str) -> dict[str, str]:
+  """Return the check/apply/apply-all verbs every formatter declares."""
+  return {
+    "check": f"report every {noun} whose formatting differs",
+    "apply": f"rewrite the {noun} this branch changed vs {DEFAULT_BASE}",
+    "apply-all": f"rewrite every {noun} in the tree",
+  }
+
+
 def relay(
   text: str,
   repo_root: Path,

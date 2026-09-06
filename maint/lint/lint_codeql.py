@@ -27,12 +27,13 @@ if TYPE_CHECKING:
   from collections.abc import Iterator
 
 from common import (
-  DEFAULT_BASE,
   RETCODE_ERR,
   RETCODE_PASS,
   RETCODE_SKIP,
   SOURCE_DIRS,
   declare_verbs,
+  format_verbs,
+  formatted,
   require_bin,
   root_dir,
   touched,
@@ -99,34 +100,19 @@ def _format_ql(
   only: list[str] | None = None,
 ) -> int:
   """Check or rewrite the formatting of the QL under `maint/codeql`."""
-  sources = _ql_sources(repo_root, only)
-  if not sources:
-    print(f"{SCRIPT}: no QL file was touched")
-    return RETCODE_PASS
-
-  result = subprocess.run(  # noqa: S603
-    [
+  return formatted(
+    SCRIPT,
+    "QL file",
+    _ql_sources(repo_root, only),
+    lambda paths: [
       codeql_bin, "query", "format",
       *(["-i"] if fix else ["--check-only"]),
       "--",
-      *[str(p) for p in sources],
+      *[str(p) for p in paths],
     ],
-    check=False,
+    fix=fix,
+    scoped=only is not None,
   )
-  if result.returncode != 0:
-    if not fix:
-      print(
-        f"hint: run 'python3 maint/lint/{SCRIPT}.py apply-all' to rewrite",
-        file=sys.stderr,
-      )
-    return RETCODE_ERR
-
-  scope = (
-    f"{len(sources)} touched QL file(s)" if only is not None
-    else f"every QL file ({len(sources)})"
-  )
-  print(f"{SCRIPT}: rewrote {scope}" if fix else f"{SCRIPT}: {scope} conforms")
-  return RETCODE_PASS
 
 
 def _generate_source_lines(
@@ -262,10 +248,7 @@ FORMAT_VERBS = ("check", "apply", "apply-all")
 def _parse_args(argv: list[str]) -> argparse.Namespace:
   parser = declare_verbs(
     "Format the QL, and analyse the workspace with it.",
-    {
-      "check": "report every QL file whose formatting differs",
-      "apply": f"rewrite the QL this branch changed vs {DEFAULT_BASE}",
-      "apply-all": "rewrite every QL file in the tree",
+    format_verbs("QL file") | {
       "run": "analyse the one language --lang names",
       "run-all": "analyse every language whose tools are present",
     },
