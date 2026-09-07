@@ -2,12 +2,19 @@
 
 {
   ci,
+  cxx,
+  crossTargets,
+  foreignTargets,
   lib,
+  nightlyWith,
   pkgs,
   ...
 }:
 
 let
+  cross = cxx.forTargets foreignTargets;
+  toolchain = nightlyWith (crossTargets ++ foreignTargets);
+
   ohMyBash = pkgs.fetchFromGitHub {
     owner = "ohmybash";
     repo = "oh-my-bash";
@@ -53,16 +60,22 @@ let
   ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.iputils ];
 in
 
-ci.overrideAttrs (old: {
-  # mkShell places `packages` here.
-  nativeBuildInputs = old.nativeBuildInputs ++ utilities;
+ci.overrideAttrs (
+  old:
+  {
+    # mkShell places `packages` here.
+    nativeBuildInputs = old.nativeBuildInputs ++ cross.packages ++ utilities ++ [ toolchain ];
 
-  # oh-my-bash is meant for interactive use. `--command` has no use for it.
-  shellHook = (old.shellHook or "") + ''
-    export OSH="${ohMyBash}"
-    if [[ $- == *i* ]]; then
-      OSH_THEME="rr"
-      source "$OSH/oh-my-bash.sh"
-    fi
-  '';
-})
+    # oh-my-bash is meant for interactive use. `--command` has no use for it.
+    shellHook = (old.shellHook or "") + ''
+      export PATH="${toolchain}/bin:$PATH"
+
+      export OSH="${ohMyBash}"
+      if [[ $- == *i* ]]; then
+        OSH_THEME="rr"
+        source "$OSH/oh-my-bash.sh"
+      fi
+    '';
+  }
+  // cross.env
+)

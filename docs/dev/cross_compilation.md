@@ -19,12 +19,17 @@ We use an LLVM 20 toolchain (Clang as the compiler, LLD as the linker) for Rust 
 through an FFI, with the standard library bundle supplied to `rustc` by cargo. `rustc` itself is first class native
 cross-compiler.
 
+> [!NOTE]
+> Support for Windows cross-compilation is only available in the `#dev` devshell, it is omitted from the `#ci` devshell
+> to reduce cache contention with our forge provider.
+
 The following platforms are supported as `target`s **excluding the `host` platform**.
 
 | Target                      | Object Format | Sysroot                     |
 | --------------------------- | ------------- | --------------------------- |
 | `aarch64-unknown-linux-gnu` | ELF           | glibc                       |
 | `x86_64-unknown-linux-gnu`  | ELF           | glibc                       |
+| `x86_64-pc-windows-gnu`     | PE32+         | MinGW-w64                   |
 | `wasm32-unknown-unknown`    | Wasm          | *None*, no libc(++) support |
 
 For each target, the following environment variables are defined

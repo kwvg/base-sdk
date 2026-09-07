@@ -25,7 +25,32 @@ let
       kind = "glibc";
       cross = pkgs.pkgsCross.gnu64;
     };
+    "x86_64-pc-windows-gnu" = {
+      clangTarget = "x86_64-w64-mingw32";
+      kind = "mingw";
+      cross = pkgs.pkgsCross.mingwW64;
+    };
   };
+
+  # MinGW keeps its headers and import libs apart, and libgcc comes from the
+  # cross GCC's libraries without its driver ever being invoked. clang emits
+  # crt2.o as a bare name, so -B is needed as well as -L.
+  mingwFlags =
+    d:
+    let
+      gccLib = "${d.cross.stdenv.cc.cc}/lib/gcc/x86_64-w64-mingw32/${d.cross.stdenv.cc.cc.version}";
+    in
+    [
+      "-isystem ${d.cross.windows.mingw_w64_headers}/include"
+      "-B${d.cross.windows.mingw_w64}/lib"
+      "-B${gccLib}"
+      "-L${d.cross.windows.mingw_w64}/lib"
+      "-L${gccLib}"
+      # rustc's windows-gnu spec links -l:libpthread.a by that literal name,
+      # and rust-std ships no self-contained copy of it.
+      "-L${d.cross.windows.pthreads}/lib"
+      (ldFor "ld.lld")
+    ];
 
   # glibc splits its outputs, so there isn't a unified tree to hand --sysroot
   # headers are in .dev, crt objects and libraries are in .out. libgcc_s.so
@@ -58,8 +83,40 @@ let
       "-L${cc}/${d.clangTarget}/lib"
     ];
 
-  cxxExtra = d: { glibc = libStdCxx; }.${d.kind} d;
-  flagsFor = d: { glibc = glibcFlags; }.${d.kind} d;
+  # libstdc++ here was built with the mcf threading model, not the winpthreads
+  # rustc asks for, so it needs mcfgthread's headers and _MCF_* symbols. gcc
+  # names the library through its spec file; clang has none, so it is here.
+  mingwLibStdCxx =
+    d:
+    libStdCxx d
+    ++ [
+      "-isystem ${d.cross.windows.mcfgthreads.dev}/include"
+      "-L${d.cross.windows.mcfgthreads}/lib"
+      "-lmcfgthread"
+    ];
+
+  cxxExtra =
+    d:
+    {
+      glibc = libStdCxx;
+      mingw = mingwLibStdCxx;
+    }
+    .${d.kind}
+      d;
+
+  flagsFor =
+    d:
+    {
+      mingw = mingwFlags;
+      glibc = glibcFlags;
+    }
+    .${d.kind}
+      d;
+
+  # rustc shells out to <target>-dlltool for the raw-dylib imports windows-sys
+  # declares, and looks for that exact name, not llvm-dlltool. Every binary in
+  # this package is target-prefixed, so none of it shadows a host tool.
+  extraPkgs = d: lib.optionals (d.kind == "mingw") [ d.cross.stdenv.cc.bintools.bintools ];
 
   # A driver per target and language. C_INCLUDE_PATH and CPLUS_INCLUDE_PATH
   # are unset because the host's include paths would otherwise leak into a
@@ -90,7 +147,8 @@ let
       packages = [
         cc
         cxx
-      ];
+      ]
+      ++ extraPkgs d;
       env = {
         "CC_${ccKey t}" = "${cc}/bin/${t}-cc";
         "CXX_${ccKey t}" = "${cxx}/bin/${t}-c++";

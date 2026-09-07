@@ -19,6 +19,10 @@ let
   sameOs = t: lib.hasInfix (if pkgs.stdenv.hostPlatform.isDarwin then "apple-darwin" else "linux") t;
   crossTargets = lib.filter (t: t != hostTriple && sameOs t) cxx.knownTargets;
 
+  # Everything else the table knows, which needs a sysroot of its own and so
+  # only the dev shell carries.
+  foreignTargets = lib.filter (t: t != hostTriple && !sameOs t) cxx.knownTargets;
+
   nightlyWith =
     extra:
     (pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml")).override {
@@ -61,6 +65,7 @@ in
     compose
     crossTargets
     cxx
+    foreignTargets
     nightlyWith
     ;
 

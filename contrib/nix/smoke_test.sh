@@ -27,7 +27,8 @@ build host "${CXX:-c++}" cpp
 
 for target in \
   aarch64-unknown-linux-gnu \
-  x86_64-unknown-linux-gnu;
+  x86_64-unknown-linux-gnu \
+  x86_64-pc-windows-gnu;
 do
   cc="CC_${target//-/_}"
   cxx="CXX_${target//-/_}"

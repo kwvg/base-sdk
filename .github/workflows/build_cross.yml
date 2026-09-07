@@ -38,10 +38,10 @@ jobs:
           skipAddingSubstituter: true
 
       - name: Initialize devshell
-        run: nix develop ./contrib/nix#ci --command true
+        run: nix develop ./contrib/nix#dev --command true
 
       - name: Validate toolchains
-        run: nix develop ./contrib/nix#ci --command ./contrib/nix/smoke_test.sh
+        run: nix develop ./contrib/nix#dev --command ./contrib/nix/smoke_test.sh
 
   build:
     name: ${{ matrix.target }}
@@ -52,10 +52,11 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
+          - x86_64-pc-windows-gnu
 
     defaults:
       run:
-        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
+        shell: nix develop ./contrib/nix#dev --command bash -eo pipefail {0}
 
     steps:
       - name: Checkout
