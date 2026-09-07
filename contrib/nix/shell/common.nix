@@ -11,7 +11,19 @@ let
   # Target platform for web demos bundled with documentation.
   commonTargets = [ "wasm32-unknown-unknown" ];
 
+  cxx = import ../mods/cxx.nix { inherit pkgs lib; };
+
   rsComponents = (lib.importTOML (root + "/rust-toolchain.toml")).toolchain.components;
+
+  hostTriple = pkgs.stdenv.hostPlatform.rust.rustcTarget;
+  sameOs = t: lib.hasInfix (if pkgs.stdenv.hostPlatform.isDarwin then "apple-darwin" else "linux") t;
+  crossTargets = lib.filter (t: t != hostTriple && sameOs t) cxx.knownTargets;
+
+  nightlyWith =
+    extra:
+    (pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml")).override {
+      targets = commonTargets ++ extra;
+    };
 
   # Folds modules into mkShell arguments. Conflicting variables or stdenvs
   # will throw instead of allowing order-sensitive assignment.
@@ -47,11 +59,14 @@ in
     pkgs
     lib
     compose
+    crossTargets
+    cxx
+    nightlyWith
     ;
 
   mods = lib.mapAttrs (name: m: m // { _name = name; }) {
     codeql = import ../mods/codeql.nix { inherit pkgs lib; };
-    cxx = import ../mods/cxx.nix { inherit pkgs lib; };
+    cxx = cxx.compiler;
     nixpkgs = import ../mods/nixpkgs.nix { inherit pkgs; };
     python = import ../mods/python.nix {
       inherit pkgs lib;
@@ -64,9 +79,7 @@ in
       inherit pkgs lib;
       default = "nightly";
       toolchains = {
-        nightly = (pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml")).override {
-          targets = commonTargets;
-        };
+        nightly = nightlyWith crossTargets;
         # Must match `workspace.package.rust-version` in root Cargo.toml.
         msrv = pkgs.rust-bin.stable."1.85.0".minimal.override { extensions = rsComponents; };
       };

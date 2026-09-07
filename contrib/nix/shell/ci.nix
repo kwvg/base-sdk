@@ -1,8 +1,15 @@
 # Development shell for continuous integration
 
-{ compose, mods, ... }:
+{
+  compose,
+  crossTargets,
+  cxx,
+  mods,
+  ...
+}:
 
 compose [
+  (cxx.forTargets crossTargets)
   mods.codeql
   mods.cxx
   mods.nixpkgs
