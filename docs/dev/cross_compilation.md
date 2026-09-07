@@ -20,17 +20,23 @@ through an FFI, with the standard library bundle supplied to `rustc` by cargo. `
 cross-compiler.
 
 > [!NOTE]
-> Support for Windows cross-compilation is only available in the `#dev` devshell, it is omitted from the `#ci` devshell
-> to reduce cache contention with our forge provider.
+> Support for macOS and Windows cross-compilation is only available in the `#dev` devshell, it is omitted from the `#ci`
+> devshell to reduce cache contention with our forge provider.
 
 The following platforms are supported as `target`s **excluding the `host` platform**.
 
 | Target                      | Object Format | Sysroot                     |
 | --------------------------- | ------------- | --------------------------- |
+| `aarch64-apple-darwin`      | Mach-O        | macOS SDK with libcxx       |
+| `x86_64-apple-darwin`       | Mach-O        | macOS SDK with libcxx       |
 | `aarch64-unknown-linux-gnu` | ELF           | glibc                       |
 | `x86_64-unknown-linux-gnu`  | ELF           | glibc                       |
 | `x86_64-pc-windows-gnu`     | PE32+         | MinGW-w64                   |
 | `wasm32-unknown-unknown`    | Wasm          | *None*, no libc(++) support |
+
+> [!NOTE]
+> `<target>` spells the triple with underscores, as `cc-rs` reads it (e.g. `CC_aarch64_apple_darwin`), while
+> `<TARGET>` spells the triple in upper case, as `cargo` reads it (e.g. `CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER`).
 
 For each target, the following environment variables are defined
 

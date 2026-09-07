@@ -11,7 +11,10 @@ let
   # Target platform for web demos bundled with documentation.
   commonTargets = [ "wasm32-unknown-unknown" ];
 
-  cxx = import ../mods/cxx.nix { inherit pkgs lib; };
+  cxx = import ../mods/cxx.nix {
+    inherit pkgs lib;
+    xcodeSdk = import ../mods/xcode_sdk.nix { inherit pkgs; };
+  };
 
   rsComponents = (lib.importTOML (root + "/rust-toolchain.toml")).toolchain.components;
 
@@ -23,11 +26,24 @@ let
   # only the dev shell carries.
   foreignTargets = lib.filter (t: t != hostTriple && !sameOs t) cxx.knownTargets;
 
+  # rust-overlay propagates a C compiler wrapper with every toolchain, which
+  # would take precedence over `cxx.nix`'s definitions. We strip it here so that
+  # every shell reaching for a toolchain respects our definitions.
+  bare =
+    toolchain:
+    toolchain.overrideAttrs (_: {
+      propagatedBuildInputs = [ ];
+      depsHostHostPropagated = [ ];
+      depsTargetTargetPropagated = [ ];
+    });
+
   nightlyWith =
     extra:
-    (pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml")).override {
-      targets = commonTargets ++ extra;
-    };
+    bare (
+      (pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml")).override {
+        targets = commonTargets ++ extra;
+      }
+    );
 
   # Folds modules into mkShell arguments. Conflicting variables or stdenvs
   # will throw instead of allowing order-sensitive assignment.
@@ -81,12 +97,12 @@ in
       python = pkgs.python311;
     };
     rust = import ../mods/rust.nix {
-      inherit pkgs lib;
+      inherit lib;
       default = "nightly";
       toolchains = {
         nightly = nightlyWith crossTargets;
         # Must match `workspace.package.rust-version` in root Cargo.toml.
-        msrv = pkgs.rust-bin.stable."1.85.0".minimal.override { extensions = rsComponents; };
+        msrv = bare (pkgs.rust-bin.stable."1.85.0".minimal.override { extensions = rsComponents; });
       };
     };
   };

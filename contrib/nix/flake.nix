@@ -57,6 +57,7 @@
                 pkg:
                 builtins.elem (lib.getName pkg) [
                   "codeql"
+                  "xcode-sdk"
                 ];
               overlays = [ rust-overlay.overlays.default ];
             }

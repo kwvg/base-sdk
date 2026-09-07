@@ -1,6 +1,10 @@
 # LLVM C(++) compiler setup and configuration
 
-{ pkgs, lib }:
+{
+  pkgs,
+  lib,
+  xcodeSdk ? null,
+}:
 
 let
   llvm = pkgs.llvmPackages_20;
@@ -15,6 +19,14 @@ let
 
   # Per-target definitions keyed against `hostTriple`
   defs = {
+    "aarch64-apple-darwin" = {
+      clangTarget = "arm64-apple-darwin";
+      kind = "darwin";
+    };
+    "x86_64-apple-darwin" = {
+      clangTarget = "x86_64-apple-darwin";
+      kind = "darwin";
+    };
     "aarch64-unknown-linux-gnu" = {
       clangTarget = "aarch64-unknown-linux-gnu";
       kind = "glibc";
@@ -70,6 +82,21 @@ let
       (ldFor "ld.lld")
     ];
 
+  darwinFlags =
+    _:
+    [
+      "-isysroot ${xcodeSdk}"
+      "-nostdlibinc"
+      "-iwithsysroot/usr/include"
+      "-iframeworkwithsysroot/System/Library/Frameworks"
+      "-mmacos-version-min=${xcodeSdk.minVersion}"
+      (ldFor "ld64.lld")
+    ]
+    ++ lib.optionals (!pkgs.stdenv.hostPlatform.isDarwin) [
+      "-mlinker-version=${xcodeSdk.linkerVersion}"
+      "-Wl,-no_adhoc_codesign"
+    ];
+
   # libstdc++ comes from the cross GCC rather than from the sysroot
   libStdCxx =
     d:
@@ -95,9 +122,15 @@ let
       "-lmcfgthread"
     ];
 
+  # libc++ is part of the SDK, which carries its headers and its link stub.
+  # These precede the C headers, since libc++ resolves its own <stddef.h>
+  # first and errors out if it cannot.
+  libCxx = _: [ "-iwithsysroot/usr/include/c++/v1" ];
+
   cxxExtra =
     d:
     {
+      darwin = libCxx;
       glibc = libStdCxx;
       mingw = mingwLibStdCxx;
     }
@@ -109,6 +142,7 @@ let
     {
       mingw = mingwFlags;
       glibc = glibcFlags;
+      darwin = darwinFlags;
     }
     .${d.kind}
       d;
@@ -136,10 +170,12 @@ let
   ccKey = t: builtins.replaceStrings [ "-" ] [ "_" ] t;
   cargoKey = t: lib.toUpper (ccKey t);
 
+  defFor = t: defs.${t} or (throw "cxx.nix knows no C toolchain for ${t}");
+
   wire =
     t:
     let
-      d = defs.${t} or (throw "cxx.nix knows no C toolchain for ${t}");
+      d = defFor t;
       cc = driver "${t}-cc" "clang" d [ ];
       cxx = driver "${t}-c++" "clang++" d (cxxExtra d);
     in
@@ -173,9 +209,17 @@ in
     targets:
     let
       wired = map wire targets;
+
+      # `rustc` asks `xcrun` for the SDK and picks its own deployment target, so
+      # both are set shell-wide rather than per target. A native macOS build
+      # has to resolve against the same pinned SDK as a cross target.
+      darwin = lib.optionalAttrs (lib.any (t: (defFor t).kind == "darwin") targets) {
+        MACOSX_DEPLOYMENT_TARGET = xcodeSdk.minVersion;
+        SDKROOT = "${xcodeSdk}";
+      };
     in
     {
       packages = lib.concatMap (w: w.packages) wired;
-      env = lib.foldl' (a: w: a // w.env) { } wired;
+      env = lib.foldl' (a: w: a // w.env) darwin wired;
     };
 }
