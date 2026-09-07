@@ -53,6 +53,11 @@
           f (
             import nixpkgs {
               inherit system;
+              config.allowUnfreePredicate =
+                pkg:
+                builtins.elem (lib.getName pkg) [
+                  "codeql"
+                ];
               overlays = [ rust-overlay.overlays.default ];
             }
           )

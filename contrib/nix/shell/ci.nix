@@ -3,6 +3,7 @@
 { compose, mods, ... }:
 
 compose [
+  mods.codeql
   mods.cxx
   mods.nixpkgs
   mods.python
