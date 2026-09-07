@@ -8,6 +8,9 @@
 }:
 
 let
+  # Target platform for web demos bundled with documentation.
+  commonTargets = [ "wasm32-unknown-unknown" ];
+
   # Folds modules into mkShell arguments. Conflicting variables will throw
   # instead of allowing order-sensitive assignment.
   compose =
@@ -43,6 +46,7 @@ in
     rust = import ../mods/rust.nix {
       inherit pkgs;
       toolchainFile = root + "/rust-toolchain.toml";
+      targets = commonTargets;
     };
   };
 }
