@@ -11,6 +11,8 @@ let
   # Target platform for web demos bundled with documentation.
   commonTargets = [ "wasm32-unknown-unknown" ];
 
+  rsComponents = (lib.importTOML (root + "/rust-toolchain.toml")).toolchain.components;
+
   # Folds modules into mkShell arguments. Conflicting variables or stdenvs
   # will throw instead of allowing order-sensitive assignment.
   compose =
@@ -33,7 +35,11 @@ let
       throw "variables redefined: ${lib.concatStringsSep ", " clashes}"
     else
       mkShell (
-        { packages = lib.concatMap (m: m.packages or [ ]) mods; } // lib.foldl' (a: b: a // b) { } envs
+        {
+          packages = lib.concatMap (m: m.packages or [ ]) mods;
+          shellHook = lib.concatStringsSep "\n" (lib.filter (h: h != "") (map (m: m.shellHook or "") mods));
+        }
+        // lib.foldl' (a: b: a // b) { } envs
       );
 in
 {
@@ -55,9 +61,15 @@ in
       python = pkgs.python311;
     };
     rust = import ../mods/rust.nix {
-      inherit pkgs;
-      toolchainFile = root + "/rust-toolchain.toml";
-      targets = commonTargets;
+      inherit pkgs lib;
+      default = "nightly";
+      toolchains = {
+        nightly = (pkgs.rust-bin.fromRustupToolchainFile (root + "/rust-toolchain.toml")).override {
+          targets = commonTargets;
+        };
+        # Must match `workspace.package.rust-version` in root Cargo.toml.
+        msrv = pkgs.rust-bin.stable."1.85.0".minimal.override { extensions = rsComponents; };
+      };
     };
   };
 }

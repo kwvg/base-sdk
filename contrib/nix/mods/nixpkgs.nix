@@ -4,9 +4,11 @@
 
 {
   packages = [
+    pkgs.cargo-llvm-cov
     pkgs.git
     pkgs.nixfmt
     pkgs.nodejs_24
+    pkgs.wasm-pack
 
     # Packages synced with '.tools' from 'pyproject.toml'.
     pkgs.ruff
