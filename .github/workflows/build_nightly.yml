@@ -12,6 +12,8 @@ on:
         required: true
         type: string
     secrets:
+      CACHIX_AUTH_TOKEN:
+        required: false
       CODECOV_TOKEN:
         required: false
 
@@ -55,6 +57,17 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: |
+            extra-substituters = https://dashpay-base-sdk.cachix.org
+            extra-trusted-public-keys = dashpay-base-sdk.cachix.org-1:TAoDyYL2e60lUEG8n10gvIZmujM5rJAhaG613fNfOWI=
+
+      - name: Cache Nix
+        uses: cachix/cachix-action@v17
+        with:
+          name: dashpay-base-sdk
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipAddingSubstituter: true
 
       - name: Manage cargo registry
         uses: actions/cache@v5
