@@ -6,10 +6,19 @@
   targets,
 }:
 
+let
+  # Purge C compiler wrapper propagated by rust-overlay to prioritize
+  # stdenv's C compiler (defined in cxx.nix)
+  toolchain =
+    ((pkgs.rust-bin.fromRustupToolchainFile toolchainFile).override { inherit targets; }).overrideAttrs
+      (_: {
+        propagatedBuildInputs = [ ];
+        depsHostHostPropagated = [ ];
+        depsTargetTargetPropagated = [ ];
+      });
+in
 {
-  packages = [
-    ((pkgs.rust-bin.fromRustupToolchainFile toolchainFile).override { inherit targets; })
-  ];
+  packages = [ toolchain ];
 
   env = {
     CARGO_TERM_COLOR = "always";

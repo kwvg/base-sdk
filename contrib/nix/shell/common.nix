@@ -11,19 +11,28 @@ let
   # Target platform for web demos bundled with documentation.
   commonTargets = [ "wasm32-unknown-unknown" ];
 
-  # Folds modules into mkShell arguments. Conflicting variables will throw
-  # instead of allowing order-sensitive assignment.
+  # Folds modules into mkShell arguments. Conflicting variables or stdenvs
+  # will throw instead of allowing order-sensitive assignment.
   compose =
     mods:
     let
+      named = m: m._name or "<unnamed>";
       envs = map (m: m.env or { }) mods;
       names = lib.concatMap lib.attrNames envs;
       clashes = lib.unique (lib.filter (n: lib.count (m: m == n) names > 1) names);
+      chosen = lib.filter (m: (m.stdenv or null) != null) mods;
+      mkShell =
+        if chosen == [ ] then
+          pkgs.mkShell
+        else if lib.length chosen == 1 then
+          pkgs.mkShell.override { stdenv = (lib.head chosen).stdenv; }
+        else
+          throw "stdenv redefined: ${lib.concatMapStringsSep ", " named chosen}";
     in
     if clashes != [ ] then
       throw "variables redefined: ${lib.concatStringsSep ", " clashes}"
     else
-      pkgs.mkShell (
+      mkShell (
         { packages = lib.concatMap (m: m.packages or [ ]) mods; } // lib.foldl' (a: b: a // b) { } envs
       );
 in
@@ -34,7 +43,8 @@ in
     compose
     ;
 
-  mods = {
+  mods = lib.mapAttrs (name: m: m // { _name = name; }) {
+    cxx = import ../mods/cxx.nix { inherit pkgs lib; };
     nixpkgs = import ../mods/nixpkgs.nix { inherit pkgs; };
     python = import ../mods/python.nix {
       inherit pkgs lib;

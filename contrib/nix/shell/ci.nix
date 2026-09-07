@@ -3,6 +3,7 @@
 { compose, mods, ... }:
 
 compose [
+  mods.cxx
   mods.nixpkgs
   mods.python
   mods.rust
