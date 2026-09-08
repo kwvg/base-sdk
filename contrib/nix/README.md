@@ -1,9 +1,15 @@
+<!-- [start:header] -->
+
 ## Nix
 
 To maintain a consistent development environment and reproducible toolchain, a declarative environment is available
 using [Nix](https://nixos.org) on macOS and Linux hosts on ARM64 and AMD64. **Windows users are recommended to either
 resort to using Nix through [Windows Subsystem for Linux](https://github.com/microsoft/WSL) or manually set up their
 environment.**
+
+<!-- [end:header] -->
+
+<!-- [start:body] -->
 
 ### Setting up Nix
 
@@ -38,3 +44,5 @@ To execute a command _without_ switching to a shell; or for scripting, use
 ```bash
 nix develop ./contrib/nix#ci --command cargo test --workspace --features full
 ```
+
+<!-- [end:body] -->

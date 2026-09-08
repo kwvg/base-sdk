@@ -1,12 +1,19 @@
 # Development Shells
 
-<!-- [include:contrib/nix/README.md] -->
+<!-- [include:contrib/nix/README.md:header] -->
+
+> [!TIP]
+> Should you wish to utilize devshells without installing Nix on your host, the environment is also available wrapped in
+> a Docker [container](#docker); though it is still recommended to set up Nix for long-term development due to the cost
+> associated with maintaining a parallel Nix store.
+
+<!-- [include:contrib/nix/README.md:body] -->
 
 <!-- pyml disable-next-line heading-increment -->
 
 ### Quirks
 
-<!-- pyml disable-num-lines 22 no-emphasis-as-heading -->
+<!-- pyml disable-num-lines 27 no-emphasis-as-heading -->
 
 * **The Python environment is read-only**
 
@@ -30,3 +37,20 @@
 
   This drift is benign. Should there be any difference in outcome, consider
   [filing an issue](https://github.com/dashpay/base-sdk/issues/new).
+
+<!-- [include:contrib/docker/README.md] -->
+
+<!-- pyml disable-next-line heading-increment,no-duplicate-heading -->
+
+### Quirks
+
+<!-- pyml disable-num-lines 27 no-emphasis-as-heading -->
+
+* **`nix_shell` doesn't work standalone**
+
+  `nix_shell` intentionally does not host the daemon, instead, delegating that to a dedicated `nix_daemon` container.
+  This is to avoid churn and to achieve better isolation. Nix stores are expensive in storage cost (and initially for
+  built elements, compute), so the interactive container talks to the store-hosting container, permitting flexible
+  setups where multiple containers can leverage the same underlying store.
+
+  Managing the containers _outside_ Docker Compose is unsupported.
