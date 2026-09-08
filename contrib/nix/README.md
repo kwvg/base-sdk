@@ -34,7 +34,7 @@ features need to be enabled (guidance for enablement should be taken from your d
 To enter an interactive shell, from the repository root, use
 
 ```bash
-nix develop ./contrib/nix#ci
+nix develop ./contrib/nix#dev
 ```
 
 ### One-shot commands
@@ -42,7 +42,7 @@ nix develop ./contrib/nix#ci
 To execute a command _without_ switching to a shell; or for scripting, use
 
 ```bash
-nix develop ./contrib/nix#ci --command cargo test --workspace --features full
+nix develop ./contrib/nix#dev --command cargo test --workspace --features full
 ```
 
 <!-- [end:body] -->
