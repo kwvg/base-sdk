@@ -62,6 +62,8 @@ class Language(NamedTuple):
   pack: str
   # Binaries it needs; absent, the language skips rather than fails.
   requires: tuple[str, ...]
+  # Findings to drop, each matched whole as (path, message).
+  suppressions: tuple[tuple[str, str], ...] = ()
 
 
 # Every language this harness knows, in the order `run-all` walks them.
@@ -169,8 +171,11 @@ def _generate_source_lines(
   return out
 
 
-def _print_csv_diagnostics(results_path: Path) -> int:
-  """Print CSV results to stderr. Returns the finding count."""
+def _print_csv_diagnostics(
+  results_path: Path,
+  suppressions: tuple[tuple[str, str], ...],
+) -> int:
+  """Print CSV results to stderr. Returns the unsuppressed finding count."""
   count = 0
   with results_path.open(newline="") as f:
     for row in csv.reader(f):
@@ -181,6 +186,8 @@ def _print_csv_diagnostics(results_path: Path) -> int:
       uri = Path(row[4].lstrip("/"))
       line = row[5]
       msg = row[3].replace("\n", " ")
+      if (str(uri), msg) in suppressions:
+        continue
       print(f"{uri}:{line}: {msg}", file=sys.stderr)
       count += 1
   return count
@@ -398,7 +405,10 @@ def _analyse(
       check=True,
     )
 
-    total_findings = _print_csv_diagnostics(results_path)
+    total_findings = _print_csv_diagnostics(
+      results_path,
+      language.suppressions,
+    )
 
   return RETCODE_ERR if total_findings > 0 else RETCODE_PASS
 
