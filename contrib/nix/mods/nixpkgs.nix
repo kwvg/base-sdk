@@ -2,6 +2,26 @@
 
 { pkgs }:
 
+let
+  # nixpkgs builds `zensical` against its own interpreter, which lacks
+  # `pygments-styles`, needs to be supplied manually.
+  pygmentsStyles = pkgs.python3Packages.buildPythonPackage {
+    pname = "pygments-styles";
+    version = "0.3.0";
+    format = "wheel";
+
+    src = pkgs.fetchurl {
+      url = "https://files.pythonhosted.org/packages/8f/64/7e0266f0c541e26df86c31d2add9be3dd9914ae83785ce0aba7cbb693667/pygments_styles-0.3.0-py3-none-any.whl";
+      hash = "sha256-xsRemTnrdZA0W8kIQRO6xGxF8SsAnRNCK+AugOhKA0w=";
+    };
+
+    dependencies = [ pkgs.python3Packages.pygments ];
+  };
+
+  zensical = pkgs.zensical.overridePythonAttrs (old: {
+    dependencies = old.dependencies ++ [ pygmentsStyles ];
+  });
+in
 {
   packages = [
     pkgs.cargo-llvm-cov
@@ -14,6 +34,6 @@
     pkgs.ruff
     pkgs.semgrep
     pkgs.taplo
-    pkgs.zensical
+    zensical
   ];
 }
