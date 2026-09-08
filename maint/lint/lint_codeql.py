@@ -66,6 +66,10 @@ class Language(NamedTuple):
   suppressions: tuple[tuple[str, str], ...] = ()
 
 
+_SUPPRESSIONS_RS = (
+  ("pkgs/primitives/src/types/netinfo.rs", "Variable 'None' is not used."),
+)
+
 # Every language this harness knows, in the order `run-all` walks them.
 LANGUAGES: tuple[Language, ...] = (
   Language(
@@ -73,6 +77,7 @@ LANGUAGES: tuple[Language, ...] = (
     directory="rust",
     pack="codeql/rust-queries",
     requires=("rustc",),
+    suppressions=_SUPPRESSIONS_RS,
   ),
 )
 
