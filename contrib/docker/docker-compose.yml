@@ -1,0 +1,56 @@
+name: "base-sdk"
+
+services:
+  nix_daemon:
+    build:
+      context: "."
+      dockerfile: "./Dockerfile"
+      args:
+        HOST_UID: "${HOST_UID:-1000}"
+        HOST_GID: "${HOST_GID:-1000}"
+    entrypoint: ["/usr/local/bin/daemon"]
+    environment:
+      HOST_UID: "${HOST_UID:-1000}"
+      HOST_GID: "${HOST_GID:-1000}"
+    init: true
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /nix/var/nix/daemon-socket/socket"]
+      interval: "1s"
+      timeout: "2s"
+      retries: 10
+    restart: "unless-stopped"
+    volumes:
+      - "build_cache:/var/cache/base-sdk"
+      - "nix_store:/nix"
+
+  nix_shell:
+    build:
+      context: "."
+      dockerfile: "./Dockerfile"
+      args:
+        HOST_UID: "${HOST_UID:-1000}"
+        HOST_GID: "${HOST_GID:-1000}"
+    depends_on:
+      nix_daemon:
+        condition: "service_healthy"
+    init: true
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      NIX_REMOTE: "daemon"
+      HOME: "/var/cache/base-sdk/home"
+      USER: "nixuser"
+      WORKSPACE_PATH: "/src/base-sdk"
+    stdin_open: true # Equivalent to -i
+    tty: true # Equivalent to -t
+    volumes:
+      - "build_cache:/var/cache/base-sdk"
+      - "nix_store:/nix"
+      - type: bind
+        source: "../.."
+        target: "/src/base-sdk"
+        bind:
+          create_host_path: false
+
+volumes:
+  nix_store:
+  build_cache:

@@ -30,6 +30,7 @@ from common import (
   RETCODE_SKIP,
   declare_verbs,
   format_table,
+  formatted,
   relay,
   require_bin,
   root_dir,
@@ -69,42 +70,33 @@ def _check_format(
     print(f"{e}, skipping the format check", file=sys.stderr)
     return None
 
-  if only is not None and not only:
-    print(f"{SCRIPT}: no TOML file was touched")
-    return RETCODE_PASS
+  def shorten(out: str, err: str) -> None:
+    relay(out, repo_root)
+    # Taplo reports the file count on stderr at INFO, so only the lines
+    # that name a fault should be emitted.
+    relay(
+      err,
+      repo_root,
+      stream=sys.stderr,
+      drop=lambda line: line.lstrip().startswith("INFO"),
+    )
 
-  argv = [taplo, "fmt"] + ([] if fix else ["--check", "--diff"]) + (only or [])
-  result = subprocess.run(  # noqa: S603
-    argv,
-    capture_output=True,
-    check=False,
-    cwd=str(repo_root),
-    text=True,
+  # None, not an empty list: with no paths taplo finds its own through
+  # '.taplo.toml', so there is no count to report for the whole tree.
+  return formatted(
+    SCRIPT,
+    "TOML file",
+    None if only is None else [Path(name) for name in only],
+    lambda paths: [
+      taplo, "fmt",
+      *([] if fix else ["--check", "--diff"]),
+      *[str(p) for p in paths],
+    ],
+    fix=fix,
+    scoped=only is not None,
+    cwd=repo_root,
+    output=shorten,
   )
-  relay(result.stdout, repo_root)
-
-  # Taplo reports the file count on stderr at INFO, so only the lines that
-  # name a fault should be emitted.
-  relay(
-    result.stderr,
-    repo_root,
-    stream=sys.stderr,
-    drop=lambda line: line.lstrip().startswith("INFO"),
-  )
-
-  if result.returncode != 0:
-    if not fix:
-      print(
-        f"hint: run 'python3 maint/lint/{SCRIPT}.py apply-all' to rewrite",
-        file=sys.stderr,
-      )
-    return RETCODE_ERR
-  scope = (
-    f"{len(only)} touched TOML file(s)" if only is not None
-    else "every TOML file"
-  )
-  print(f"{SCRIPT}: rewrote {scope}" if fix else f"{SCRIPT}: {scope} conforms")
-  return RETCODE_PASS
 
 
 def _parse_version(text: str) -> Version:

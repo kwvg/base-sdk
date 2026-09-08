@@ -17,6 +17,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-24.04
 
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -34,42 +38,19 @@ jobs:
             exit 1
           fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
         with:
-          components: rustfmt
+          extra-conf: |
+            extra-substituters = https://dashpay-base-sdk.cachix.org
+            extra-trusted-public-keys = dashpay-base-sdk.cachix.org-1:TAoDyYL2e60lUEG8n10gvIZmujM5rJAhaG613fNfOWI=
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
+      - name: Cache Nix
+        uses: cachix/cachix-action@v17
         with:
-          node-version: 24
-
-      - name: Set up Python
-        id: python
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: pyproject.toml
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
-        with:
-          version: 0.12.9
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Install Python dependencies
-        run: |
-          uv sync --locked --extra dev --python '${{ steps.python.outputs.python-path }}'
-          echo "${PWD}/.venv/bin" >> "${GITHUB_PATH}"
-
-      - name: Install CodeQL
-        id: setup-codeql
-        uses: github/codeql-action/setup-codeql@v4.37.1
-        with:
-          tools: linked
-
-      - name: Setup CodeQL
-        run: echo "$(dirname '${{ steps.setup-codeql.outputs.codeql-path }}')" >> "$GITHUB_PATH"
+          name: dashpay-base-sdk
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipAddingSubstituter: true
 
       - name: Restore cargo registry
         uses: actions/cache/restore@v5
@@ -79,14 +60,6 @@ jobs:
             ~/.cargo/git
           key: cargo-deps-${{ hashFiles('Cargo.lock', 'docs/samples/Cargo.lock') }}
           restore-keys: cargo-deps-
-
-      - name: Restore build artifacts
-        uses: actions/cache/restore@v5
-        with:
-          path: target
-          key: cargo-build-msrv-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
-          restore-keys: |
-            cargo-build-msrv-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Manage CodeQL packs
         uses: actions/cache@v5
@@ -98,13 +71,9 @@ jobs:
         run: |
           python3 maint/lint_all.py --exclude lint_codeql
           python3 maint/lint/lint_codeql.py check
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
 
       - name: Run CodeQL
         run: python3 maint/lint/lint_codeql.py run --lang=rust --with-suite=rust-security-and-quality
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
 
       - name: Check PR commit messages
         if: github.event_name == 'pull_request'
@@ -115,6 +84,10 @@ jobs:
   build:
     name: Build and test
     runs-on: ubuntu-24.04-arm
+
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
 
     steps:
       - name: Checkout
@@ -133,8 +106,19 @@ jobs:
             exit 1
           fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: |
+            extra-substituters = https://dashpay-base-sdk.cachix.org
+            extra-trusted-public-keys = dashpay-base-sdk.cachix.org-1:TAoDyYL2e60lUEG8n10gvIZmujM5rJAhaG613fNfOWI=
+
+      - name: Cache Nix
+        uses: cachix/cachix-action@v17
+        with:
+          name: dashpay-base-sdk
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipAddingSubstituter: true
 
       - name: Restore cargo registry
         uses: actions/cache/restore@v5
@@ -155,14 +139,14 @@ jobs:
 
       - name: Build workspace
         run: |
-          cargo build --workspace --exclude dash-pow --features full
-          cargo build -p dash-pow --features std,aes_hw
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
+          export RUSTC="$TOOLCHAIN_MSRV/bin/rustc"
+          export RUSTDOC="$TOOLCHAIN_MSRV/bin/rustdoc"
+          "$TOOLCHAIN_MSRV/bin/cargo" build --workspace --exclude dash-pow --features full
+          "$TOOLCHAIN_MSRV/bin/cargo" build -p dash-pow --features std,aes_hw
 
       - name: Test workspace
         run: |
-          cargo test --workspace --exclude dash-pow --features full
-          cargo test -p dash-pow --features std,aes_hw
-        env:
-          RUSTUP_TOOLCHAIN: 1.85.0
+          export RUSTC="$TOOLCHAIN_MSRV/bin/rustc"
+          export RUSTDOC="$TOOLCHAIN_MSRV/bin/rustdoc"
+          "$TOOLCHAIN_MSRV/bin/cargo" test --workspace --exclude dash-pow --features full
+          "$TOOLCHAIN_MSRV/bin/cargo" test -p dash-pow --features std,aes_hw

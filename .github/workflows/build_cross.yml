@@ -1,0 +1,100 @@
+name: Cross-compilation build
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    name: Initialize devshell
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: |
+            extra-substituters = https://dashpay-base-sdk.cachix.org
+            extra-trusted-public-keys = dashpay-base-sdk.cachix.org-1:TAoDyYL2e60lUEG8n10gvIZmujM5rJAhaG613fNfOWI=
+
+      - name: Cache Nix
+        uses: cachix/cachix-action@v17
+        with:
+          name: dashpay-base-sdk
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipAddingSubstituter: true
+
+      - name: Initialize devshell
+        run: nix develop ./contrib/nix#dev --command true
+
+      - name: Validate toolchains
+        run: nix develop ./contrib/nix#dev --command ./contrib/nix/smoke_test.sh
+
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-24.04-arm
+    needs: shell
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-pc-windows-gnu
+          - aarch64-apple-darwin
+
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#dev --command bash -eo pipefail {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: |
+            extra-substituters = https://dashpay-base-sdk.cachix.org
+            extra-trusted-public-keys = dashpay-base-sdk.cachix.org-1:TAoDyYL2e60lUEG8n10gvIZmujM5rJAhaG613fNfOWI=
+
+      - name: Cache Nix
+        uses: cachix/cachix-action@v17
+        with:
+          name: dashpay-base-sdk
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipAddingSubstituter: true
+
+      - name: Restore cargo registry
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-deps-${{ hashFiles('Cargo.lock', 'docs/samples/Cargo.lock') }}
+          restore-keys: cargo-deps-
+
+      - name: Manage build artifacts
+        uses: actions/cache@v5
+        with:
+          path: target
+          key: cargo-build-cross-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            cargo-build-cross-${{ matrix.target }}-
+
+      - name: Build workspace
+        run: cargo build --workspace --all-targets --features full --target ${{ matrix.target }}

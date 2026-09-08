@@ -8,6 +8,7 @@ This guide is generated using [Zensical](https://pypi.org/project/zensical/) (a 
 
 > [!NOTE]
 > If you haven't set up your development environment, check out the [startup guide](./getting_started.md) first.
+> If you're in a [development shell](./devshells.md), `wasm-pack` is included and this step can be skipped.
 
 The documentation comes bundled with web-ready demos, which are powered by WebAssembly. Preparing them for
 distribution relies on [`wasm-pack`](https://github.com/wasm-bindgen/wasm-pack), which is installed as a binary crate.

@@ -1,5 +1,10 @@
 # Getting Started
 
+> [!TIP]
+> On ARM64 and AMD64 Linux and macOS hosts, we offer [development shells](./devshells.md) that provide environments
+> identical to or based on environments used in CI as an alternative to manual setup. The following instructions are
+> for manual setup.
+
 ## Installing Rust
 
 > [!WARNING]

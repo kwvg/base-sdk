@@ -18,6 +18,11 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from common import off_disk, root_dir, spelt_as_stored
+from markdown.blockprocessors import (
+  ListIndentProcessor,
+  OListProcessor,
+  UListProcessor,
+)
 from markdown.extensions import Extension
 from markdown.preprocessors import Preprocessor
 
@@ -330,6 +335,22 @@ def _section(lines: list[str], name: str, spec: str) -> list[str]:
   return found
 
 
+# Indentation where CommonMark defines a continued list item.
+_LIST_INDENT = 2
+
+
+def _commonmark_list_indent(md: Markdown) -> None:
+  """Rebuild the list processors at CommonMark indentation."""
+  kept = md.tab_length
+  md.tab_length = _LIST_INDENT
+  for processor in md.parser.blockprocessors:
+    if isinstance(
+      processor, ListIndentProcessor | OListProcessor | UListProcessor
+    ):
+      processor.__init__(md.parser)
+  md.tab_length = kept
+
+
 class PreprocessorHost(Extension):
   """Markdown extension entrypoint."""
 
@@ -348,6 +369,7 @@ class PreprocessorHost(Extension):
     )
     md.preprocessors.register(include, "include", 32)
     md.preprocessors.register(GfmAlertsPreprocessor(md), "gfm_alerts", 31)
+    _commonmark_list_indent(md)
 
 
 def makeExtension(**kwargs: object) -> PreprocessorHost:
@@ -381,6 +403,11 @@ class TestPreprocess:
       for stem, text in files.items():
         (home / f"{stem}.md").write_text(text, encoding="utf-8")
       yield home.relative_to(root_dir())
+
+  def test_list_continues_at_the_commonmark_column(self) -> None:
+    out = self._render("* lead\n\n  continuation\n")
+    assert out.count("<li>") == 1
+    assert "continuation" in out.split("</li>")[0]
 
   def test_alert_becomes_admonition(self) -> None:
     out = self._render("> [!CAUTION]\n> Mind the gap.\n")

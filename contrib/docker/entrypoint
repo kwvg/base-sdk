@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+SOCKET="/nix/var/nix/daemon-socket/socket"
+if [[ ! -S "${SOCKET}" ]]; then
+  echo "${0##*/}: no nix daemon at ${SOCKET}, cannot continue!" >&2
+  exit 1
+fi
+
+: "${WORKSPACE_PATH:?no workspace to enter, expected a bind mount}"
+if ! git -C / config --global --fixed-value --get safe.directory "${WORKSPACE_PATH}" > /dev/null; then
+  git -C / config --global --add safe.directory "${WORKSPACE_PATH}"
+fi
+
+cd "${WORKSPACE_PATH}"
+
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+  if [[ -f .git ]]; then
+    gitdir="$(< .git)"
+    echo "${0##*/}: ${WORKSPACE_PATH} is a worktree of ${gitdir#gitdir: }, unsupported!" >&2
+  else
+    echo "${0##*/}: ${WORKSPACE_PATH} is not a git repository, cannot continue!" >&2
+  fi
+  exit 1
+fi
+
+if (( $# > 0 )); then
+  exec nix develop ./contrib/nix#dev --command "$@"
+else
+  exec nix develop ./contrib/nix#dev
+fi

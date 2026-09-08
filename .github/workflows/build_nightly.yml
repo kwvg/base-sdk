@@ -12,6 +12,8 @@ on:
         required: true
         type: string
     secrets:
+      CACHIX_AUTH_TOKEN:
+        required: false
       CODECOV_TOKEN:
         required: false
 
@@ -32,6 +34,10 @@ jobs:
           - { name: min, args: "--no-default-features" }
           - { name: std, args: "--features std" }
 
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#ci --command bash -eo pipefail {0}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -49,11 +55,19 @@ jobs:
             exit 1
           fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
         with:
-          toolchain: nightly-2026-02-01
-          components: clippy, llvm-tools, rustfmt
+          extra-conf: |
+            extra-substituters = https://dashpay-base-sdk.cachix.org
+            extra-trusted-public-keys = dashpay-base-sdk.cachix.org-1:TAoDyYL2e60lUEG8n10gvIZmujM5rJAhaG613fNfOWI=
+
+      - name: Cache Nix
+        uses: cachix/cachix-action@v17
+        with:
+          name: dashpay-base-sdk
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipAddingSubstituter: true
 
       - name: Manage cargo registry
         uses: actions/cache@v5
@@ -82,13 +96,9 @@ jobs:
         if: matrix.config.name != 'full'
         run: cargo test -p ${{ inputs.package }} ${{ matrix.config.args }}
 
-      - name: Install cargo-llvm-cov
-        if: matrix.config.name == 'full'
-        uses: taiki-e/install-action@cargo-llvm-cov
-
       - name: Check formatting
         if: matrix.config.name == 'full'
-        run: python maint/lint/lint_rust.py
+        run: python3 maint/lint/lint_rust.py
 
       - name: Test package (with coverage)
         if: matrix.config.name == 'full'

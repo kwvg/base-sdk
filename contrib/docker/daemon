@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+install -d -m 0755 -o "${HOST_UID}" -g "${HOST_GID}" \
+  /var/cache/base-sdk \
+  /var/cache/base-sdk/home
+
+exec nix-daemon
