@@ -13,6 +13,9 @@ use crate::CompactSize;
 use core::convert::Infallible;
 use core::fmt;
 
+// TODO(kwvg): remove compatibility alias
+pub use crate::traits::{Checkable, Hashable}; // nosemgrep: use-pub-roots-only
+
 /// Maximum bytes to pre-allocate per batch when deserializing vectors.
 const MAX_VECTOR_ALLOCATE: usize = 5_000_000;
 
@@ -341,25 +344,6 @@ impl BaseCodec for String {
     CompactSize::from(self.len()).encode(buf);
     buf.extend_from_slice(self.as_bytes());
   }
-}
-
-/// Consensus types that have internal consistency checks.
-pub trait Checkable {
-  /// The error type returned on failure.
-  type Error;
-
-  /// Checks structural invariants, returning the first violation.
-  #[must_use]
-  fn check(&self) -> Option<Self::Error>;
-}
-
-/// Canonical hashed representation.
-pub trait Hashable {
-  /// The hash output type.
-  type Hash;
-
-  /// Computes the canonical hash of this value.
-  fn hash(&self) -> Self::Hash;
 }
 
 /// Marker trait for codec coverage enforcement.

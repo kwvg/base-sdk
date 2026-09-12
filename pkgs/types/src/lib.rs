@@ -18,11 +18,13 @@ mod macros;
 #[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
 mod prelude;
 mod secret;
+mod traits;
 
 #[cfg(feature = "serde")]
 pub mod serialize;
 
 pub use macros::qtypestr;
+pub use traits::{Checkable, Hashable};
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "codec")] {
