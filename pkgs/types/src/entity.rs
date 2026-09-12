@@ -441,8 +441,8 @@ macro_rules! make_bytes {
     $crate::derive_bytes!(@order [$($g)*] $name $(<$($param),+>)?, $n, $rev);
 
     $crate::make_bytes!(@accessors [$($g)*] $name $(<$($param),+>)?, $n, {
-      /// Returns the inner byte array.
-      pub const fn to_bytes(self) -> [u8; $n] {
+      /// Copies out the inner byte array.
+      pub const fn to_bytes(&self) -> [u8; $n] {
         self.inner
       }
     });
