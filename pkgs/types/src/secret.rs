@@ -372,6 +372,64 @@ macro_rules! derive_sbytes {
   };
 }
 
+/// Declares a fixed-size secret byte newtype over `[u8; N]`, the secret
+/// counterpart to [`make_bytes!`](crate::make_bytes).
+///
+/// A `for[..]` prefix takes type parameters, held in a `PhantomData` beside
+/// the bytes, for a type that utilizes parameters for tagging without mutating
+/// the inner structure.
+///
+/// An optional trailing word follows the width. Whether the bag carries a
+/// wire image, `codec` (the default) or `nocodec`.
+///
+/// Invokes `impl_sbytes!` and [`derive_sbytes!`](crate::derive_sbytes). A
+/// newtype that needs a validating constructor or its own trait set should
+/// define itself and invoke those macros manually.
+#[macro_export]
+macro_rules! make_sbytes {
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $enc:ident) => {
+    $crate::make_bytes!(@decl [$($g)*] $attrs $name $(<$($param),+>)?, $n, $enc, impl_sbytes);
+
+    $crate::derive_sbytes!(@parse [$($g)*] $name $(<$($param),+>)?, $n);
+
+    $crate::make_bytes!(@accessors [$($g)*] $name $(<$($param),+>)?, $n, {
+      /// Copies out the inner byte array.
+      pub fn to_bytes(&self) -> $crate::__private::zeroize::Zeroizing<[u8; $n]> {
+        $crate::__private::zeroize::Zeroizing::new(self.inner)
+      }
+    });
+
+    impl<$($g)*> $crate::__private::zeroize::Zeroize for $name $(<$($param),+>)? {
+      fn zeroize(&mut self) {
+        $crate::__private::zeroize::Zeroize::zeroize(&mut self.inner);
+      }
+    }
+
+    impl<$($g)*> ::core::clone::Clone for $name $(<$($param),+>)? {
+      fn clone(&self) -> Self {
+        Self::from_bytes(self.inner)
+      }
+    }
+
+    impl<$($g)*> ::core::cmp::Eq for $name $(<$($param),+>)? {}
+
+    impl<$($g)*> ::core::cmp::PartialEq for $name $(<$($param),+>)? {
+      fn eq(&self, other: &Self) -> bool {
+        $crate::__private::subtle::ConstantTimeEq::ct_eq(&self.inner[..], &other.inner[..]).into()
+      }
+    }
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr) => {
+    $crate::make_sbytes!(@parse [$($g)*] $attrs $name $(<$($param),+>)?, $n, codec);
+  };
+  ($(#[$attr:meta])* for[$($generic:tt)*] $name:ident<$($param:ident),+>, $($args:tt)*) => {
+    $crate::make_sbytes!(@parse [$($generic)*] {$(#[$attr])*} $name<$($param),+>, $($args)*);
+  };
+  ($(#[$attr:meta])* $name:ident, $($args:tt)*) => {
+    $crate::make_sbytes!(@parse [] {$(#[$attr])*} $name, $($args)*);
+  };
+}
+
 /// The secret counterpart to [`dlgt_codec!`](crate::dlgt_codec), for an
 /// operational type whose wire image is key material.
 ///

@@ -382,6 +382,7 @@ macro_rules! derive_bytes {
 /// itself and invoke those macros manually.
 #[macro_export]
 macro_rules! make_bytes {
+  // `@struct`, `@decl` and `@accessors` are shared with `make_sbytes!`
   (@struct [$($g:tt)*] {$($attr:tt)*} $(#[$derive:meta])? $name:ident $(<$($param:ident),+>)?, $n:expr) => {
     $($attr)*
     $(#[$derive])?
@@ -391,20 +392,21 @@ macro_rules! make_bytes {
       $(_marker: ::core::marker::PhantomData<fn() -> ($($param,)+)>,)?
     }
   };
-  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, codec) => {
+  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, codec, $codec:ident) => {
     $crate::cfg_codec! {
       {
         $crate::make_bytes!(
           @struct [$($g)*] $attrs #[derive($crate::type_id::TypeId)] $name $(<$($param),+>)?, $n
         );
 
-        $crate::impl_bytes!(@parse [$($g)*] $name $(<$($param),+>)?, $n);
+        $crate::$codec!(@parse [$($g)*] $name $(<$($param),+>)?, $n);
       } else {
         $crate::make_bytes!(@struct [$($g)*] $attrs $name $(<$($param),+>)?, $n);
       }
     }
   };
-  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, nocodec) => {
+  // `$codec` is accepted for symmetry with the arm above, nothing to stage.
+  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, nocodec, $codec:ident) => {
     $crate::cfg_codec! {
       {
         $crate::make_bytes!(
@@ -415,11 +417,7 @@ macro_rules! make_bytes {
       }
     }
   };
-  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $rev:tt, $enc:ident) => {
-    $crate::make_bytes!(@decl [$($g)*] $attrs $name $(<$($param),+>)?, $n, $enc);
-
-    $crate::derive_bytes!(@order [$($g)*] $name $(<$($param),+>)?, $n, $rev);
-
+  (@accessors [$($g:tt)*] $name:ident $(<$($param:ident),+>)?, $n:expr, {$($to_bytes:tt)*}) => {
     impl<$($g)*> $name $(<$($param),+>)? {
       /// Wraps raw bytes without validation.
       pub const fn from_bytes(bytes: [u8; $n]) -> Self {
@@ -429,16 +427,25 @@ macro_rules! make_bytes {
         }
       }
 
-      /// Returns the inner byte array.
-      pub const fn to_bytes(self) -> [u8; $n] {
-        self.inner
-      }
+      $($to_bytes)*
 
       /// Borrows the inner byte array.
       pub const fn as_bytes(&self) -> &[u8; $n] {
         &self.inner
       }
     }
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $rev:tt, $enc:ident) => {
+    $crate::make_bytes!(@decl [$($g)*] $attrs $name $(<$($param),+>)?, $n, $enc, impl_bytes);
+
+    $crate::derive_bytes!(@order [$($g)*] $name $(<$($param),+>)?, $n, $rev);
+
+    $crate::make_bytes!(@accessors [$($g)*] $name $(<$($param),+>)?, $n, {
+      /// Returns the inner byte array.
+      pub const fn to_bytes(self) -> [u8; $n] {
+        self.inner
+      }
+    });
   };
   (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $rev:tt) => {
     $crate::make_bytes!(@parse [$($g)*] $attrs $name $(<$($param),+>)?, $n, $rev, codec);
