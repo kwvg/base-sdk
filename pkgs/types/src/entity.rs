@@ -378,11 +378,18 @@ macro_rules! make_bytes {
     $(#[$attr:meta])*
     $name:ident, $n:literal
   ) => {
-    $(#[$attr])*
-    #[derive($crate::type_id::TypeId)]
-    pub struct $name(pub [u8; $n]);
+    $crate::cfg_codec! {
+      {
+        $(#[$attr])*
+        #[derive($crate::type_id::TypeId)]
+        pub struct $name(pub [u8; $n]);
 
-    $crate::impl_bytes!($name, $n);
+        $crate::impl_bytes!($name, $n);
+      } else {
+        $(#[$attr])*
+        pub struct $name(pub [u8; $n]);
+      }
+    }
 
     $crate::derive_bytes!($name, $n);
 

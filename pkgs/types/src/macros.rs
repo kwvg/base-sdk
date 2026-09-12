@@ -14,6 +14,10 @@ use core::fmt;
 /// against the invoking crate, which doesn't need have a `codec` feature at
 /// all. This marker is compiled here, so it tracks `dash-types` instead.
 ///
+/// `{ .. } else { .. }` picks between two bodies rather than emitting one
+/// conditionally, for an item that exists either way but is built differently
+/// with the feature enabled.
+///
 /// The two arms must stay plain `#[cfg]` items. Wrapping them in `cfg_if!`
 /// makes the definition macro-expanded, and a macro-expanded `#[macro_export]`
 /// macro cannot be reached by `$crate::` from its own crate (rust#52234).
@@ -21,6 +25,7 @@ use core::fmt;
 #[doc(hidden)]
 #[macro_export]
 macro_rules! cfg_codec {
+  ({$($with:tt)*} else {$($without:tt)*}) => { $($with)* };
   ($($item:tt)*) => { $($item)* };
 }
 
@@ -28,6 +33,7 @@ macro_rules! cfg_codec {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! cfg_codec {
+  ({$($with:tt)*} else {$($without:tt)*}) => { $($without)* };
   ($($item:tt)*) => {};
 }
 
