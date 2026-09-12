@@ -8,13 +8,10 @@
 
 use crate::bls::BlsSchemeId;
 
-#[cfg(feature = "codec")]
 use bitcoin_hashes::sha256d::Hash as Sha256d;
-#[cfg(feature = "codec")]
 use dash_num::Hash256;
-#[cfg(feature = "codec")]
-use dash_types::codec::Hashable;
 use dash_types::make_bytes;
+use dash_types::Hashable;
 
 /// Raw BLS signature length (G2 compressed).
 pub const BLS_SIG_LEN: usize = 96;
@@ -24,7 +21,6 @@ make_bytes! {
   for[S: BlsSchemeId] BlsSigBytes<S>, BLS_SIG_LEN
 }
 
-#[cfg(feature = "codec")]
 impl<S: BlsSchemeId> Hashable for BlsSigBytes<S> {
   type Hash = Hash256;
 

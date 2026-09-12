@@ -9,12 +9,12 @@ aes = { version = "0.8", default-features = false, features = [
   "zeroize",
 ], optional = true }
 base58ck = { workspace = true, optional = true, features = ["alloc"] }
-bitcoin_hashes = { workspace = true, optional = true, features = ["alloc"] }
+bitcoin_hashes = { workspace = true, features = ["alloc"] }
 blst = { version = "0.3", default-features = false, optional = true }
 ff = { version = "0.14", default-features = false, optional = true }
 group = { version = "0.14", default-features = false, optional = true }
 cfg-if = "1"
-dash-num = { version = "0.0.0", path = "../num", optional = true }
+dash-num = { version = "0.0.0", path = "../num", default-features = false }
 dash-types = { version = "0.0.0", path = "../types", default-features = false }
 hex-conservative = { version = "0.3", default-features = false, features = [
   "alloc",
@@ -49,7 +49,7 @@ serde = { version = "1", features = ["derive"] }
 
 [features]
 default = []
-std = ["base58ck?/std", "bitcoin_hashes?/std", "dash-types/std"]
+std = ["base58ck?/std", "bitcoin_hashes/std", "dash-types/std"]
 bls = [
   "dep:aes",
   "dep:blst",
@@ -60,8 +60,7 @@ bls = [
 ]
 codec = [
   "dep:base58ck",
-  "dep:bitcoin_hashes",
-  "dep:dash-num",
+  "dash-num/codec",
   "dash-types/codec",
 ]
 ecdsa = ["codec", "dep:k256", "dep:rand_core"]
