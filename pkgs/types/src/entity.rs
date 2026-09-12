@@ -6,17 +6,24 @@
 
 //! Buffered codec implementation.
 
+#[cfg(feature = "codec")]
 use crate::codec::DecodeError;
+#[cfg(feature = "codec")]
 use crate::prelude::*;
 
+#[cfg(feature = "codec")]
 use bitcoin_consensus_encoding::{Decoder, Encoder};
 
+#[cfg(feature = "codec")]
 use core::convert::Infallible;
+#[cfg(feature = "codec")]
 use core::fmt;
 
+#[cfg(feature = "codec")]
 /// Maximum serialized object size (32 MiB).
 pub const MAX_SER_SIZE: usize = 0x0200_0000;
 
+#[cfg(feature = "codec")]
 /// An encoder that wraps a pre-built byte vector.
 #[derive(Clone)]
 pub struct VecEncoder {
@@ -24,6 +31,7 @@ pub struct VecEncoder {
   done: bool,
 }
 
+#[cfg(feature = "codec")]
 impl VecEncoder {
   /// Creates a new encoder wrapping the given bytes.
   pub fn new(data: Vec<u8>) -> Self {
@@ -31,6 +39,7 @@ impl VecEncoder {
   }
 }
 
+#[cfg(feature = "codec")]
 impl fmt::Debug for VecEncoder {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("VecEncoder")
@@ -40,6 +49,7 @@ impl fmt::Debug for VecEncoder {
   }
 }
 
+#[cfg(feature = "codec")]
 impl Encoder for VecEncoder {
   fn current_chunk(&self) -> &[u8] {
     if self.done {
@@ -59,6 +69,7 @@ impl Encoder for VecEncoder {
   }
 }
 
+#[cfg(feature = "codec")]
 /// A decoder that buffers all input and decodes in `end()`.
 ///
 /// Wraps types with complex sequential decode logic (conditional fields,
@@ -70,6 +81,7 @@ pub struct VecDecoder<T, E = Infallible> {
   decode_fn: fn(&mut &[u8]) -> Result<T, DecodeError<E>>,
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> VecDecoder<T, E> {
   /// Creates a new decoder with the given decode function and
   /// maximum buffer size.
@@ -82,6 +94,7 @@ impl<T, E> VecDecoder<T, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> fmt::Debug for VecDecoder<T, E> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("VecDecoder")
@@ -91,6 +104,7 @@ impl<T, E> fmt::Debug for VecDecoder<T, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> Clone for VecDecoder<T, E> {
   fn clone(&self) -> Self {
     Self {
@@ -101,6 +115,7 @@ impl<T, E> Clone for VecDecoder<T, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> Decoder for VecDecoder<T, E> {
   type Output = T;
   type Error = DecodeError<E>;
@@ -137,6 +152,7 @@ impl<T, E> Decoder for VecDecoder<T, E> {
 /// Stages through the growable [`VecEncoder`]/[`VecDecoder`] pair. For
 /// secret material use [`impl_stype!`](crate::impl_stype) instead, which is
 /// the same generator over the wiping fixed-width pair.
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! impl_type {
   (@parse [$($impl_generics:tt)*] $ty:ty, $max:expr, $err:ty) => {
@@ -179,6 +195,7 @@ macro_rules! impl_type {
 ///
 /// Staged through the growable [`VecEncoder`]. For a newtype whose contents
 /// are secret use [`impl_sbytes!`](crate::impl_sbytes).
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! impl_bytes {
   // Shared by `impl_bytes!` and `impl_sbytes!`, only the encoder pair differs.
@@ -212,43 +229,235 @@ macro_rules! impl_bytes {
   };
 }
 
+/// The standard trait set for a fixed-size byte newtype, expressed only
+/// through `from_bytes` / `as_bytes`.
+///
+/// Emits `Clone`, `Copy`, `Default`, `Eq`, `PartialEq`, `Ord`, `PartialOrd`,
+/// `Hash`, `is_null`, `AsRef<[u8]>`, `AsRef<[u8; N]>`, `From<Self> for
+/// [u8; N]`, a hex `Debug`/`Display`, and the hex `serde` pair.
+///
+/// A trailing `rev` renders the hex in reverse storage order, the default `fwd`
+/// renders storage order.
+///
+/// For a newtype holding secrets use [`derive_sbytes!`](crate::derive_sbytes),
+/// which withholds everything that would read or copy out the plaintext.
+#[macro_export]
+macro_rules! derive_bytes {
+  (@parse [$($g:tt)*] $ty:ty, $n:expr, $rev:expr) => {
+    impl<$($g)*> ::core::clone::Clone for $ty {
+      fn clone(&self) -> Self { *self }
+    }
+
+    impl<$($g)*> ::core::marker::Copy for $ty {}
+
+    impl<$($g)*> ::core::default::Default for $ty {
+      fn default() -> Self { Self::from_bytes([0u8; $n]) }
+    }
+
+    impl<$($g)*> ::core::cmp::Eq for $ty {}
+
+    impl<$($g)*> ::core::cmp::PartialEq for $ty {
+      fn eq(&self, other: &Self) -> bool { self.as_bytes() == other.as_bytes() }
+    }
+
+    impl<$($g)*> ::core::cmp::Ord for $ty {
+      fn cmp(&self, other: &Self) -> ::core::cmp::Ordering {
+        self.as_bytes().cmp(other.as_bytes())
+      }
+    }
+
+    impl<$($g)*> ::core::cmp::PartialOrd for $ty {
+      fn partial_cmp(&self, other: &Self) -> ::core::option::Option<::core::cmp::Ordering> {
+        ::core::option::Option::Some(::core::cmp::Ord::cmp(self, other))
+      }
+    }
+
+    impl<$($g)*> ::core::hash::Hash for $ty {
+      fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
+        ::core::hash::Hash::hash(self.as_bytes(), state);
+      }
+    }
+
+    impl<$($g)*> ::core::convert::AsRef<[u8]> for $ty {
+      fn as_ref(&self) -> &[u8] { self.as_bytes() }
+    }
+
+    impl<$($g)*> ::core::convert::AsRef<[u8; $n]> for $ty {
+      fn as_ref(&self) -> &[u8; $n] { self.as_bytes() }
+    }
+
+    impl<$($g)*> ::core::convert::From<$ty> for [u8; $n] {
+      fn from(val: $ty) -> Self { *val.as_bytes() }
+    }
+
+    impl<$($g)*> $ty {
+      /// Returns `true` when every byte is zero.
+      pub fn is_null(&self) -> bool { self.as_bytes().iter().all(|&b| b == 0) }
+    }
+
+    impl<$($g)*> ::core::fmt::Debug for $ty {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        $crate::qtypestr(f, ::core::any::type_name::<Self>())?;
+        f.write_str("(")?;
+        ::core::fmt::Display::fmt(self, f)?;
+        f.write_str(")")
+      }
+    }
+
+    $crate::derive_bytes!(@hex [$($g)*] $ty, $n, $rev);
+  };
+  (@order [$($g:tt)*] $ty:ty, $n:expr, fwd) => {
+    $crate::derive_bytes!(@parse [$($g)*] $ty, $n, false);
+  };
+  (@order [$($g:tt)*] $ty:ty, $n:expr, rev) => {
+    $crate::derive_bytes!(@parse [$($g)*] $ty, $n, true);
+  };
+  (@hex [$($g:tt)*] $ty:ty, $n:expr, $rev:expr) => {
+    impl<$($g)*> ::core::fmt::Display for $ty {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let bytes = self.as_bytes();
+        for i in 0..$n {
+          let byte = if $rev { bytes[$n - 1 - i] } else { bytes[i] };
+          ::core::write!(f, "{byte:02x}")?;
+        }
+        ::core::result::Result::Ok(())
+      }
+    }
+
+    $crate::cfg_serde! {
+      impl<$($g)*> $crate::__private::serde::Serialize for $ty {
+        fn serialize<Z>(&self, serializer: Z) -> Result<Z::Ok, Z::Error>
+        where
+          Z: $crate::__private::serde::Serializer,
+        {
+          serializer.serialize_str(&::alloc::format!("{self}"))
+        }
+      }
+
+      impl<'de, $($g)*> $crate::__private::serde::Deserialize<'de> for $ty {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+          D: $crate::__private::serde::Deserializer<'de>,
+        {
+          use $crate::__private::serde::de::Error as _;
+          let s = <::alloc::string::String as $crate::__private::serde::Deserialize>::deserialize(deserializer)?;
+          let mut bytes = <[u8; $n] as $crate::__private::hex_conservative::FromHex>::from_hex(&s)
+            .map_err(D::Error::custom)?;
+          if $rev {
+            bytes.reverse();
+          }
+          ::core::result::Result::Ok(Self::from_bytes(bytes))
+        }
+      }
+    }
+  };
+  (for[$($generic:tt)*] $ty:ty, $n:expr, $order:tt) => {
+    $crate::derive_bytes!(@order [$($generic)*] $ty, $n, $order);
+  };
+  (for[$($generic:tt)*] $ty:ty, $n:expr) => {
+    $crate::derive_bytes!(@order [$($generic)*] $ty, $n, fwd);
+  };
+  ($ty:ty, $n:expr, $order:tt) => {
+    $crate::derive_bytes!(@order [] $ty, $n, $order);
+  };
+  ($ty:ty, $n:expr) => {
+    $crate::derive_bytes!(@order [] $ty, $n, fwd);
+  };
+}
+
 /// Declares a fixed-size byte newtype over `[u8; N]` with the `from_bytes` /
 /// `to_bytes` / `as_bytes` accessors.
 ///
-/// Invokes [`impl_bytes!`](crate::impl_bytes) and
-/// [`derive_bytes!`](crate::derive_bytes). A newtype that needs a validating
-/// constructor, a scheme tag, or its own trait set should define itself and
-/// invoke those macros manually.
+/// A `for[..]` prefix takes type parameters, held in a `PhantomData` beside
+/// the bytes, for a type that utilizes parameters for tagging without mutating
+/// the inner structure.
+///
+/// Two optional trailing words follow the width. The first is the hex order,
+/// `fwd` (the default) or `rev`. The second is whether the bag carries a wire
+/// image, `codec` (the default) or `nocodec`; the second cannot be given
+/// without the first.
+///
+/// Invokes `impl_bytes!` and [`derive_bytes!`](crate::derive_bytes). A newtype
+/// that needs a validating constructor or its own trait set should define
+/// itself and invoke those macros manually.
 #[macro_export]
 macro_rules! make_bytes {
-  (
-    $(#[$attr:meta])*
-    $name:ident, $n:literal
-  ) => {
-    $(#[$attr])*
-    #[derive($crate::type_id::TypeId)]
-    pub struct $name(pub [u8; $n]);
+  // `@struct`, `@decl` and `@accessors` are shared with `make_sbytes!`
+  (@struct [$($g:tt)*] {$($attr:tt)*} $(#[$derive:meta])? $name:ident $(<$($param:ident),+>)?, $n:expr) => {
+    $($attr)*
+    $(#[$derive])?
+    // A plain bag gets an empty `<>`, legal and invisible in rustdoc.
+    pub struct $name<$($g)*> {
+      inner: [u8; $n],
+      $(_marker: ::core::marker::PhantomData<fn() -> ($($param,)+)>,)?
+    }
+  };
+  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, codec, $codec:ident) => {
+    $crate::cfg_codec! {
+      {
+        $crate::make_bytes!(
+          @struct [$($g)*] $attrs #[derive($crate::type_id::TypeId)] $name $(<$($param),+>)?, $n
+        );
 
-    $crate::impl_bytes!($name, $n);
-
-    $crate::derive_bytes!($name, $n);
-
-    impl $name {
+        $crate::$codec!(@parse [$($g)*] $name $(<$($param),+>)?, $n);
+      } else {
+        $crate::make_bytes!(@struct [$($g)*] $attrs $name $(<$($param),+>)?, $n);
+      }
+    }
+  };
+  // `$codec` is accepted for symmetry with the arm above, nothing to stage.
+  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, nocodec, $codec:ident) => {
+    $crate::cfg_codec! {
+      {
+        $crate::make_bytes!(
+          @struct [$($g)*] $attrs #[derive($crate::type_id::Unencodable)] $name $(<$($param),+>)?, $n
+        );
+      } else {
+        $crate::make_bytes!(@struct [$($g)*] $attrs $name $(<$($param),+>)?, $n);
+      }
+    }
+  };
+  (@accessors [$($g:tt)*] $name:ident $(<$($param:ident),+>)?, $n:expr, {$($to_bytes:tt)*}) => {
+    impl<$($g)*> $name $(<$($param),+>)? {
       /// Wraps raw bytes without validation.
       pub const fn from_bytes(bytes: [u8; $n]) -> Self {
-        Self(bytes)
+        Self {
+          inner: bytes,
+          $(_marker: ::core::marker::PhantomData::<fn() -> ($($param,)+)>,)?
+        }
       }
 
-      /// Returns the inner byte array.
-      pub const fn to_bytes(self) -> [u8; $n] {
-        self.0
-      }
+      $($to_bytes)*
 
       /// Borrows the inner byte array.
       pub const fn as_bytes(&self) -> &[u8; $n] {
-        &self.0
+        &self.inner
       }
     }
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $rev:tt, $enc:ident) => {
+    $crate::make_bytes!(@decl [$($g)*] $attrs $name $(<$($param),+>)?, $n, $enc, impl_bytes);
+
+    $crate::derive_bytes!(@order [$($g)*] $name $(<$($param),+>)?, $n, $rev);
+
+    $crate::make_bytes!(@accessors [$($g)*] $name $(<$($param),+>)?, $n, {
+      /// Copies out the inner byte array.
+      pub const fn to_bytes(&self) -> [u8; $n] {
+        self.inner
+      }
+    });
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $rev:tt) => {
+    $crate::make_bytes!(@parse [$($g)*] $attrs $name $(<$($param),+>)?, $n, $rev, codec);
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr) => {
+    $crate::make_bytes!(@parse [$($g)*] $attrs $name $(<$($param),+>)?, $n, fwd);
+  };
+  ($(#[$attr:meta])* for[$($generic:tt)*] $name:ident<$($param:ident),+>, $($args:tt)*) => {
+    $crate::make_bytes!(@parse [$($generic)*] {$(#[$attr])*} $name<$($param),+>, $($args)*);
+  };
+  ($(#[$attr:meta])* $name:ident, $($args:tt)*) => {
+    $crate::make_bytes!(@parse [] {$(#[$attr])*} $name, $($args)*);
   };
 }
 
@@ -262,6 +471,7 @@ macro_rules! make_bytes {
 /// `$max` bounds the `impl_type!` decoder buffer to the wrapped type's own
 /// maximum encoded length. For a secret wire image use
 /// [`dlgt_scodec!`](crate::dlgt_scodec).
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! dlgt_codec {
   // Shared by `dlgt_codec!` and `dlgt_scodec!`, only the encoder pair differs.

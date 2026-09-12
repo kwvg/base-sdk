@@ -17,11 +17,13 @@ use cfg_if::cfg_if;
 #[cfg(feature = "codec")]
 use dash_num::Hash256;
 #[cfg(feature = "codec")]
-use dash_types::codec::{read_bytes, BaseCodec, Checkable, DecodeError, EncodeBuf, Hashable};
+use dash_types::codec::{read_bytes, BaseCodec, DecodeError, EncodeBuf};
 #[cfg(feature = "codec")]
 use dash_types::type_id::TypeId;
 #[cfg(feature = "codec")]
 use dash_types::{impl_type, CompactSize};
+#[cfg(feature = "codec")]
+use dash_types::{Checkable, Hashable};
 use hex_conservative::DisplayHex;
 
 use core::fmt;

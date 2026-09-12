@@ -6,6 +6,27 @@
 
 //! Hash newtype macros.
 
+/// dash-num's [`cfg_codec!`](dash_types::cfg_codec), keyed to `dash-num/codec`
+/// (this crate) rather than `dash-types/codec`.
+///
+/// `{ .. } else { .. }` picks between two bodies rather than emitting one
+/// conditionally, for an item that exists either way.
+#[cfg(feature = "codec")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! cfg_codec {
+  ({$($with:tt)*} else {$($without:tt)*}) => { $($with)* };
+  ($($item:tt)*) => { $($item)* };
+}
+
+#[cfg(not(feature = "codec"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! cfg_codec {
+  ({$($with:tt)*} else {$($without:tt)*}) => { $($without)* };
+  ($($item:tt)*) => {};
+}
+
 /// dash-num's [`cfg_serde!`](dash_types::cfg_serde), keyed to `dash-num/serde`
 /// (this crate) rather than `dash-types/serde`.
 #[cfg(feature = "serde")]
@@ -25,7 +46,7 @@ macro_rules! cfg_serde {
 /// Generates `BaseCodec` + `Encode` + `Decode` for hash newtypes.
 #[macro_export]
 macro_rules! impl_hash {
-  ($base:ty, $($name:ident),* $(,)?) => { $(
+  ($base:ty, $($name:ident),* $(,)?) => { $( $crate::cfg_codec! {
     impl $crate::__private::dash_types::codec::BaseCodec for $name {
       fn decode(
         data: &mut &[u8],
@@ -40,7 +61,7 @@ macro_rules! impl_hash {
     }
 
     $crate::__private::dash_types::impl_type!($name);
-  )* };
+  } )* };
 }
 
 /// Generates a newtype wrapping a hash base type with full trait
@@ -52,9 +73,20 @@ macro_rules! make_hash {
     $(#[$attr:meta])*
     $name:ident
   ) => {
-    $(#[$attr])*
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, $crate::__private::dash_types::type_id::TypeId)]
-    pub struct $name($base);
+    $crate::cfg_codec! {
+      {
+        $(#[$attr])*
+        #[derive(
+          Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+          $crate::__private::dash_types::type_id::TypeId,
+        )]
+        pub struct $name($base);
+      } else {
+        $(#[$attr])*
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name($base);
+      }
+    }
 
     $crate::cfg_serde! {
       impl $crate::__private::serde::Serialize for $name {

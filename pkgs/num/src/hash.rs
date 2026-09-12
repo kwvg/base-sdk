@@ -301,17 +301,19 @@ macro_rules! define_hash {
       }
     }
 
-    impl $crate::__private::dash_types::codec::BaseCodec for $name {
-      fn decode(data: &mut &[u8]) -> Result<Self, $crate::__private::dash_types::codec::DecodeError> {
-        $crate::__private::dash_types::codec::take::<$n>(data).map(Self::from_bytes)
+    $crate::cfg_codec! {
+      impl $crate::__private::dash_types::codec::BaseCodec for $name {
+        fn decode(data: &mut &[u8]) -> Result<Self, $crate::__private::dash_types::codec::DecodeError> {
+          $crate::__private::dash_types::codec::take::<$n>(data).map(Self::from_bytes)
+        }
+
+        fn encode(&self, buf: &mut impl $crate::__private::dash_types::codec::EncodeBuf) {
+          buf.extend_from_slice(&self.0);
+        }
       }
 
-      fn encode(&self, buf: &mut impl crate::__private::dash_types::codec::EncodeBuf) {
-        buf.extend_from_slice(&self.0);
-      }
+      $crate::__private::dash_types::impl_type!($name);
     }
-
-    $crate::__private::dash_types::impl_type!($name);
 
     #[cfg(feature = "serde")]
     impl ::serde::Serialize for $name {

@@ -6,17 +6,24 @@
 
 //! Secret-holding codec implementation.
 
+#[cfg(feature = "codec")]
 use crate::codec::{DecodeError, EncodeBuf};
 
+#[cfg(feature = "codec")]
 use bitcoin_consensus_encoding::{Decoder, Encoder};
+#[cfg(feature = "codec")]
 use zeroize::Zeroize;
 
+#[cfg(feature = "codec")]
 use core::convert::Infallible;
+#[cfg(feature = "codec")]
 use core::fmt;
 
+#[cfg(feature = "codec")]
 /// Widest buffer [`ArrEncoder`] and [`ArrDecoder`] will wipe.
 pub const MAX_ARR_SIZE: usize = 512;
 
+#[cfg(feature = "codec")]
 /// Fixed-size encode buffer backed by `[u8; N]`.
 ///
 /// Implements [`Zeroize`] but has no `Drop`, so it does *not* wipe itself when
@@ -33,6 +40,7 @@ pub struct ArrayBuf<const N: usize> {
   len: usize,
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> ArrayBuf<N> {
   /// Creates an empty buffer.
   pub const fn new() -> Self {
@@ -70,18 +78,21 @@ impl<const N: usize> ArrayBuf<N> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> fmt::Debug for ArrayBuf<N> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("ArrayBuf").field("len", &self.len).finish()
   }
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> Default for ArrayBuf<N> {
   fn default() -> Self {
     Self::new()
   }
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> EncodeBuf for ArrayBuf<N> {
   fn push(&mut self, byte: u8) {
     self.buf[self.len] = byte;
@@ -94,6 +105,7 @@ impl<const N: usize> EncodeBuf for ArrayBuf<N> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> Zeroize for ArrayBuf<N> {
   fn zeroize(&mut self) {
     self.buf.zeroize();
@@ -101,6 +113,7 @@ impl<const N: usize> Zeroize for ArrayBuf<N> {
   }
 }
 
+#[cfg(feature = "codec")]
 /// An encoder for values whose encoded width is bounded at compile time.
 ///
 /// Costs a byte-wise volatile write per byte of `N`, so it suits key material
@@ -111,6 +124,7 @@ pub struct ArrEncoder<const N: usize> {
   done: bool,
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> ArrEncoder<N> {
   /// Wraps a filled buffer.
   ///
@@ -121,6 +135,7 @@ impl<const N: usize> ArrEncoder<N> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> fmt::Debug for ArrEncoder<N> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("ArrEncoder")
@@ -130,12 +145,14 @@ impl<const N: usize> fmt::Debug for ArrEncoder<N> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> Drop for ArrEncoder<N> {
   fn drop(&mut self) {
     self.data.zeroize();
   }
 }
 
+#[cfg(feature = "codec")]
 impl<const N: usize> Encoder for ArrEncoder<N> {
   fn current_chunk(&self) -> &[u8] {
     if self.done {
@@ -155,12 +172,14 @@ impl<const N: usize> Encoder for ArrEncoder<N> {
   }
 }
 
+#[cfg(feature = "codec")]
 /// A decoder for values whose encoded width is bounded by `N`.
 pub struct ArrDecoder<T, const N: usize, E = Infallible> {
   buf: ArrayBuf<N>,
   decode_fn: fn(&mut &[u8]) -> Result<T, DecodeError<E>>,
 }
 
+#[cfg(feature = "codec")]
 impl<T, const N: usize, E> ArrDecoder<T, N, E> {
   /// Creates a decoder that accepts at most `N` bytes.
   ///
@@ -174,6 +193,7 @@ impl<T, const N: usize, E> ArrDecoder<T, N, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, const N: usize, E> fmt::Debug for ArrDecoder<T, N, E> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("ArrDecoder")
@@ -183,12 +203,14 @@ impl<T, const N: usize, E> fmt::Debug for ArrDecoder<T, N, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, const N: usize, E> Drop for ArrDecoder<T, N, E> {
   fn drop(&mut self) {
     self.buf.zeroize();
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, const N: usize, E> Decoder for ArrDecoder<T, N, E> {
   type Output = T;
   type Error = DecodeError<E>;
@@ -229,6 +251,7 @@ impl<T, const N: usize, E> Decoder for ArrDecoder<T, N, E> {
 /// `$n` and capped at [`MAX_ARR_SIZE`]. For public material use
 /// [`impl_type!`](crate::impl_type), the same generator over the growable
 /// pair.
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! impl_stype {
   (@parse [$($impl_generics:tt)*] $ty:ty, $n:expr, $err:ty) => {
@@ -273,6 +296,7 @@ macro_rules! impl_stype {
 ///
 /// Same `BaseCodec` and `From<[u8; N]>`, staged through the wiping
 /// [`ArrEncoder`] rather than the growable [`VecEncoder`](crate::VecEncoder).
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! impl_sbytes {
   (@parse [$($g:tt)*] $ty:ty, $n:expr) => {
@@ -288,6 +312,124 @@ macro_rules! impl_sbytes {
   };
 }
 
+/// The secret counterpart to [`derive_bytes!`](crate::derive_bytes), for a
+/// fixed-size byte newtype holding key material.
+///
+/// Emits `Drop`, `ZeroizeOnDrop`, `is_null`, the `AsRef` pair, and a redacting
+/// `Debug`/`Display`. `Zeroize`, `Clone` and `Eq`/`PartialEq` are left to the
+/// type: only it knows which fields are secret, and equality must be
+/// constant-time.
+///
+/// Withholds `Copy`, `Default`, `Ord`/`PartialOrd`/`Hash`, `From<Self> for
+/// [u8; N]` and the hex `serde` pair, each because it either escapes the wipe
+/// or reads the plaintext. Do *not* implement them.
+#[macro_export]
+macro_rules! derive_sbytes {
+  (@parse [$($g:tt)*] $ty:ty, $n:expr) => {
+    impl<$($g)*> ::core::ops::Drop for $ty {
+      fn drop(&mut self) {
+        <Self as $crate::__private::zeroize::Zeroize>::zeroize(self);
+      }
+    }
+
+    impl<$($g)*> $crate::__private::zeroize::ZeroizeOnDrop for $ty {}
+
+    impl<$($g)*> $ty {
+      /// Returns `true` when every byte is zero.
+      pub fn is_null(&self) -> bool {
+        use $crate::__private::subtle::ConstantTimeEq as _;
+        self.as_bytes().ct_eq(&[0u8; $n]).into()
+      }
+    }
+
+    impl<$($g)*> ::core::fmt::Debug for $ty {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        // `type_name` rather than `stringify!`, which cannot see the generics
+        $crate::qtypestr(f, ::core::any::type_name::<Self>())?;
+        f.write_str("(..)")
+      }
+    }
+
+    impl<$($g)*> ::core::fmt::Display for $ty {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Debug::fmt(self, f)
+      }
+    }
+
+    impl<$($g)*> ::core::convert::AsRef<[u8]> for $ty {
+      fn as_ref(&self) -> &[u8] { self.as_bytes() }
+    }
+
+    impl<$($g)*> ::core::convert::AsRef<[u8; $n]> for $ty {
+      fn as_ref(&self) -> &[u8; $n] { self.as_bytes() }
+    }
+  };
+  (for[$($generic:tt)*] $($args:tt)*) => {
+    $crate::derive_sbytes!(@parse [$($generic)*] $($args)*);
+  };
+  ($($args:tt)*) => {
+    $crate::derive_sbytes!(@parse [] $($args)*);
+  };
+}
+
+/// Declares a fixed-size secret byte newtype over `[u8; N]`, the secret
+/// counterpart to [`make_bytes!`](crate::make_bytes).
+///
+/// A `for[..]` prefix takes type parameters, held in a `PhantomData` beside
+/// the bytes, for a type that utilizes parameters for tagging without mutating
+/// the inner structure.
+///
+/// An optional trailing word follows the width. Whether the bag carries a
+/// wire image, `codec` (the default) or `nocodec`.
+///
+/// Invokes `impl_sbytes!` and [`derive_sbytes!`](crate::derive_sbytes). A
+/// newtype that needs a validating constructor or its own trait set should
+/// define itself and invoke those macros manually.
+#[macro_export]
+macro_rules! make_sbytes {
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $enc:ident) => {
+    $crate::make_bytes!(@decl [$($g)*] $attrs $name $(<$($param),+>)?, $n, $enc, impl_sbytes);
+
+    $crate::derive_sbytes!(@parse [$($g)*] $name $(<$($param),+>)?, $n);
+
+    $crate::make_bytes!(@accessors [$($g)*] $name $(<$($param),+>)?, $n, {
+      /// Copies out the inner byte array.
+      pub fn to_bytes(&self) -> $crate::__private::zeroize::Zeroizing<[u8; $n]> {
+        $crate::__private::zeroize::Zeroizing::new(self.inner)
+      }
+    });
+
+    impl<$($g)*> $crate::__private::zeroize::Zeroize for $name $(<$($param),+>)? {
+      fn zeroize(&mut self) {
+        $crate::__private::zeroize::Zeroize::zeroize(&mut self.inner);
+      }
+    }
+
+    impl<$($g)*> ::core::clone::Clone for $name $(<$($param),+>)? {
+      fn clone(&self) -> Self {
+        Self::from_bytes(self.inner)
+      }
+    }
+
+    impl<$($g)*> ::core::cmp::Eq for $name $(<$($param),+>)? {}
+
+    impl<$($g)*> ::core::cmp::PartialEq for $name $(<$($param),+>)? {
+      fn eq(&self, other: &Self) -> bool {
+        $crate::__private::subtle::ConstantTimeEq::ct_eq(&self.inner[..], &other.inner[..]).into()
+      }
+    }
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr) => {
+    $crate::make_sbytes!(@parse [$($g)*] $attrs $name $(<$($param),+>)?, $n, codec);
+  };
+  ($(#[$attr:meta])* for[$($generic:tt)*] $name:ident<$($param:ident),+>, $($args:tt)*) => {
+    $crate::make_sbytes!(@parse [$($generic)*] {$(#[$attr])*} $name<$($param),+>, $($args)*);
+  };
+  ($(#[$attr:meta])* $name:ident, $($args:tt)*) => {
+    $crate::make_sbytes!(@parse [] {$(#[$attr])*} $name, $($args)*);
+  };
+}
+
 /// The secret counterpart to [`dlgt_codec!`](crate::dlgt_codec), for an
 /// operational type whose wire image is key material.
 ///
@@ -298,6 +440,7 @@ macro_rules! impl_sbytes {
 /// `$n` bounds the encoded width rather than fixing it: the staging buffer is
 /// an [`ArrayBuf<$n>`](crate::ArrayBuf), so a narrower image is emitted as
 /// written and a wider one panics on the overflowing write.
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! dlgt_scodec {
   (@parse [$($impl_generics:tt)*] $ops:ty => $bytes:ty, $hash:ty, $err:ty, $n:expr) => {
@@ -313,7 +456,7 @@ macro_rules! dlgt_scodec {
   };
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "codec"))]
 mod tests {
   use super::{ArrDecoder, ArrEncoder, ArrayBuf, MAX_ARR_SIZE};
   use crate::codec::{DecodeError, EncodeBuf};

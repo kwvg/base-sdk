@@ -13,27 +13,25 @@ extern crate self as dash_types;
 #[cfg(feature = "std")]
 extern crate std;
 
-#[allow(unused_macros, reason = "used by feature-gated submodules")]
-#[cfg(feature = "codec")]
-mod adapters;
-#[cfg(feature = "codec")]
 mod entity;
 mod macros;
 #[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
 mod prelude;
-#[cfg(feature = "codec")]
 mod secret;
-#[cfg(feature = "codec")]
-mod uint;
+mod traits;
 
 #[cfg(feature = "serde")]
 pub mod serialize;
 
 pub use macros::qtypestr;
+pub use traits::{Checkable, Hashable};
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "codec")] {
+    #[allow(unused_macros, reason = "used by feature-gated submodules")]
+    mod adapters;
     mod compact;
+    mod uint;
 
     pub mod codec;
     pub mod type_id;

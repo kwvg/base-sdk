@@ -32,7 +32,7 @@ bitcoin-p2p-messages = { workspace = true }
 bitcoin-primitives = { workspace = true }
 bitcoin-units = { workspace = true, features = ["alloc"] }
 cfg-if = "1"
-dash-num = { version = "0.0.0", path = "../num" }
+dash-num = { version = "0.0.0", path = "../num", features = ["codec"] }
 dash-pkc = { version = "0.0.0", path = "../pkc", features = ["codec"] }
 dash-script = { version = "0.0.0", path = "../script" }
 dash-params = { version = "0.0.0", path = "../params" }
