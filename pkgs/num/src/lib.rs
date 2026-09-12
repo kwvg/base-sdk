@@ -27,6 +27,7 @@ pub mod util;
 
 #[doc(hidden)]
 pub mod __private {
+  #[cfg(feature = "codec")]
   pub use bitcoin_consensus_encoding;
   pub use dash_types;
   #[cfg(feature = "serde")]

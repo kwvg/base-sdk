@@ -12,7 +12,7 @@ full = ["std"]
 [dependencies]
 bitcoin-primitives = { workspace = true, features = ["alloc"] }
 bitcoin-units = { workspace = true, features = ["alloc"] }
-dash-num = { version = "0.0.0", path = "../num" }
+dash-num = { version = "0.0.0", path = "../num", features = ["codec"] }
 dash-primitives = { version = "0.0.0", path = "../primitives" }
 dash-script = { version = "0.0.0", path = "../script" }
 hex-literal = "0.4"

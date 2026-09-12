@@ -78,6 +78,11 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: stable
 
+      - name: Build package without default features
+        run: cargo build -p ${{ inputs.package }} --no-default-features
+        env:
+          RUSTUP_TOOLCHAIN: stable
+
       - name: Test package
         run: cargo test -p ${{ inputs.package }} --features ${{ inputs.features }}
         env:
