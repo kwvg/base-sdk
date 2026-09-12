@@ -374,20 +374,24 @@ macro_rules! derive_bytes {
 /// invoke those macros manually.
 #[macro_export]
 macro_rules! make_bytes {
+  (@struct {$($attr:tt)*} $(#[$derive:meta])? $name:ident, $n:literal) => {
+    $($attr)*
+    $(#[$derive])?
+    pub struct $name(pub [u8; $n]);
+  };
   (
     $(#[$attr:meta])*
     $name:ident, $n:literal
   ) => {
     $crate::cfg_codec! {
       {
-        $(#[$attr])*
-        #[derive($crate::type_id::TypeId)]
-        pub struct $name(pub [u8; $n]);
+        $crate::make_bytes!(
+          @struct {$(#[$attr])*} #[derive($crate::type_id::TypeId)] $name, $n
+        );
 
         $crate::impl_bytes!($name, $n);
       } else {
-        $(#[$attr])*
-        pub struct $name(pub [u8; $n]);
+        $crate::make_bytes!(@struct {$(#[$attr])*} $name, $n);
       }
     }
 
