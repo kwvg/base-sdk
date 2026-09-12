@@ -210,6 +210,11 @@ predicate callsCtEq(Function f) {
     mc.getEnclosingCallable() = f and
     mc.getIdentifier().getText() = "ct_eq"
   )
+  or
+  exists(PathExpr pe |
+    pe.getEnclosingCallable() = f and
+    pe.getPath().getSegment().getIdentifier().getText() = "ct_eq"
+  )
 }
 
 /**
