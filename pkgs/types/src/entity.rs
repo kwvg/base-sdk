@@ -368,51 +368,65 @@ macro_rules! derive_bytes {
 /// Declares a fixed-size byte newtype over `[u8; N]` with the `from_bytes` /
 /// `to_bytes` / `as_bytes` accessors.
 ///
+/// A `for[..]` prefix takes type parameters, held in a `PhantomData` beside
+/// the bytes, for a type that utilizes parameters for tagging without mutating
+/// the inner structure.
+///
 /// Invokes [`impl_bytes!`](crate::impl_bytes) and
 /// [`derive_bytes!`](crate::derive_bytes). A newtype that needs a validating
-/// constructor, a scheme tag, or its own trait set should define itself and
-/// invoke those macros manually.
+/// constructor or its own trait set should define itself and invoke those
+/// macros manually.
 #[macro_export]
 macro_rules! make_bytes {
-  (@struct {$($attr:tt)*} $(#[$derive:meta])? $name:ident, $n:literal) => {
+  (@struct [$($g:tt)*] {$($attr:tt)*} $(#[$derive:meta])? $name:ident $(<$($param:ident),+>)?, $n:expr) => {
     $($attr)*
     $(#[$derive])?
-    pub struct $name(pub [u8; $n]);
+    // A plain bag gets an empty `<>`, legal and invisible in rustdoc.
+    pub struct $name<$($g)*> {
+      inner: [u8; $n],
+      $(_marker: ::core::marker::PhantomData<fn() -> ($($param,)+)>,)?
+    }
   };
-  (
-    $(#[$attr:meta])*
-    $name:ident, $n:literal
-  ) => {
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr) => {
     $crate::cfg_codec! {
       {
         $crate::make_bytes!(
-          @struct {$(#[$attr])*} #[derive($crate::type_id::TypeId)] $name, $n
+          @struct [$($g)*] $attrs #[derive($crate::type_id::TypeId)] $name $(<$($param),+>)?, $n
         );
 
-        $crate::impl_bytes!($name, $n);
+        $crate::impl_bytes!(@parse [$($g)*] $name $(<$($param),+>)?, $n);
       } else {
-        $crate::make_bytes!(@struct {$(#[$attr])*} $name, $n);
+        $crate::make_bytes!(@struct [$($g)*] $attrs $name $(<$($param),+>)?, $n);
       }
     }
 
-    $crate::derive_bytes!($name, $n);
+    $crate::derive_bytes!(@order [$($g)*] $name $(<$($param),+>)?, $n, fwd);
 
-    impl $name {
+    impl<$($g)*> $name $(<$($param),+>)? {
       /// Wraps raw bytes without validation.
       pub const fn from_bytes(bytes: [u8; $n]) -> Self {
-        Self(bytes)
+        Self {
+          inner: bytes,
+          $(_marker: ::core::marker::PhantomData::<fn() -> ($($param,)+)>,)?
+        }
       }
 
       /// Returns the inner byte array.
       pub const fn to_bytes(self) -> [u8; $n] {
-        self.0
+        self.inner
       }
 
       /// Borrows the inner byte array.
       pub const fn as_bytes(&self) -> &[u8; $n] {
-        &self.0
+        &self.inner
       }
     }
+  };
+  ($(#[$attr:meta])* for[$($generic:tt)*] $name:ident<$($param:ident),+>, $($args:tt)*) => {
+    $crate::make_bytes!(@parse [$($generic)*] {$(#[$attr])*} $name<$($param),+>, $($args)*);
+  };
+  ($(#[$attr:meta])* $name:ident, $($args:tt)*) => {
+    $crate::make_bytes!(@parse [] {$(#[$attr])*} $name, $($args)*);
   };
 }
 
