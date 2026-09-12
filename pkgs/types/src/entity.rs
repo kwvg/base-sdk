@@ -372,10 +372,14 @@ macro_rules! derive_bytes {
 /// the bytes, for a type that utilizes parameters for tagging without mutating
 /// the inner structure.
 ///
-/// Invokes [`impl_bytes!`](crate::impl_bytes) and
-/// [`derive_bytes!`](crate::derive_bytes). A newtype that needs a validating
-/// constructor or its own trait set should define itself and invoke those
-/// macros manually.
+/// Two optional trailing words follow the width. The first is the hex order,
+/// `fwd` (the default) or `rev`. The second is whether the bag carries a wire
+/// image, `codec` (the default) or `nocodec`; the second cannot be given
+/// without the first.
+///
+/// Invokes `impl_bytes!` and [`derive_bytes!`](crate::derive_bytes). A newtype
+/// that needs a validating constructor or its own trait set should define
+/// itself and invoke those macros manually.
 #[macro_export]
 macro_rules! make_bytes {
   (@struct [$($g:tt)*] {$($attr:tt)*} $(#[$derive:meta])? $name:ident $(<$($param:ident),+>)?, $n:expr) => {
@@ -387,7 +391,7 @@ macro_rules! make_bytes {
       $(_marker: ::core::marker::PhantomData<fn() -> ($($param,)+)>,)?
     }
   };
-  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr) => {
+  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, codec) => {
     $crate::cfg_codec! {
       {
         $crate::make_bytes!(
@@ -399,8 +403,22 @@ macro_rules! make_bytes {
         $crate::make_bytes!(@struct [$($g)*] $attrs $name $(<$($param),+>)?, $n);
       }
     }
+  };
+  (@decl [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, nocodec) => {
+    $crate::cfg_codec! {
+      {
+        $crate::make_bytes!(
+          @struct [$($g)*] $attrs #[derive($crate::type_id::Unencodable)] $name $(<$($param),+>)?, $n
+        );
+      } else {
+        $crate::make_bytes!(@struct [$($g)*] $attrs $name $(<$($param),+>)?, $n);
+      }
+    }
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $rev:tt, $enc:ident) => {
+    $crate::make_bytes!(@decl [$($g)*] $attrs $name $(<$($param),+>)?, $n, $enc);
 
-    $crate::derive_bytes!(@order [$($g)*] $name $(<$($param),+>)?, $n, fwd);
+    $crate::derive_bytes!(@order [$($g)*] $name $(<$($param),+>)?, $n, $rev);
 
     impl<$($g)*> $name $(<$($param),+>)? {
       /// Wraps raw bytes without validation.
@@ -421,6 +439,12 @@ macro_rules! make_bytes {
         &self.inner
       }
     }
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr, $rev:tt) => {
+    $crate::make_bytes!(@parse [$($g)*] $attrs $name $(<$($param),+>)?, $n, $rev, codec);
+  };
+  (@parse [$($g:tt)*] $attrs:tt $name:ident $(<$($param:ident),+>)?, $n:expr) => {
+    $crate::make_bytes!(@parse [$($g)*] $attrs $name $(<$($param),+>)?, $n, fwd);
   };
   ($(#[$attr:meta])* for[$($generic:tt)*] $name:ident<$($param:ident),+>, $($args:tt)*) => {
     $crate::make_bytes!(@parse [$($generic)*] {$(#[$attr])*} $name<$($param),+>, $($args)*);
