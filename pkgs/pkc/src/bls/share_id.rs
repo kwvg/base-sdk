@@ -6,34 +6,12 @@
 
 //! Threshold participant identifier.
 
-use dash_types::derive_bytes;
-#[cfg(feature = "codec")]
-use dash_types::type_id::Unencodable;
+use dash_types::make_bytes;
 
 /// Threshold participant identifier length.
 pub const BLS_ID_LEN: usize = 32;
 
-/// Threshold participant identifier.
-#[cfg_attr(feature = "codec", derive(Unencodable))]
-pub struct BlsShareId {
-  inner: [u8; BLS_ID_LEN],
+make_bytes! {
+  /// Threshold participant identifier.
+  BlsShareId, BLS_ID_LEN, rev, nocodec
 }
-
-impl BlsShareId {
-  /// Wraps raw bytes.
-  pub const fn from_bytes(bytes: [u8; BLS_ID_LEN]) -> Self {
-    Self { inner: bytes }
-  }
-
-  /// Borrows the inner byte array.
-  pub const fn as_bytes(&self) -> &[u8; BLS_ID_LEN] {
-    &self.inner
-  }
-
-  /// Returns the inner byte array.
-  pub const fn into_bytes(self) -> [u8; BLS_ID_LEN] {
-    self.inner
-  }
-}
-
-derive_bytes!(BlsShareId, BLS_ID_LEN, rev);
