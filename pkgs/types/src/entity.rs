@@ -6,17 +6,24 @@
 
 //! Buffered codec implementation.
 
+#[cfg(feature = "codec")]
 use crate::codec::DecodeError;
+#[cfg(feature = "codec")]
 use crate::prelude::*;
 
+#[cfg(feature = "codec")]
 use bitcoin_consensus_encoding::{Decoder, Encoder};
 
+#[cfg(feature = "codec")]
 use core::convert::Infallible;
+#[cfg(feature = "codec")]
 use core::fmt;
 
+#[cfg(feature = "codec")]
 /// Maximum serialized object size (32 MiB).
 pub const MAX_SER_SIZE: usize = 0x0200_0000;
 
+#[cfg(feature = "codec")]
 /// An encoder that wraps a pre-built byte vector.
 #[derive(Clone)]
 pub struct VecEncoder {
@@ -24,6 +31,7 @@ pub struct VecEncoder {
   done: bool,
 }
 
+#[cfg(feature = "codec")]
 impl VecEncoder {
   /// Creates a new encoder wrapping the given bytes.
   pub fn new(data: Vec<u8>) -> Self {
@@ -31,6 +39,7 @@ impl VecEncoder {
   }
 }
 
+#[cfg(feature = "codec")]
 impl fmt::Debug for VecEncoder {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("VecEncoder")
@@ -40,6 +49,7 @@ impl fmt::Debug for VecEncoder {
   }
 }
 
+#[cfg(feature = "codec")]
 impl Encoder for VecEncoder {
   fn current_chunk(&self) -> &[u8] {
     if self.done {
@@ -59,6 +69,7 @@ impl Encoder for VecEncoder {
   }
 }
 
+#[cfg(feature = "codec")]
 /// A decoder that buffers all input and decodes in `end()`.
 ///
 /// Wraps types with complex sequential decode logic (conditional fields,
@@ -70,6 +81,7 @@ pub struct VecDecoder<T, E = Infallible> {
   decode_fn: fn(&mut &[u8]) -> Result<T, DecodeError<E>>,
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> VecDecoder<T, E> {
   /// Creates a new decoder with the given decode function and
   /// maximum buffer size.
@@ -82,6 +94,7 @@ impl<T, E> VecDecoder<T, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> fmt::Debug for VecDecoder<T, E> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("VecDecoder")
@@ -91,6 +104,7 @@ impl<T, E> fmt::Debug for VecDecoder<T, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> Clone for VecDecoder<T, E> {
   fn clone(&self) -> Self {
     Self {
@@ -101,6 +115,7 @@ impl<T, E> Clone for VecDecoder<T, E> {
   }
 }
 
+#[cfg(feature = "codec")]
 impl<T, E> Decoder for VecDecoder<T, E> {
   type Output = T;
   type Error = DecodeError<E>;
@@ -137,6 +152,7 @@ impl<T, E> Decoder for VecDecoder<T, E> {
 /// Stages through the growable [`VecEncoder`]/[`VecDecoder`] pair. For
 /// secret material use [`impl_stype!`](crate::impl_stype) instead, which is
 /// the same generator over the wiping fixed-width pair.
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! impl_type {
   (@parse [$($impl_generics:tt)*] $ty:ty, $max:expr, $err:ty) => {
@@ -179,6 +195,7 @@ macro_rules! impl_type {
 ///
 /// Staged through the growable [`VecEncoder`]. For a newtype whose contents
 /// are secret use [`impl_sbytes!`](crate::impl_sbytes).
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! impl_bytes {
   // Shared by `impl_bytes!` and `impl_sbytes!`, only the encoder pair differs.
@@ -262,6 +279,7 @@ macro_rules! make_bytes {
 /// `$max` bounds the `impl_type!` decoder buffer to the wrapped type's own
 /// maximum encoded length. For a secret wire image use
 /// [`dlgt_scodec!`](crate::dlgt_scodec).
+#[cfg(feature = "codec")]
 #[macro_export]
 macro_rules! dlgt_codec {
   // Shared by `dlgt_codec!` and `dlgt_scodec!`, only the encoder pair differs.
