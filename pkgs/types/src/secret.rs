@@ -312,6 +312,66 @@ macro_rules! impl_sbytes {
   };
 }
 
+/// The secret counterpart to [`derive_bytes!`](crate::derive_bytes), for a
+/// fixed-size byte newtype holding key material.
+///
+/// Emits `Drop`, `ZeroizeOnDrop`, `is_null`, the `AsRef` pair, and a redacting
+/// `Debug`/`Display`. `Zeroize`, `Clone` and `Eq`/`PartialEq` are left to the
+/// type: only it knows which fields are secret, and equality must be
+/// constant-time.
+///
+/// Withholds `Copy`, `Default`, `Ord`/`PartialOrd`/`Hash`, `From<Self> for
+/// [u8; N]` and the hex `serde` pair, each because it either escapes the wipe
+/// or reads the plaintext. Do *not* implement them.
+#[macro_export]
+macro_rules! derive_sbytes {
+  (@parse [$($g:tt)*] $ty:ty, $n:expr) => {
+    impl<$($g)*> ::core::ops::Drop for $ty {
+      fn drop(&mut self) {
+        <Self as $crate::__private::zeroize::Zeroize>::zeroize(self);
+      }
+    }
+
+    impl<$($g)*> $crate::__private::zeroize::ZeroizeOnDrop for $ty {}
+
+    impl<$($g)*> $ty {
+      /// Returns `true` when every byte is zero.
+      pub fn is_null(&self) -> bool {
+        use $crate::__private::subtle::ConstantTimeEq as _;
+        self.as_bytes().ct_eq(&[0u8; $n]).into()
+      }
+    }
+
+    impl<$($g)*> ::core::fmt::Debug for $ty {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        // `type_name` rather than `stringify!`, which cannot see the generics
+        $crate::qtypestr(f, ::core::any::type_name::<Self>())?;
+        f.write_str("(..)")
+      }
+    }
+
+    impl<$($g)*> ::core::fmt::Display for $ty {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Debug::fmt(self, f)
+      }
+    }
+
+    impl<$($g)*> ::core::convert::AsRef<[u8]> for $ty {
+      fn as_ref(&self) -> &[u8] { self.as_bytes() }
+    }
+
+    impl<$($g)*> ::core::convert::AsRef<[u8; $n]> for $ty {
+      fn as_ref(&self) -> &[u8; $n] { self.as_bytes() }
+    }
+  };
+  (for[$($generic:tt)*] $($args:tt)*) => {
+    $crate::derive_sbytes!(@parse [$($generic)*] $($args)*);
+  };
+  ($($args:tt)*) => {
+    $crate::derive_sbytes!(@parse [] $($args)*);
+  };
+}
+
 /// The secret counterpart to [`dlgt_codec!`](crate::dlgt_codec), for an
 /// operational type whose wire image is key material.
 ///
