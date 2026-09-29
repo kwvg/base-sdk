@@ -15,6 +15,22 @@ use hex_conservative::hex;
 /// BLS12-381 scalar field order r, big-endian.
 pub const GROUP_ORDER: [u8; 32] = hex!("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
 
+/// Negate a scalar below the group order, as `order - s`.
+///
+/// Builds the tweak that cancels a key without going through the field code
+/// under test.
+pub fn negate_scalar(s: &[u8; 32]) -> [u8; 32] {
+  let mut out = [0u8; 32];
+  let mut borrow = 0i16;
+
+  for i in (0..32).rev() {
+    let diff = i16::from(GROUP_ORDER[i]) - i16::from(s[i]) - borrow;
+    borrow = i16::from(diff < 0);
+    out[i] = diff.rem_euclid(256) as u8;
+  }
+  out
+}
+
 /// Fixed 32-byte IKMs for deterministic test keys (all 0x00, 0x01, 0x02, 0x03).
 pub const RSEED: [[u8; 32]; 4] = [[0u8; 32], [1u8; 32], [2u8; 32], [3u8; 32]];
 

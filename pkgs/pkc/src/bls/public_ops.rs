@@ -86,6 +86,15 @@ impl<S: BlsScheme> BlsPublicKey<S> {
     S::mul_tweak_pk(&self.0, tweak).map(Self::from_inner)
   }
 
+  /// Negate the point.
+  ///
+  /// # Errors
+  ///
+  /// Returns `InvalidPublicKey` when this key does not decode to a point.
+  pub fn negate(&self) -> Result<Self, BlsError> {
+    S::negate_pk(&self.0).map(Self::from_inner)
+  }
+
   /// Aggregate multiple public keys into one.
   ///
   /// # Errors

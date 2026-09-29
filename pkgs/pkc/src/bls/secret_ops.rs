@@ -109,6 +109,15 @@ impl<S: BlsScheme> BlsSecretKey<S> {
     S::mul_tweak_sk(&self.0, tweak).map(Self::from_inner)
   }
 
+  /// Negate the secret scalar, modulo the group order.
+  ///
+  /// # Errors
+  ///
+  /// Never returns an error; a key is never zero, so neither is its negation.
+  pub fn negate(&self) -> Result<Self, BlsError> {
+    S::negate_sk(&self.0).map(Self::from_inner)
+  }
+
   /// Derive the corresponding public key.
   pub fn public_key(&self) -> BlsPublicKey<S> {
     BlsPublicKey(S::derive_pk(&self.0))
@@ -213,7 +222,7 @@ type_cvrt!(for[S: BlsScheme] TryFrom<Fr> for BlsSecretKey<S>, BlsError, |scalar|
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
-  use crate::bls::tests::{GROUP_ORDER, RSEED};
+  use crate::bls::tests::{negate_scalar, GROUP_ORDER, RSEED};
   use crate::bls::{BlsError, BlsScChia, BlsScIetf};
 
   use dash_dev::{arr_from_hex, Corpus};
@@ -225,6 +234,7 @@ mod tests {
   enum Tweak {
     Add,
     Mul,
+    Neg,
   }
 
   impl Tweak {
@@ -232,6 +242,7 @@ mod tests {
       match self {
         Tweak::Add => sk.add_tweak(tweak).unwrap(),
         Tweak::Mul => sk.mul_tweak(tweak).unwrap(),
+        Tweak::Neg => sk.negate().unwrap(),
       }
     }
 
@@ -239,6 +250,7 @@ mod tests {
       match self {
         Tweak::Add => pk.add_tweak(tweak).unwrap(),
         Tweak::Mul => pk.mul_tweak(tweak).unwrap(),
+        Tweak::Neg => pk.negate().unwrap(),
       }
     }
   }
@@ -262,7 +274,7 @@ mod tests {
   #[rstest]
   #[case::chia(assert_tweak_agrees_on_both_sides::<BlsScChia>)]
   #[case::ietf(assert_tweak_agrees_on_both_sides::<BlsScIetf>)]
-  fn tweak_agrees_on_both_sides(#[case] assertion: fn(Tweak), #[values(Tweak::Add, Tweak::Mul)] op: Tweak) {
+  fn tweak_agrees_on_both_sides(#[case] assertion: fn(Tweak), #[values(Tweak::Add, Tweak::Mul, Tweak::Neg)] op: Tweak) {
     assertion(op);
   }
 
@@ -285,15 +297,7 @@ mod tests {
   /// from `aG` alone, so the sum has to be refused rather than handed back.
   fn assert_tweak_add_refuses_zero_sum<S: BlsScheme>() {
     let sk = BlsSecretKey::<S>::from_ikm(&RSEED[0]).unwrap();
-    let scalar = *sk.to_bytes();
-    let mut tweak = GROUP_ORDER;
-    let mut borrow = 0i16;
-
-    for i in (0..32).rev() {
-      let diff = i16::from(tweak[i]) - i16::from(scalar[i]) - borrow;
-      borrow = i16::from(diff < 0);
-      tweak[i] = diff.rem_euclid(256) as u8;
-    }
+    let tweak = negate_scalar(&sk.to_bytes());
 
     assert_eq!(sk.add_tweak(&tweak), Err(BlsError::InvalidTweak));
     // The point at infinity is no key either.
@@ -356,6 +360,36 @@ mod tests {
   #[case::chia(assert_tweak_mul_refuses_bad_factor::<BlsScChia>)]
   #[case::ietf(assert_tweak_mul_refuses_bad_factor::<BlsScIetf>)]
   fn tweak_mul_refuses_bad_factor(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_tweak_neg_is_order_minus_scalar<S: BlsScheme>() {
+    let sk = BlsSecretKey::<S>::from_ikm(&RSEED[0]).unwrap();
+
+    assert_eq!(*sk.negate().unwrap().to_bytes(), negate_scalar(&sk.to_bytes()));
+  }
+
+  #[rstest]
+  #[case::chia(assert_tweak_neg_is_order_minus_scalar::<BlsScChia>)]
+  #[case::ietf(assert_tweak_neg_is_order_minus_scalar::<BlsScIetf>)]
+  fn tweak_neg_is_order_minus_scalar(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_tweak_neg_twice_is_identity<S: BlsScheme>() {
+    let sk = BlsSecretKey::<S>::from_ikm(&RSEED[0]).unwrap();
+    let negated = sk.negate().unwrap();
+
+    assert_ne!(negated, sk);
+    assert_eq!(negated.negate().unwrap(), sk);
+    assert_ne!(sk.public_key().negate().unwrap(), sk.public_key());
+    assert_eq!(sk.public_key().negate().unwrap().negate().unwrap(), sk.public_key());
+  }
+
+  #[rstest]
+  #[case::chia(assert_tweak_neg_twice_is_identity::<BlsScChia>)]
+  #[case::ietf(assert_tweak_neg_twice_is_identity::<BlsScIetf>)]
+  fn tweak_neg_twice_is_identity(#[case] assertion: fn()) {
     assertion();
   }
 

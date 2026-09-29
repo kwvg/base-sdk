@@ -62,9 +62,6 @@ extensions:
       # Recoverable signatures
       - ["Ecdsa", "SecretKey", "sign_recoverable"]        # Sign
       - ["Ecdsa", "PublicKey", "recover"]                 # Get public key from a signature
-      # Tweaking
-      - ["Ecdsa", "SecretKey", "negate"]                  # Flip the scalar
-      - ["Ecdsa", "PublicKey", "negate"]                  # Flip the point
   - addsTo:
       pack: base-sdk/codeql-rust
       extensible: armLacks
@@ -73,8 +70,10 @@ extensions:
       # Tweaking
       - ["Eddsa", "SecretKey", "add_tweak"]               # Curve properties prevent this, see SLIP-0010
       - ["Eddsa", "SecretKey", "mul_tweak"]               # Curve properties prevent this, see SLIP-0010
+      - ["Eddsa", "SecretKey", "negate"]                  # Curve properties prevent this, see SLIP-0010
       - ["Eddsa", "PublicKey", "add_tweak"]               # Curve properties prevent this, see SLIP-0010
       - ["Eddsa", "PublicKey", "mul_tweak"]               # Curve properties prevent this, see SLIP-0010
+      - ["Eddsa", "PublicKey", "negate"]                  # Curve properties prevent this, see SLIP-0010
   - addsTo:
       pack: base-sdk/codeql-rust
       extensible: armLacksTrait
