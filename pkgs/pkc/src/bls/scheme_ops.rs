@@ -255,10 +255,11 @@ pub trait BlsScheme: BlsSchemeId + sealed::Sealed + Sized {
   ///
   /// Returns `InvalidTweak` when `tweak` is not below the group order or the
   /// sum is zero, which is the tweak that is this scalar's additive inverse.
+  /// Returns `InvalidSecretKey` when `sk` is zero, which a key never is.
   fn add_tweak_sk(sk: &Self::InnerSk, tweak: &[u8; 32]) -> Result<Self::InnerSk, BlsError> {
     let scalar = tweak_scalar(tweak)?;
     let bytes = Zeroizing::new(Self::sk_to_bytes(sk));
-    let mut current = Fr::from_bendian_reduce(&bytes)?;
+    let mut current = Fr::from_bendian_reduce(&bytes).map_err(|_| BlsError::InvalidSecretKey)?;
     let mut sum = current + scalar;
     current.zeroize();
 

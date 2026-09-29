@@ -369,4 +369,20 @@ mod tests {
     let res = BlsScChia::secure_verify_aggregates(&sig, &MSG_DEADBEEF, &[&real_pk, &inf_pk]);
     assert!(matches!(res, Err(BlsError::InvalidPublicKey)));
   }
+
+  #[test]
+  fn tweaks_refuse_a_zero_scalar() {
+    // A key never holds zero, but the backend type can; the tweak has to name
+    // the key rather than leak the field's own error.
+    let zero = blst::blst_scalar::default();
+    assert_eq!(
+      BlsScChia::add_tweak_sk(&zero, &[1; 32]),
+      Err(BlsError::InvalidSecretKey)
+    );
+    assert_eq!(
+      BlsScChia::mul_tweak_sk(&zero, &[1; 32]),
+      Err(BlsError::InvalidSecretKey)
+    );
+    assert_eq!(BlsScChia::negate_sk(&zero), Err(BlsError::InvalidSecretKey));
+  }
 }
