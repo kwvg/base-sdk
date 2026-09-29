@@ -7,8 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `Bls{Public,Secret}Key::negate`, `BlsSecretKey::mul_tweak`, `EcdsaPublicKey::negate` and `EcdsaSecretKey::mul_tweak`.
+
 ### Changed
 
+- `EcdsaSecretKey::negate` takes `&self` and returns the negated key as `Result<Self, EcdsaError>` instead of negating
+  in place and returning `()`, matching the other tweaks. A call that drops the return value still compiles, warned of
+  only by `unused_must_use`, but leaves the key as it was. Callers must bind the result, e.g. `sk = sk.negate()?`.
 - The following types serialize as raw bytes for machine-readable formats, following changes to `dash-types` and
   `dash-num`. JSON and other human-readable formats are unaffected by this change.
 
