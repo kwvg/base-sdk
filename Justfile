@@ -7,6 +7,8 @@ python := if os() == "windows" { "python" } else { "python3" }
 export RUSTDOCFLAGS := "-D warnings"
 export RUSTFLAGS := "-D warnings"
 
+mod cbld
+
 nextest := "cargo nextest run --config-file maint/nextest.toml --profile=ci"
 
 [private]
