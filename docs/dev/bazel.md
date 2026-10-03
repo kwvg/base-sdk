@@ -23,3 +23,12 @@ or to a manifest it lists.
 `--build_profile=debug` (the default) and `--build_profile=release` select flags matching `[profile.dev]` and
 `[profile.release]` in the workspace `Cargo.toml`. The workspace lints are restated in `defs.bzl`, since `rules_rust`
 does not read `[lints]`.
+
+## Linting
+
+```bash
+python3 maint/lint/lint_bazel.py
+```
+
+formats and lints the Starlark with `buildifier`. The `apply` verb rewrites what the branch changed, and `apply-all`
+rewrites every file.
