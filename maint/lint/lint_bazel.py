@@ -49,6 +49,7 @@ ANCHOR = "dash-meta-bazel"
 # Label of every crate Bazel builds.
 ANCHOR_TARGETS = (
   "//pkgs/num:dash-num",
+  "//pkgs/pkc:dash-pkc",
   "//pkgs/pow:dash-pow",
   "//pkgs/types:dash-types",
 )

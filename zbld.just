@@ -43,9 +43,9 @@ p2p_core:
 params:
     @echo "error: unsupported crate 'params'" >&2; exit 1
 
-[doc('Unsupported under Bazel')]
-pkc:
-    @echo "error: unsupported crate 'pkc'" >&2; exit 1
+[doc('Build dash-pkc')]
+pkc: ramdisk
+    {{ build }} //pkgs/pkc:dash-pkc
 
 [doc('Build dash-pow')]
 pow: ramdisk

@@ -96,7 +96,7 @@ jobs:
         run: bazel --output_user_root="${PWD}/.cache/bazel" mod deps --lockfile_mode=error
 
       - name: Build
-        run: just zbld::pow zbld::types zbld::num
+        run: just zbld::pow zbld::types zbld::num zbld::pkc
 
       - name: Test the C++ toolchain
         run: |

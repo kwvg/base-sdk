@@ -16,8 +16,8 @@ just cbld::pow   # cargo build -p dash-pow --features full
 just zbld::pow   # the same crate under Bazel
 ```
 
-`zbld` covers `pow`, `types` and `num`. The other crates answer `unsupported crate`. Both modules build every crate with
-its `full` feature set, so the two systems build the same code.
+`zbld` covers `pow`, `types`, `num` and `pkc`. The other crates answer `unsupported crate`. Both modules build every
+crate with its `full` feature set, so the two systems build the same code.
 
 Bazel keeps all of its state in `.cache/bazel`, never in the home directory of the host. This is enforced by the
 `zbld` recipes, which are the supported way to invoke it.

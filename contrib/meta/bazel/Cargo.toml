@@ -12,6 +12,7 @@ rust-version.workspace = true
 
 [dependencies]
 dash-num = { version = "0.1.0-beta", path = "../../../pkgs/num", features = ["full"] }
+dash-pkc = { version = "0.1.0-beta", path = "../../../pkgs/pkc", features = ["full"] }
 dash-pow = { version = "0.0.0", path = "../../../pkgs/pow", features = ["full"] }
 dash-types = { version = "0.1.0-beta", path = "../../../pkgs/types", features = ["full"] }
 dash-types-marker = { version = "0.1.0-beta", path = "../../../pkgs/types/marker" }
