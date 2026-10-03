@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//:defs.bzl", "PROFILE_RUSTC_FLAGS", "RUSTC_LINTS")
+
+package(default_visibility = ["//visibility:public"])
+
+# `crate_features` restates the manifest; keep the two equal.
+rust_library(
+    name = "dash-pow",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = [
+        "aes_hw",
+        "default",
+        "full",
+        "simd",
+        "std",
+    ],
+    crate_name = "dash_pow",
+    edition = "2021",
+    rustc_flags = RUSTC_LINTS + PROFILE_RUSTC_FLAGS,
+)

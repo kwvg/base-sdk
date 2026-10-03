@@ -10,6 +10,7 @@
 
 compose [
   (cxx.forTargets crossTargets)
+  mods.bazel
   mods.codeql
   mods.cxx
   mods.nixpkgs

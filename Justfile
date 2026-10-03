@@ -44,3 +44,8 @@ test:
     cargo test --doc --workspace --features full
     cargo doc --workspace --no-deps --features full
     cargo bench --workspace --features full --no-run
+
+# The lock is written by the devshell's Bazel, never the host's.
+[doc('Regenerate MODULE.bazel.lock through the Nix devshell')]
+zglock:
+    nix develop ./contrib/nix#dev --command bazel --output_user_root={{ justfile_directory() }}/.cache/bazel mod deps --lockfile_mode=update

@@ -87,6 +87,7 @@ in
     ;
 
   mods = lib.mapAttrs (name: m: m // { _name = name; }) {
+    bazel = import ../mods/bazel.nix { inherit pkgs; };
     codeql = import ../mods/codeql.nix { inherit pkgs unstable; };
     cxx = cxx.compiler;
     nixpkgs = import ../mods/nixpkgs.nix { inherit pkgs; };

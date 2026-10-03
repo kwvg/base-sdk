@@ -16,3 +16,7 @@ trim_trailing_whitespace = false
 
 [Justfile]
 indent_size = 4
+
+# buildifier's canonical format is 4 spaces and cannot be configured.
+[{*.bzl,BUILD.bazel,MODULE.bazel}]
+indent_size = 4

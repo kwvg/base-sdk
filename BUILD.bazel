@@ -1,0 +1,25 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+
+# Selects the flag set in `defs.bzl`, which mirrors the Cargo profiles. Bazel's
+# own `-c opt` and `-c dbg` cannot express those flags.
+string_flag(
+    name = "build_profile",
+    build_setting_default = "debug",
+    values = [
+        "debug",
+        "release",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "build_profile_debug",
+    flag_values = {":build_profile": "debug"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "build_profile_release",
+    flag_values = {":build_profile": "release"},
+    visibility = ["//visibility:public"],
+)

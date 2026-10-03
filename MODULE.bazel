@@ -1,0 +1,161 @@
+# Bazel module for `just zbld`. Bazel 9 is bzlmod only; there is no WORKSPACE.
+
+module(
+    name = "dash_sdk",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_rust", version = "0.73.0")
+
+# Mirrors `rust-toolchain.toml`. `.bazelrc` must also select the channel.
+RUST_NIGHTLY = "nightly/2026-02-01"
+
+# Digests from the `.sha256` sidecars at static.rust-lang.org/dist. A key
+# missing here makes the fetch skip its integrity check, so every artifact
+# the toolchains below fetch must be listed.
+RUST_SHA256S = {
+    "2026-02-01/cargo-nightly-aarch64-apple-darwin.tar.xz": "d44376a1e54a97b244b69483604602c0cece2b3a09ebd5a7499182f7ee0c23cb",
+    "2026-02-01/clippy-nightly-aarch64-apple-darwin.tar.xz": "1e32a5a31623b9fbf4eae896dd4ef009832d651f01a202fce64fa8ca668bfaf4",
+    "2026-02-01/llvm-tools-nightly-aarch64-apple-darwin.tar.xz": "45d9b7f97a085f112555508d732f6f5fc309c3d42e54520b08790b99c5b2ff8e",
+    "2026-02-01/rust-std-nightly-aarch64-apple-darwin.tar.xz": "b4273f0f9f2716c6fda95ff3a64237b0b02733de1fc870aebcaadd0cfeeb1479",
+    "2026-02-01/rustc-nightly-aarch64-apple-darwin.tar.xz": "a8ee4d227c01be9fa1e6bf0dd757dd7dc3b04994b08cf00dc838e68497c18349",
+    "2026-02-01/cargo-nightly-aarch64-unknown-linux-gnu.tar.xz": "c46ed1ec1d2c226ecacf86d1ec5b17b5f91d3668c8e58c40d29d38a2825b5221",
+    "2026-02-01/clippy-nightly-aarch64-unknown-linux-gnu.tar.xz": "3a2fa0d10f48c36af7951e34b3d78accda3821ebb464b778c18329003c87fccf",
+    "2026-02-01/llvm-tools-nightly-aarch64-unknown-linux-gnu.tar.xz": "bade74408206e182e3a3fc2eeb51ab8dae5adc4c173ff74a2e4ad68b01ec4759",
+    "2026-02-01/rust-std-nightly-aarch64-unknown-linux-gnu.tar.xz": "36ba4b6f63a015423e314359bee97bb66193603b216984bc7b10a4da3809d619",
+    "2026-02-01/rustc-nightly-aarch64-unknown-linux-gnu.tar.xz": "be688f082d82588cf92bf65e279c970f81ea75b13af7f3857a07a832bc6e50c9",
+    "2026-02-01/cargo-nightly-x86_64-apple-darwin.tar.xz": "22a67c1ac511e3383114396f8671719ea14f2a96e9a2fec08443608534519dab",
+    "2026-02-01/clippy-nightly-x86_64-apple-darwin.tar.xz": "0d2f28dcf9a55adf48681c0b03fce2897d5919b7ae2a262a6dbe4152ef9198ca",
+    "2026-02-01/llvm-tools-nightly-x86_64-apple-darwin.tar.xz": "ec7eda16fa943104fcb4713560921da567dda1db8e5b2fbc4881b82ebf29c1e2",
+    "2026-02-01/rust-std-nightly-x86_64-apple-darwin.tar.xz": "385ac0f16b24c0a1d4ba560b4e3138bcfc13e2bccb75e7af1055c709d11b8e6a",
+    "2026-02-01/rustc-nightly-x86_64-apple-darwin.tar.xz": "d86a16e916c7e829e16c9b8b810f1436afd9e41e24e20be9e19c2c911282455c",
+    "2026-02-01/cargo-nightly-x86_64-unknown-linux-gnu.tar.xz": "432b9fb8a801ca703b4d77a8b3daf912239f46a3e69f99e3d2be8ca05b21561e",
+    "2026-02-01/clippy-nightly-x86_64-unknown-linux-gnu.tar.xz": "48bb0bdf699665c8ef643bde7e5d28df211662aac883dd1876b4dd5ee3564b05",
+    "2026-02-01/llvm-tools-nightly-x86_64-unknown-linux-gnu.tar.xz": "d3e361aae313666e174968fa11935b2ca06762ec66f676d5df0cc0bcfea1488a",
+    "2026-02-01/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz": "c5c0ce572e9b6cd9956308cc3f8d5beedfe10ae87e5e965cbe21007cb03e98dd",
+    "2026-02-01/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz": "72f3d9ac47710773931732204e8841240e348c8e63771d0360ddef11afe350ed",
+}
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+
+# An empty `versions` stops rules_rust registering its unhashed defaults.
+# Nothing here needs rustfmt, rust-analyzer or the wasm targets.
+rust.toolchain(
+    extra_target_triples = [],
+    versions = [],
+)
+
+# One set per supported host. `target_compatible_with` is required, or the
+# toolchain claims every target. An empty `rustfmt_version` drops rustfmt.
+rust.repository_set(
+    name = "rust_macos_aarch64",
+    edition = "2021",
+    exec_triple = "aarch64-apple-darwin",
+    rustfmt_version = "",
+    sha256s = RUST_SHA256S,
+    target_compatible_with = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:osx",
+    ],
+    target_triple = "aarch64-apple-darwin",
+    versions = [RUST_NIGHTLY],
+)
+rust.repository_set(
+    name = "rust_macos_x86_64",
+    edition = "2021",
+    exec_triple = "x86_64-apple-darwin",
+    rustfmt_version = "",
+    sha256s = RUST_SHA256S,
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:osx",
+    ],
+    target_triple = "x86_64-apple-darwin",
+    versions = [RUST_NIGHTLY],
+)
+rust.repository_set(
+    name = "rust_linux_aarch64",
+    edition = "2021",
+    exec_triple = "aarch64-unknown-linux-gnu",
+    rustfmt_version = "",
+    sha256s = RUST_SHA256S,
+    target_compatible_with = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+    target_triple = "aarch64-unknown-linux-gnu",
+    versions = [RUST_NIGHTLY],
+)
+rust.repository_set(
+    name = "rust_linux_x86_64",
+    edition = "2021",
+    exec_triple = "x86_64-unknown-linux-gnu",
+    rustfmt_version = "",
+    sha256s = RUST_SHA256S,
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    target_triple = "x86_64-unknown-linux-gnu",
+    versions = [RUST_NIGHTLY],
+)
+
+# Apple targets every host can cross-compile to. Each needs its `rust-std`
+# hashed in `RUST_SHA256S`.
+APPLE_TARGET_TRIPLES = {
+    "aarch64-apple-darwin": [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:osx",
+    ],
+    "x86_64-apple-darwin": [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:osx",
+    ],
+}
+
+# Each host also gets every Apple triple other than its own. A follow-up tag
+# may only add a target triple to an existing set.
+[
+    rust.repository_set(
+        name = name,
+        target_compatible_with = constraints,
+        target_triple = triple,
+    )
+    for name, host_triple in {
+        "rust_linux_aarch64": "aarch64-unknown-linux-gnu",
+        "rust_linux_x86_64": "x86_64-unknown-linux-gnu",
+        "rust_macos_aarch64": "aarch64-apple-darwin",
+        "rust_macos_x86_64": "x86_64-apple-darwin",
+    }.items()
+    for triple, constraints in APPLE_TARGET_TRIPLES.items()
+    if triple != host_triple
+]
+
+use_repo(
+    rust,
+    "rust_linux_aarch64__aarch64-apple-darwin__nightly",
+    "rust_linux_aarch64__aarch64-unknown-linux-gnu__nightly",
+    "rust_linux_aarch64__x86_64-apple-darwin__nightly",
+    "rust_linux_x86_64__aarch64-apple-darwin__nightly",
+    "rust_linux_x86_64__x86_64-apple-darwin__nightly",
+    "rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly",
+    "rust_macos_aarch64__aarch64-apple-darwin__nightly",
+    "rust_macos_aarch64__x86_64-apple-darwin__nightly",
+    "rust_macos_x86_64__aarch64-apple-darwin__nightly",
+    "rust_macos_x86_64__x86_64-apple-darwin__nightly",
+)
+
+register_toolchains(
+    "@rust_linux_aarch64__aarch64-apple-darwin__nightly//:toolchain",
+    "@rust_linux_aarch64__aarch64-unknown-linux-gnu__nightly//:toolchain",
+    "@rust_linux_aarch64__x86_64-apple-darwin__nightly//:toolchain",
+    "@rust_linux_x86_64__aarch64-apple-darwin__nightly//:toolchain",
+    "@rust_linux_x86_64__x86_64-apple-darwin__nightly//:toolchain",
+    "@rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly//:toolchain",
+    "@rust_macos_aarch64__aarch64-apple-darwin__nightly//:toolchain",
+    "@rust_macos_aarch64__x86_64-apple-darwin__nightly//:toolchain",
+    "@rust_macos_x86_64__aarch64-apple-darwin__nightly//:toolchain",
+    "@rust_macos_x86_64__x86_64-apple-darwin__nightly//:toolchain",
+)

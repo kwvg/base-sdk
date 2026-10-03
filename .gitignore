@@ -194,3 +194,7 @@ docs/.site/
 
 # Debug logs
 *.log
+
+# Bazel
+/bazel-*
+.bazelrc.user
