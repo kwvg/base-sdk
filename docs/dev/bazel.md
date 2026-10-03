@@ -9,11 +9,21 @@ same pinned toolchain on every host. It supports only the nightly pinned in `rus
 
 ## Building
 
-Bazel keeps all of its state in `.cache/bazel`, never in the home directory of the host.
+`just` has a module for each build system, with one recipe per crate.
 
 ```bash
-bazel --output_user_root="${PWD}/.cache/bazel" build //pkgs/pow:dash-pow
+just cbld::pow   # cargo build -p dash-pow --features full
+just zbld::pow   # the same crate under Bazel
 ```
+
+`zbld` covers `pow`. The other crates answer `unsupported crate`. Both modules build every crate with its `full` feature
+set, so the two systems build the same code.
+
+Bazel keeps all of its state in `.cache/bazel`, never in the home directory of the host. This is enforced by the
+`zbld` recipes, which are the supported way to invoke it.
+
+On macOS, `zbld` also mounts a 1 GiB RAM disk at `/Volumes/bsdk-sandbox` for the sandbox. Staging thousands of input
+links per action is slow on the journaled HFS+ volumes external drives often carry. `just zbld::eject` detaches it.
 
 `just zglock` regenerates `MODULE.bazel.lock` through the devshell, and should follow any change to `MODULE.bazel`
 or to a manifest it lists.
@@ -50,4 +60,4 @@ First-party crates restate their features in `crate_features`.
 
 1. Add a `BUILD.bazel` beside its manifest, copying a sibling, with `crate_features` set to its `full` features.
 2. Add the crate to the dependencies of `contrib/meta/bazel/Cargo.toml` and its manifest to `MODULE.bazel`.
-3. Run `just zglock`.
+3. Add a `zbld` recipe, and run `just zglock`.

@@ -8,6 +8,7 @@ export RUSTDOCFLAGS := "-D warnings"
 export RUSTFLAGS := "-D warnings"
 
 mod cbld
+mod zbld
 
 nextest := "cargo nextest run --config-file maint/nextest.toml --profile=ci"
 

@@ -1,0 +1,102 @@
+name: Bazel
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - .bazelrc
+      - BUILD.bazel
+      - Cargo.lock
+      - Cargo.toml
+      - Justfile
+      - MODULE.bazel
+      - MODULE.bazel.lock
+      - cbld.just
+      - contrib/meta/**
+      - contrib/nix/**
+      - defs.bzl
+      - maint/lint/lint_bazel.py
+      - patches/**
+      - pkgs/**
+      - platforms/**
+      - zbld.just
+      - .github/workflows/bazel.yml
+  pull_request:
+    paths:
+      - .bazelrc
+      - BUILD.bazel
+      - Cargo.lock
+      - Cargo.toml
+      - Justfile
+      - MODULE.bazel
+      - MODULE.bazel.lock
+      - cbld.just
+      - contrib/meta/**
+      - contrib/nix/**
+      - defs.bzl
+      - maint/lint/lint_bazel.py
+      - patches/**
+      - pkgs/**
+      - platforms/**
+      - zbld.just
+      - .github/workflows/bazel.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bazel:
+    name: ${{ matrix.os }} (bazel)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, macos-latest]
+
+    defaults:
+      run:
+        shell: nix develop ./contrib/nix#dev --command bash -eo pipefail {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: |
+            extra-substituters = https://dashpay-base-sdk.cachix.org
+            extra-trusted-public-keys = dashpay-base-sdk.cachix.org-1:TAoDyYL2e60lUEG8n10gvIZmujM5rJAhaG613fNfOWI=
+
+      - name: Cache Nix
+        uses: cachix/cachix-action@v17
+        with:
+          name: dashpay-base-sdk
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipAddingSubstituter: true
+
+      # Keyed on the lock, which decides the toolchains and crates fetched.
+      - name: Cache Bazel
+        uses: actions/cache@v5
+        with:
+          path: .cache/bazel
+          key: bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}-${{ github.sha }}
+          restore-keys: |
+            bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock') }}-
+            bazel-${{ runner.os }}-${{ runner.arch }}-
+
+      # Regenerate a stale lock with `just zglock`.
+      - name: Check the lock
+        run: bazel --output_user_root="${PWD}/.cache/bazel" mod deps --lockfile_mode=error
+
+      - name: Build
+        run: just zbld::pow
+
+      - name: Check the Bazel files
+        run: python3 maint/lint/lint_bazel.py
