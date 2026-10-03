@@ -15,6 +15,7 @@ let
   cxx = import ../mods/cxx.nix {
     inherit pkgs lib;
     xcodeSdk = import ../mods/xcode_sdk.nix { inherit pkgs; };
+    mingwSysroot = import ../mods/mingw_sysroot.nix { inherit pkgs; };
   };
 
   rsComponents = (lib.importTOML (root + "/rust-toolchain.toml")).toolchain.components;

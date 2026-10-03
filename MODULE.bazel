@@ -203,23 +203,44 @@ macos_sdk = use_repo_rule("//platforms:sdk.bzl", "macos_sdk")
 
 macos_sdk(name = "macos_sdk")
 
+# The same for the MinGW-w64 sysroot, with winpthreads.
+mingw_sysroot = use_repo_rule("//platforms:mingw.bzl", "mingw_sysroot")
+
+mingw_sysroot(name = "mingw_sysroot")
+
 # 1.8.0 picks link flags from the exec and target platforms together, so a
-# Linux host targeting Darwin gets ELF flags. The patch keys on the target.
+# Linux host targeting Darwin gets ELF flags. The first patch keys on the
+# target. The second teaches it a `windows-x86_64` target, which it lacks.
 single_version_override(
     module_name = "toolchains_llvm",
     patch_strip = 1,
-    patches = ["//patches:toolchains_llvm-darwin-link-flags.patch"],
+    patches = [
+        "//patches:toolchains_llvm-darwin-link-flags.patch",
+        "//patches:toolchains_llvm-windows-target.patch",
+    ],
+)
+
+# The C++ rules decide a binary's file name from the toolchain, which this
+# version names for Linux and macOS only.
+single_version_override(
+    module_name = "rules_cc",
+    patch_strip = 1,
+    patches = ["//patches:rules_cc-mingw-artifact-names.patch"],
 )
 
 llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
 llvm.toolchain(
+    # The MinGW libstdc++ is built on mcfgthread, so C++ links it as well.
+    extra_link_libs = {"windows-x86_64": ["-lmcfgthread"]},
     # 20.1.8 has no x86_64 macOS archive.
     llvm_version = "20.1.7",
     # A Linux host has no Darwin libc++ to link statically; the SDK has one.
+    # MinGW has no libc++ at all, so its libstdc++ comes from the sysroot.
     stdlib = {
         "": "builtin-libc++",
         "darwin-aarch64": "libc++",
         "darwin-x86_64": "libc++",
+        "windows-x86_64": "stdc++",
     },
 )
 
@@ -230,6 +251,10 @@ llvm.sysroot(
         "darwin-aarch64",
         "darwin-x86_64",
     ],
+)
+llvm.sysroot(
+    label = "@mingw_sysroot//:sysroot",
+    targets = ["windows-x86_64"],
 )
 use_repo(llvm, "llvm_toolchain")
 

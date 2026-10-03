@@ -83,13 +83,20 @@ if command -v bazel > /dev/null && command -v just > /dev/null; then
     status=1
   fi
 
-  # Checked by the architecture in the binary, as a cross build that quietly
-  # produced the host's would still exit 0.
-  probe="${root}/bazel-bin/contrib/meta/cxxtest/cxxtest"
-  for slice in macos_arm64:arm64 macos_x86_64:x86_64; do
-    platform="${slice%%:*}" arch="${slice##*:}"
+  # Checked by the format in the binary, as a cross build that quietly
+  # produced the host's would still exit 0. The Windows binary carries its
+  # suffix, as the MinGW linker adds one.
+  for slice in \
+    "macos_arm64|cxxtest|Mach-O 64-bit arm64 executable" \
+    "macos_x86_64|cxxtest|Mach-O 64-bit x86_64 executable" \
+    "windows_x86_64|cxxtest.exe|PE32+ executable*x86-64";
+  do
+    IFS='|' read -r platform binary want <<< "${slice}"
+    probe="${root}/bazel-bin/contrib/meta/cxxtest/${binary}"
+    rm -f -- "${probe}"
+    # shellcheck disable=SC2053
     if (cd "${root}" && just zbld::cxx "${platform}" > /dev/null 2>&1) &&
-      [[ "$(file -b "${probe}")" == *"Mach-O 64-bit ${arch} executable"* ]]; then
+      [[ "$(file -b "${probe}")" == *${want}* ]]; then
       say "bazel ${platform}" cpp "$(file -b "${probe}" | cut -d, -f1)"
     else
       say "bazel ${platform}" cpp FAILED

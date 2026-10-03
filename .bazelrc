@@ -25,8 +25,10 @@ build --reuse_sandbox_directories
 # a plain shell share one action cache.
 build --action_env=PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
-# Read by `//platforms:sdk.bzl`; listed so it enters the cache key.
+# Read by `//platforms:sdk.bzl` and `//platforms:mingw.bzl`; listed so they
+# enter the cache key.
 common --repo_env=MACOS_SDK_SYSROOT
+common --repo_env=MINGW_SYSROOT
 
 build --verbose_failures
 

@@ -1,0 +1,75 @@
+diff --git a/toolchain/cc_toolchain_config.bzl b/toolchain/cc_toolchain_config.bzl
+--- a/toolchain/cc_toolchain_config.bzl
++++ b/toolchain/cc_toolchain_config.bzl
+@@ -198,6 +198,15 @@ def cc_toolchain_config(
+             "unknown",
+             None,
+         ),
++        "windows-x86_64": (
++            "clang-x86_64-windows",
++            "x64_windows",
++            "mingw",
++            "clang",
++            "mingw",
++            "mingw",
++            None,
++        ),
+         "wasip1-wasm32": (
+             "clang-wasm32",
+             "wasm32",
+@@ -379,6 +388,9 @@ def cc_toolchain_config(
+     elif target_arch in ["wasm32", "wasm64"]:
+         # lld is invoked as wasm-ld for WebAssembly targets.
+         use_libtool = False
++    elif target_os == "windows":
++        # lld speaks the MinGW flavor, which has none of the ELF flags below.
++        use_libtool = False
+     else:
+         link_flags.extend([
+             "-Wl,--build-id=md5",
+diff --git a/toolchain/internal/common.bzl b/toolchain/internal/common.bzl
+--- a/toolchain/internal/common.bzl
++++ b/toolchain/internal/common.bzl
+@@ -21,6 +21,7 @@ SUPPORTED_TARGETS = [
+     ("linux", "riscv64"),
+     ("darwin", "x86_64"),
+     ("darwin", "aarch64"),
++    ("windows", "x86_64"),
+     ("none", "riscv32"),
+     ("none", "riscv64"),
+     ("none", "wasm32"),
+@@ -157,7 +158,7 @@ def os_from_rctx(rctx):
+ 
+ def os_bzl(os):
+     # Return the OS string as used in bazel platform constraints.
+-    return {"darwin": "osx", "linux": "linux", "none": "none", "wasip1": "wasi"}[os]
++    return {"darwin": "osx", "linux": "linux", "none": "none", "wasip1": "wasi", "windows": "windows"}[os]
+ 
+ def arch(rctx):
+     arch = rctx.attr.exec_arch
+diff --git a/toolchain/internal/configure.bzl b/toolchain/internal/configure.bzl
+--- a/toolchain/internal/configure.bzl
++++ b/toolchain/internal/configure.bzl
+@@ -497,6 +497,7 @@ def _cc_toolchain_str(
+         "wasm64": "wasm64-unknown-unknown",
+         "wasip1-wasm32": "wasm32-wasip1",
+         "wasip1-wasm64": "wasm64-wasip1",
++        "windows-x86_64": "x86_64-w64-mingw32",
+     }[target_pair]
+ 
+     target_toolchain_root = toolchain_info.toolchain_root
+@@ -575,6 +576,14 @@ def _cc_toolchain_str(
+             _join(sysroot_prefix, "/usr/include"),
+             _join(sysroot_prefix, "/System/Library/Frameworks"),
+         ])
++    elif target_os == "windows":
++        # A MinGW sysroot holds its headers beside the compiler's own, so the
++        # directories are named whole.
++        cxx_builtin_include_directories.extend([
++            _join(sysroot_prefix, "/include"),
++            _join(sysroot_prefix, "/lib/gcc"),
++            _join(sysroot_prefix, "/x86_64-w64-mingw32/include"),
++        ])
+     elif target_os == "none" or target_os == "wasip1":
+         if sysroot_prefix:
+             cxx_builtin_include_directories.extend([

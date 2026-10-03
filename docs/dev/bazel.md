@@ -85,3 +85,18 @@ just zbld::cxx macos_x86_64   # cross-build it for another macOS slice
 ```
 
 `contrib/nix/smoke_test.sh` builds both macOS slices, and checks the architecture of what they produce.
+
+### Windows
+
+The Windows target is `x86_64-w64-mingw32`, linked by `lld` against MinGW-w64 with winpthreads, the same runtime the
+cross drivers in [Cross Compilation](./cross_compilation.md) use. The devshell hands over a merged sysroot through
+`MINGW_SYSROOT`. The sysroot carries `libstdc++` from the cross GCC, which is built on mcfgthread, so C++ links
+`-lmcfgthread` as the drivers do.
+
+```bash
+just zbld::cxx windows_x86_64   # cross-build it for Windows
+```
+
+`toolchains_llvm` has no Windows target and `rules_cc` names MinGW binaries without `.exe`, so `patches/` carries a fix
+for each. The probe is built but never run, as no Windows host is available. Rust has no Windows toolchain under Bazel
+yet.

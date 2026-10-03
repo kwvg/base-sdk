@@ -4,6 +4,7 @@
   pkgs,
   lib,
   xcodeSdk ? null,
+  mingwSysroot ? null,
 }:
 
 let
@@ -200,11 +201,16 @@ in
     stdenv = llvm.stdenv;
     packages = [ llvm.bintools ];
 
-    # Read by `//platforms:sdk.bzl`. Only Bazel and the cross drivers use this
-    # SDK; the host compiler keeps nixpkgs', which matches its libc++.
-    shellHook = lib.optionalString (xcodeSdk != null) ''
-      export MACOS_SDK_SYSROOT=${xcodeSdk.sysroot}
-    '';
+    # Read by `//platforms:sdk.bzl` and `//platforms:mingw.bzl`. Only Bazel and
+    # the cross drivers use the Xcode SDK; the host compiler keeps nixpkgs',
+    # which matches its libc++.
+    shellHook =
+      lib.optionalString (xcodeSdk != null) ''
+        export MACOS_SDK_SYSROOT=${xcodeSdk.sysroot}
+      ''
+      + lib.optionalString (mingwSysroot != null) ''
+        export MINGW_SYSROOT=${mingwSysroot}
+      '';
   };
 
   # attrNames does not force the values, so listing targets is cheap even
