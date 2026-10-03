@@ -1,9 +1,14 @@
+load("@crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//:defs.bzl", "PROFILE_RUSTC_FLAGS", "RUSTC_LINTS")
 
 package(default_visibility = ["//visibility:public"])
 
-# `crate_features` restates the manifest; keep the two equal.
+# Read by `crate_universe`.
+exports_files(["Cargo.toml"])
+
+# Third-party dependencies come from the manifest. Workspace ones and
+# `crate_features` restate it, so keep them equal.
 rust_library(
     name = "dash-pow",
     srcs = glob(["src/**/*.rs"]),
@@ -16,5 +21,7 @@ rust_library(
     ],
     crate_name = "dash_pow",
     edition = "2021",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
     rustc_flags = RUSTC_LINTS + PROFILE_RUSTC_FLAGS,
+    deps = all_crate_deps(normal = True),
 )

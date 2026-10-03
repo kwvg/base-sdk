@@ -1,0 +1,17 @@
+[package]
+name = "dash-meta-bazel"
+version = "0.0.0"
+description = "Dependency anchor that lets Bazel resolve the Cargo crate graph"
+publish = false
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+dash-pow = { version = "0.0.0", path = "../../../pkgs/pow", features = ["full"] }
+
+[lints]
+workspace = true

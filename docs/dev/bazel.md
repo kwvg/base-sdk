@@ -30,5 +30,24 @@ does not read `[lints]`.
 python3 maint/lint/lint_bazel.py
 ```
 
-formats and lints the Starlark with `buildifier`. The `apply` verb rewrites what the branch changed, and `apply-all`
+formats and lints the Starlark with `buildifier`, and checks that the crates Bazel builds match what cargo
+resolves. First-party `crate_features` must equal cargo's, third-party features may be narrower but never wider.
+
+The `apply` verb rewrites what the branch changed, and `apply-all`
 rewrites every file.
+
+## How the crate graph is resolved
+
+`rules_rust` reads `Cargo.toml` through `crate_universe`, which needs one place to start from. That is
+`contrib/meta/bazel`, the `dash-meta-bazel` crate, which depends on every crate Bazel builds with `features = ["full"]`.
+Its manifest and those of the crates it names are listed under `crate.from_cargo` in `MODULE.bazel`.
+
+`crate_universe` unifies third-party features across the whole workspace with every feature on, as `cargo metadata`
+does. A third-party crate built by Bazel may therefore carry more features than `cargo build -p <crate>` would give it.
+First-party crates restate their features in `crate_features`.
+
+### Adding a crate
+
+1. Add a `BUILD.bazel` beside its manifest, copying a sibling, with `crate_features` set to its `full` features.
+2. Add the crate to the dependencies of `contrib/meta/bazel/Cargo.toml` and its manifest to `MODULE.bazel`.
+3. Run `just zglock`.

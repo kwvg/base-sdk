@@ -440,6 +440,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dash-meta-bazel"
+version = "0.0.0"
+dependencies = [
+ "dash-pow",
+]
+
+[[package]]
 name = "dash-num"
 version = "0.1.0-beta"
 dependencies = [

@@ -15,6 +15,9 @@ common --repo_contents_cache=
 # Selected by CI, so a stale lock fails rather than being rewritten.
 common:ci --lockfile_mode=error
 
+# A build script that fetched would make every pin advisory.
+build --nosandbox_default_allow_network
+
 build --verbose_failures
 
 try-import %workspace%/.bazelrc.user

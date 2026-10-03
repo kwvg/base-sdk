@@ -23,3 +23,12 @@ config_setting(
     flag_values = {":build_profile": "release"},
     visibility = ["//visibility:public"],
 )
+
+# Read by `crate_universe`.
+exports_files(
+    [
+        "Cargo.lock",
+        "Cargo.toml",
+    ],
+    visibility = ["//visibility:public"],
+)

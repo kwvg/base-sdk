@@ -1,0 +1,5 @@
+# Read by `crate_universe`.
+exports_files(
+    ["Cargo.toml"],
+    visibility = ["//visibility:public"],
+)
