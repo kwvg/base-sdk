@@ -31,9 +31,9 @@ ramdisk:
 dev:
     @echo "error: unsupported crate 'dev'" >&2; exit 1
 
-[doc('Unsupported under Bazel')]
-num:
-    @echo "error: unsupported crate 'num'" >&2; exit 1
+[doc('Build dash-num')]
+num: ramdisk
+    {{ build }} //pkgs/num:dash-num
 
 [doc('Unsupported under Bazel')]
 p2p_core:

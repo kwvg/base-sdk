@@ -477,7 +477,7 @@
     "@@rules_rust+//crate_universe:extensions.bzl%crate": {
       "general": {
         "bzlTransitiveDigest": "UyS7z1+RhAK8U+B0cvjndVViknoFTzlHNZhmKB5gLZI=",
-        "usagesDigest": "iIeYFSfA7ImTBvkFMTGaCNaF00SlKIjfsp9Xy43cKhw=",
+        "usagesDigest": "SBzULZxZBs0n9CJPn3Cb8NybxkRurd+9zZGXWD1r4Hs=",
         "recordedInputs": [
           "ENV:CARGO_BAZEL_DEBUG \\0",
           "ENV:CARGO_BAZEL_GENERATOR_SHA256 \\0",
@@ -499,14 +499,14 @@
           "REPO_MAPPING:rules_rust+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_rust+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_rust+,rules_cc rules_cc+",
-          "FILE:@@//Cargo.lock 57553dd8968ea32299dbd2b11b4cb1a35669b60e64027ba46e477427f1806c79",
+          "FILE:@@//Cargo.lock f1ded8c187f32e158b58fbabe7f1900e13f9553984ba1858a9dff42dfd09fe62",
           "FILE:@@//Cargo.toml 00529441378e05a734120455ebf49a9e3f14fe5fb632948bbdcf93ef8810b322",
-          "FILE:@@//contrib/meta/bazel/Cargo.toml 9546fbe13cb7cc7983d2002a928ed4fe0662e2424027ccd94bf5040dbd8f1d7c",
+          "FILE:@@//contrib/meta/bazel/Cargo.toml 195cd74014ac0137aed868d0495a1456655c3248c6062dcc0a6ad695f2564123",
+          "FILE:@@//pkgs/num/Cargo.toml a0a021bdf2310ad52874a04092641c181a1d409c67a5eb95d9e30a391a6295cc",
           "FILE:@@//pkgs/pow/Cargo.toml f33c4ecf202af7d845af9578e12b58169b374de2d4cf8f5d3d6c69b6c5d77b6c",
           "FILE:@@//pkgs/types/Cargo.toml e4f9d431a342e98249bbb48072238c0ff74ac72c2394b2d7ffdd3936dfe58251",
           "FILE:@@//pkgs/types/marker/Cargo.toml 3c48c907baab24f8fd6539e84b38600ca6b04429b8c8cdd66c64a5413b3d069b",
           "FILE:@@//pkgs/dev/Cargo.toml 6f2cb6dfaa4fe713a06d3722dd8164f6e21123ce3dbbcf09410ce851004ddb3d",
-          "FILE:@@//pkgs/num/Cargo.toml a0a021bdf2310ad52874a04092641c181a1d409c67a5eb95d9e30a391a6295cc",
           "FILE:@@//pkgs/params/Cargo.toml 2d3821b559495521c0d97b74cc8daeccea13fbba412158097a5cf454b5ab1509",
           "FILE:@@//pkgs/primitives/Cargo.toml 443791d582f1123eec00b3a077d1f7f8ff2ab6ba8faf6ced5a048c8be4d2eb7f",
           "FILE:@@//pkgs/pkc/Cargo.toml eeced248a4ce1999f0167140e126c913b902d9a7164edb0f0e62640f2b8f439a",

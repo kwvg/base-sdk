@@ -178,6 +178,7 @@ crate.from_cargo(
     manifests = [
         "//:Cargo.toml",
         "//contrib/meta/bazel:Cargo.toml",
+        "//pkgs/num:Cargo.toml",
         "//pkgs/pow:Cargo.toml",
         "//pkgs/types:Cargo.toml",
         "//pkgs/types/marker:Cargo.toml",

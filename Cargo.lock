@@ -443,6 +443,7 @@ dependencies = [
 name = "dash-meta-bazel"
 version = "0.0.0"
 dependencies = [
+ "dash-num",
  "dash-pow",
  "dash-types",
  "dash-types-marker",
