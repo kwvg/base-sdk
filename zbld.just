@@ -66,3 +66,7 @@ types: ramdisk
 [doc('Test the C++ toolchain, or cross-build it for a platform')]
 cxx platform="": ramdisk
     {{ if platform == "" { bazel + " test --sandbox_base=" + sandbox } else { build + " --platforms=//platforms:" + platform } }} //contrib/meta/cxxtest:cxxtest
+
+[doc('Build a Rust shared library, for the host or another platform')]
+dll platform="": ramdisk
+    {{ build }} {{ if platform == "" { "" } else { "--platforms=//platforms:" + platform } }} //contrib/meta/rustdll:rustdll

@@ -1,0 +1,11 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+
+package(default_visibility = ["//visibility:private"])
+
+# Takes no repository Starlark, so a failure points at the toolchain.
+rust_shared_library(
+    name = "rustdll",
+    srcs = ["src/lib.rs"],
+    edition = "2021",
+    deps = ["//pkgs/pkc:dash-pkc"],
+)

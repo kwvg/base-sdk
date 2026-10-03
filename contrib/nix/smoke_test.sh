@@ -103,6 +103,18 @@ if command -v bazel > /dev/null && command -v just > /dev/null; then
       status=1
     fi
   done
+
+  # A Rust DLL that reaches C through dash-pkc, so it covers the Rust and C
+  # linkers together.
+  dll="${root}/bazel-bin/contrib/meta/rustdll/rustdll.dll"
+  rm -f -- "${dll}"
+  if (cd "${root}" && just zbld::dll windows_x86_64 > /dev/null 2>&1) &&
+    [[ "$(file -b "${dll}")" == *"PE32+ executable"*"(DLL)"*"x86-64"* ]]; then
+    say "bazel windows_x86_64" rs "$(file -b "${dll}" | cut -d, -f1)"
+  else
+    say "bazel windows_x86_64" rs FAILED
+    status=1
+  fi
 else
   say bazel cpp skipped
 fi

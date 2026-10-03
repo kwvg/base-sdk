@@ -43,7 +43,16 @@ RUST_SHA256S = {
     "2026-02-01/llvm-tools-nightly-x86_64-unknown-linux-gnu.tar.xz": "d3e361aae313666e174968fa11935b2ca06762ec66f676d5df0cc0bcfea1488a",
     "2026-02-01/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz": "c5c0ce572e9b6cd9956308cc3f8d5beedfe10ae87e5e965cbe21007cb03e98dd",
     "2026-02-01/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz": "72f3d9ac47710773931732204e8841240e348c8e63771d0360ddef11afe350ed",
+    "2026-02-01/rust-std-nightly-x86_64-pc-windows-gnu.tar.xz": "afbcb95da6a1232159d9d7868c5d62a7e054c9f9f017e755fdb5fbbcbb3d7608",
 }
+
+# The rules declare an import library for every Windows cdylib, which rustc
+# writes only for MSVC targets, so a `windows-gnu` build never produces it.
+single_version_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = ["//patches:rules_rust-gnu-interface-library.patch"],
+)
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 
@@ -109,9 +118,9 @@ rust.repository_set(
     versions = [RUST_NIGHTLY],
 )
 
-# Apple targets every host can cross-compile to. Each needs its `rust-std`
-# hashed in `RUST_SHA256S`.
-APPLE_TARGET_TRIPLES = {
+# Targets every host can cross-compile to. Each needs its `rust-std` hashed in
+# `RUST_SHA256S`.
+CROSS_TARGET_TRIPLES = {
     "aarch64-apple-darwin": [
         "@platforms//cpu:aarch64",
         "@platforms//os:osx",
@@ -120,9 +129,13 @@ APPLE_TARGET_TRIPLES = {
         "@platforms//cpu:x86_64",
         "@platforms//os:osx",
     ],
+    "x86_64-pc-windows-gnu": [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:windows",
+    ],
 }
 
-# Each host also gets every Apple triple other than its own. A follow-up tag
+# Each host also gets every cross triple other than its own. A follow-up tag
 # may only add a target triple to an existing set.
 [
     rust.repository_set(
@@ -136,7 +149,7 @@ APPLE_TARGET_TRIPLES = {
         "rust_macos_aarch64": "aarch64-apple-darwin",
         "rust_macos_x86_64": "x86_64-apple-darwin",
     }.items()
-    for triple, constraints in APPLE_TARGET_TRIPLES.items()
+    for triple, constraints in CROSS_TARGET_TRIPLES.items()
     if triple != host_triple
 ]
 
@@ -145,36 +158,46 @@ use_repo(
     "rust_linux_aarch64__aarch64-apple-darwin__nightly",
     "rust_linux_aarch64__aarch64-unknown-linux-gnu__nightly",
     "rust_linux_aarch64__x86_64-apple-darwin__nightly",
+    "rust_linux_aarch64__x86_64-pc-windows-gnu__nightly",
     "rust_linux_x86_64__aarch64-apple-darwin__nightly",
     "rust_linux_x86_64__x86_64-apple-darwin__nightly",
+    "rust_linux_x86_64__x86_64-pc-windows-gnu__nightly",
     "rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly",
     "rust_macos_aarch64__aarch64-apple-darwin__nightly",
     "rust_macos_aarch64__x86_64-apple-darwin__nightly",
+    "rust_macos_aarch64__x86_64-pc-windows-gnu__nightly",
     "rust_macos_x86_64__aarch64-apple-darwin__nightly",
     "rust_macos_x86_64__x86_64-apple-darwin__nightly",
+    "rust_macos_x86_64__x86_64-pc-windows-gnu__nightly",
 )
 
 register_toolchains(
     "@rust_linux_aarch64__aarch64-apple-darwin__nightly//:toolchain",
     "@rust_linux_aarch64__aarch64-unknown-linux-gnu__nightly//:toolchain",
     "@rust_linux_aarch64__x86_64-apple-darwin__nightly//:toolchain",
+    "@rust_linux_aarch64__x86_64-pc-windows-gnu__nightly//:toolchain",
     "@rust_linux_x86_64__aarch64-apple-darwin__nightly//:toolchain",
     "@rust_linux_x86_64__x86_64-apple-darwin__nightly//:toolchain",
+    "@rust_linux_x86_64__x86_64-pc-windows-gnu__nightly//:toolchain",
     "@rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly//:toolchain",
     "@rust_macos_aarch64__aarch64-apple-darwin__nightly//:toolchain",
     "@rust_macos_aarch64__x86_64-apple-darwin__nightly//:toolchain",
+    "@rust_macos_aarch64__x86_64-pc-windows-gnu__nightly//:toolchain",
     "@rust_macos_x86_64__aarch64-apple-darwin__nightly//:toolchain",
     "@rust_macos_x86_64__x86_64-apple-darwin__nightly//:toolchain",
+    "@rust_macos_x86_64__x86_64-pc-windows-gnu__nightly//:toolchain",
 )
 
 # Triples the crate graph renders `select()` arms for; an unlisted triple is
-# incompatible. The NixOS pair serves a `--host_platform` of NixOS.
+# incompatible. The NixOS pair serves a `--host_platform` of NixOS. rules_rust
+# cannot tell `windows-gnu` from `windows-msvc` by constraints, so the MSVC arm
+# serves a `windows-gnu` target.
 CRATE_PLATFORM_TRIPLES = [
     "aarch64-unknown-linux-gnu",
     "aarch64-unknown-nixos-gnu",
     "x86_64-unknown-linux-gnu",
     "x86_64-unknown-nixos-gnu",
-] + sorted(APPLE_TARGET_TRIPLES.keys())
+] + sorted([t.replace("-windows-gnu", "-windows-msvc") for t in CROSS_TARGET_TRIPLES.keys()])
 
 # `dash-meta-bazel` depends on every crate Bazel builds, so its manifest makes
 # `crate_universe` resolve the whole third-party graph.

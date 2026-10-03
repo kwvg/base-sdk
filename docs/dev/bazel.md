@@ -98,5 +98,15 @@ just zbld::cxx windows_x86_64   # cross-build it for Windows
 ```
 
 `toolchains_llvm` has no Windows target and `rules_cc` names MinGW binaries without `.exe`, so `patches/` carries a fix
-for each. The probe is built but never run, as no Windows host is available. Rust has no Windows toolchain under Bazel
-yet.
+for each. The probe is built but never run, as no Windows host is available.
+
+Rust targets `x86_64-pc-windows-gnu` with a hashed `rust-std` from every host. `contrib/meta/rustdll` is a Rust DLL that
+calls into `dash-pkc`, so building it compiles `blst` and `secp256k1` with the same toolchain and links them.
+
+```bash
+just zbld::dll windows_x86_64   # build rustdll.dll
+```
+
+`rules_rust` cannot tell `windows-gnu` from `windows-msvc` by platform constraints, so the crate graph renders its
+Windows `select()` arms for the MSVC triple, and a `windows-gnu` target takes those. `rules_rust` also declares an
+import library that rustc writes only for MSVC, so a third patch stops that for gnu.
