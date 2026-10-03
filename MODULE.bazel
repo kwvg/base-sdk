@@ -179,6 +179,8 @@ crate.from_cargo(
         "//:Cargo.toml",
         "//contrib/meta/bazel:Cargo.toml",
         "//pkgs/pow:Cargo.toml",
+        "//pkgs/types:Cargo.toml",
+        "//pkgs/types/marker:Cargo.toml",
     ],
     # Cargo owns `Cargo.lock`; Bazel only reads it.
     skip_cargo_lockfile_overwrite = True,

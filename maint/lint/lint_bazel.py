@@ -49,6 +49,7 @@ ANCHOR = "dash-meta-bazel"
 # Label of every crate Bazel builds.
 ANCHOR_TARGETS = (
   "//pkgs/pow:dash-pow",
+  "//pkgs/types:dash-types",
 )
 
 # Rule kinds whose 'crate_features' is a transcription of cargo's.

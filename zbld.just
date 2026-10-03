@@ -59,6 +59,6 @@ primitives:
 script:
     @echo "error: unsupported crate 'script'" >&2; exit 1
 
-[doc('Unsupported under Bazel')]
-types:
-    @echo "error: unsupported crate 'types'" >&2; exit 1
+[doc('Build dash-types')]
+types: ramdisk
+    {{ build }} //pkgs/types:dash-types

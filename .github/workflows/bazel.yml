@@ -96,7 +96,7 @@ jobs:
         run: bazel --output_user_root="${PWD}/.cache/bazel" mod deps --lockfile_mode=error
 
       - name: Build
-        run: just zbld::pow
+        run: just zbld::pow zbld::types
 
       - name: Check the Bazel files
         run: python3 maint/lint/lint_bazel.py

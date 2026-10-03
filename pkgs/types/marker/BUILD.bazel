@@ -1,0 +1,19 @@
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+load("//:defs.bzl", "RUSTC_LINTS")
+
+package(default_visibility = ["//visibility:public"])
+
+# Read by `crate_universe`.
+exports_files(["Cargo.toml"])
+
+# No `PROFILE_RUSTC_FLAGS`. A proc macro builds for the exec platform, which the
+# global `-Cembed-bitcode=yes` skips, and rustc rejects `-Clto` without it.
+rust_proc_macro(
+    name = "dash-types-marker",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "dash_types_marker",
+    edition = "2021",
+    rustc_flags = RUSTC_LINTS,
+    deps = all_crate_deps(normal = True),
+)

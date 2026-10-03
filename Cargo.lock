@@ -444,6 +444,8 @@ name = "dash-meta-bazel"
 version = "0.0.0"
 dependencies = [
  "dash-pow",
+ "dash-types",
+ "dash-types-marker",
 ]
 
 [[package]]
