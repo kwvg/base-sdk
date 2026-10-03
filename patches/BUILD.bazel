@@ -1,0 +1,3 @@
+# Patches applied by `single_version_override` in `MODULE.bazel`. Module
+# resolution precedes any target, so the files are exported, not built.
+exports_files(glob(["*.patch"]))

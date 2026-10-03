@@ -1,0 +1,59 @@
+--- a/toolchain/cc_toolchain_config.bzl
++++ b/toolchain/cc_toolchain_config.bzl
+@@ -362,8 +362,13 @@
+ 
+     is_darwin_exec_and_target = exec_os == "darwin" and target_os == "darwin"
+ 
++    # Which object format the linker emits follows the target alone. Keying the
++    # link flags on exec-and-target hands ld64.lld the ELF set below whenever a
++    # non-Darwin host cross-compiles to Darwin, which it refuses.
++    is_darwin_target = target_os == "darwin"
++
+     # Linker flags:
+-    if is_darwin_exec_and_target:
++    if is_darwin_target:
+         link_flags.extend([
+             "-headerpad_max_install_names",
+             "-fobjc-link-runtime",
+@@ -385,7 +390,7 @@
+     # Pre-installed libtool on macOS has -static as default, but llvm-libtool-darwin needs it
+     # explicitly. cc_common.create_link_variables does not automatically add this either if
+     # output_file arg to it is None.
+-    archive_flags = ["-static"] if is_darwin_exec_and_target else []
++    archive_flags = ["-static"] if is_darwin_target else []
+ 
+     # Flags related to C++ standard.
+     # The linker has no way of knowing if there are C++ objects; so we
+@@ -436,7 +441,7 @@
+               "probably not what you want. Explicitly set standard_libraries to libc++ to silence.")
+ 
+     # Darwin has a universal sysroot so the builtin can compile cross-arch.
+-    if stdlib == "builtin-libc++" and is_xcompile and not is_darwin_exec_and_target:
++    if stdlib == "builtin-libc++" and is_xcompile and not is_darwin_target:
+         stdlib = "stdc++"
+ 
+     # "dynamic-stdc++"[-<ver>] is libstdc++ linked dynamically rather than
+@@ -515,10 +520,19 @@
+             "-stdlib=libc++",
+         ])
+ 
+-        stdlib_link_libs.extend([
+-            "-l:libc++.a",
+-            "-l:libc++abi.a",
+-        ])
++        # Darwin's libc++ is in the SDK and is linked by name, dynamically.
++        # The static pair below is what the LLVM distribution ships, and no
++        # Linux distribution of it carries a Darwin build to link statically.
++        if is_darwin_target:
++            stdlib_link_libs.extend([
++                "-lc++",
++                "-lc++abi",
++            ])
++        else:
++            stdlib_link_libs.extend([
++                "-l:libc++.a",
++                "-l:libc++abi.a",
++            ])
+     elif stdlib.startswith("stdc++"):
+         # We use libgcc when using libstdc++ from a sysroot. Most libstdc++
+         # builds link to libgcc, which means we need to use libgcc's exception

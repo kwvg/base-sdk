@@ -101,6 +101,8 @@ jobs:
       - name: Test the C++ toolchain
         run: |
           just zbld::cxx
+          just zbld::cxx macos_arm64
+          just zbld::cxx macos_x86_64
 
       - name: Check the Bazel files
         run: python3 maint/lint/lint_bazel.py

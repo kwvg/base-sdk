@@ -21,6 +21,9 @@ build --nosandbox_default_allow_network
 # Reusing sandbox directories skips most input staging, which is slow on HFS+.
 build --reuse_sandbox_directories
 
+# Read by `//platforms:sdk.bzl`; listed so it enters the cache key.
+common --repo_env=MACOS_SDK_SYSROOT
+
 build --verbose_failures
 
 try-import %workspace%/.bazelrc.user

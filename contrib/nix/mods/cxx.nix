@@ -85,7 +85,7 @@ let
   darwinFlags =
     _:
     [
-      "-isysroot ${xcodeSdk}"
+      "-isysroot ${xcodeSdk.sysroot}"
       "-nostdlibinc"
       "-iwithsysroot/usr/include"
       "-iframeworkwithsysroot/System/Library/Frameworks"
@@ -199,6 +199,12 @@ in
   compiler = {
     stdenv = llvm.stdenv;
     packages = [ llvm.bintools ];
+
+    # Read by `//platforms:sdk.bzl`. Only Bazel and the cross drivers use this
+    # SDK; the host compiler keeps nixpkgs', which matches its libc++.
+    shellHook = lib.optionalString (xcodeSdk != null) ''
+      export MACOS_SDK_SYSROOT=${xcodeSdk.sysroot}
+    '';
   };
 
   # attrNames does not force the values, so listing targets is cheap even
@@ -215,7 +221,6 @@ in
       # has to resolve against the same pinned SDK as a cross target.
       darwin = lib.optionalAttrs (lib.any (t: (defFor t).kind == "darwin") targets) {
         MACOSX_DEPLOYMENT_TARGET = xcodeSdk.minVersion;
-        SDKROOT = "${xcodeSdk}";
       };
     in
     {

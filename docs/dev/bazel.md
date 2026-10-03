@@ -74,3 +74,14 @@ just zbld::cxx   # build and run contrib/meta/cxxtest on the host
 `contrib/meta/cxxtest` is a small C++20 program that includes `<string>`, so it fails if the toolchain or its sysroot
 cannot be found. `contrib/nix/smoke_test.sh` runs it. The platforms in `//platforms` name other targets for
 `--platforms`, which `just zbld::cxx <platform>` accepts.
+
+### macOS
+
+The macOS sysroot is the Xcode SDK extract, handed over through `MACOS_SDK_SYSROOT` by the devshell, so that no Xcode is
+needed on any host.
+
+```bash
+just zbld::cxx macos_x86_64   # cross-build it for another macOS slice
+```
+
+`contrib/nix/smoke_test.sh` builds both macOS slices, and checks the architecture of what they produce.

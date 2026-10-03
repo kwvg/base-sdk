@@ -196,10 +196,39 @@ crate.from_cargo(
 )
 use_repo(crate, "crates")
 
+# The SDK's store path cannot be spelled here, so a repository rule turns the
+# devshell's `MACOS_SDK_SYSROOT` into a label.
+macos_sdk = use_repo_rule("//platforms:sdk.bzl", "macos_sdk")
+
+macos_sdk(name = "macos_sdk")
+
+# 1.8.0 picks link flags from the exec and target platforms together, so a
+# Linux host targeting Darwin gets ELF flags. The patch keys on the target.
+single_version_override(
+    module_name = "toolchains_llvm",
+    patch_strip = 1,
+    patches = ["//patches:toolchains_llvm-darwin-link-flags.patch"],
+)
+
 llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
 llvm.toolchain(
     # 20.1.8 has no x86_64 macOS archive.
     llvm_version = "20.1.7",
+    # A Linux host has no Darwin libc++ to link statically; the SDK has one.
+    stdlib = {
+        "": "builtin-libc++",
+        "darwin-aarch64": "libc++",
+        "darwin-x86_64": "libc++",
+    },
+)
+
+# A Linux host has no `xcrun` to ask; on macOS this is the SDK it would name.
+llvm.sysroot(
+    label = "@macos_sdk//:sysroot",
+    targets = [
+        "darwin-aarch64",
+        "darwin-x86_64",
+    ],
 )
 use_repo(llvm, "llvm_toolchain")
 
