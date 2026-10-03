@@ -1,0 +1,11 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:private"])
+
+# Takes no repository Starlark, so a failure points at the toolchain.
+cc_test(
+    name = "cxxtest",
+    size = "small",
+    srcs = ["cxxtest.cpp"],
+    copts = ["-std=c++20"],
+)

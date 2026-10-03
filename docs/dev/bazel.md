@@ -61,3 +61,16 @@ First-party crates restate their features in `crate_features`.
 1. Add a `BUILD.bazel` beside its manifest, copying a sibling, with `crate_features` set to its `full` features.
 2. Add the crate to the dependencies of `contrib/meta/bazel/Cargo.toml` and its manifest to `MODULE.bazel`.
 3. Add a `zbld` recipe, and run `just zglock`.
+
+## C and C++
+
+Bazel pins its own C and C++ toolchain, LLVM 20 from `toolchains_llvm`, rather than the drivers described in
+[Cross Compilation](./cross_compilation.md). A `*-sys` crate compiles with it too, which is how Rust exercises it.
+
+```bash
+just zbld::cxx   # build and run contrib/meta/cxxtest on the host
+```
+
+`contrib/meta/cxxtest` is a small C++20 program that includes `<string>`, so it fails if the toolchain or its sysroot
+cannot be found. `contrib/nix/smoke_test.sh` runs it. The platforms in `//platforms` name other targets for
+`--platforms`, which `just zbld::cxx <platform>` accepts.

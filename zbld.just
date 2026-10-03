@@ -62,3 +62,7 @@ script:
 [doc('Build dash-types')]
 types: ramdisk
     {{ build }} //pkgs/types:dash-types
+
+[doc('Test the C++ toolchain, or cross-build it for a platform')]
+cxx platform="": ramdisk
+    {{ if platform == "" { bazel + " test --sandbox_base=" + sandbox } else { build + " --platforms=//platforms:" + platform } }} //contrib/meta/cxxtest:cxxtest

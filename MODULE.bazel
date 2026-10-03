@@ -9,6 +9,13 @@ bazel_dep(name = "bazel_skylib", version = "1.9.2")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_rust", version = "0.73.0")
 
+# Bazel 9 has no native `cc_*` rules.
+bazel_dep(name = "rules_cc", version = "0.2.17")
+
+# Pins the C compiler. Left out, Bazel uses whatever `PATH` offers and the
+# `*-sys` build scripts compile with it.
+bazel_dep(name = "toolchains_llvm", version = "1.8.0")
+
 # Mirrors `rust-toolchain.toml`. `.bazelrc` must also select the channel.
 RUST_NIGHTLY = "nightly/2026-02-01"
 
@@ -188,3 +195,13 @@ crate.from_cargo(
     supported_platform_triples = CRATE_PLATFORM_TRIPLES,
 )
 use_repo(crate, "crates")
+
+llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
+llvm.toolchain(
+    # 20.1.8 has no x86_64 macOS archive.
+    llvm_version = "20.1.7",
+)
+use_repo(llvm, "llvm_toolchain")
+
+# Outranks any C toolchain a dependency module registers.
+register_toolchains("@llvm_toolchain//:all")

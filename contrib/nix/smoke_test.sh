@@ -71,4 +71,19 @@ do
   try "${target}" rs "${rust}" "--target=${target}" ${driver:+"-Clinker=${driver}"}
 done
 
+# Bazel resolves its own C++ toolchain, so it is checked apart from the
+# drivers above.
+if command -v bazel > /dev/null && command -v just > /dev/null; then
+  root=$(git rev-parse --show-toplevel)
+
+  if (cd "${root}" && just zbld::cxx > /dev/null 2>&1); then
+    say bazel cpp "host, passed"
+  else
+    say bazel cpp FAILED
+    status=1
+  fi
+else
+  say bazel cpp skipped
+fi
+
 exit "${status}"
