@@ -45,7 +45,6 @@ pub use dash_pkc::__private::__EddsaPkHash as PlatformNodeId;
 pub(crate) const MAX_OPERATOR_REWARD: u16 = 10_000;
 
 /// ProTx version: legacy BLS operator keys (v1).
-#[expect(unused, reason = "consensus constant")]
 pub(crate) const PROTX_VERSION_LEGACY_BLS: u16 = 1;
 
 /// ProTx version: basic (IETF) BLS operator keys (v2).
