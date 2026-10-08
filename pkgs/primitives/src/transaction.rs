@@ -151,6 +151,8 @@ pub enum TxInvalid {
   NullPrevout { index: usize },
   /// `bad-txns-payload-not-allowed`
   PayloadNotAllowed,
+  /// `bad-cbtx-invalid`
+  CoinbaseCommitmentNotCoinbase,
   /// `bad-txns-payload-decode`
   PayloadDecode(PayloadError),
   /// `bad-txns-payload-check`
@@ -170,6 +172,7 @@ impl fmt::Display for TxInvalid {
       Self::BadCoinbaseScriptLength { len } => write!(f, "bad-cb-length: {len}"),
       Self::NullPrevout { index } => write!(f, "bad-txns-prevout-null: input {index}"),
       Self::PayloadNotAllowed => write!(f, "bad-txns-payload-not-allowed"),
+      Self::CoinbaseCommitmentNotCoinbase => write!(f, "bad-cbtx-invalid"),
       Self::PayloadDecode(e) => write!(f, "bad-txns-payload-decode: {e}"),
       Self::PayloadCheck(e) => write!(f, "bad-txns-payload-check: {e}"),
     }
@@ -311,6 +314,10 @@ impl Checkable for Transaction {
           return Some(TxInvalid::NullPrevout { index: i });
         }
       }
+    }
+
+    if self.has_extra_payload() && self.tx_type == TxType::CoinbaseCommitment && !self.is_coinbase() {
+      return Some(TxInvalid::CoinbaseCommitmentNotCoinbase);
     }
 
     if let Some(result) = self.decode_payload() {
@@ -505,6 +512,23 @@ mod tests {
         size: MAX_LEGACY_BLOCK_SIZE + 1
       })
     );
+  }
+
+  #[rstest]
+  fn coinbase_commitment_outside_a_coinbase_is_rejected() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "cbtx");
+    let mut raws = Vec::new();
+    corpus.entries::<crate::CoinbaseCommitment>("cbtx", |raw, _, _| raws.push(raw.to_vec()));
+    let mut tx = Transaction::decode(&mut raws[0].as_slice()).unwrap();
+    assert_eq!(tx.tx_type, TxType::CoinbaseCommitment);
+    assert_eq!(tx.check(), None);
+
+    tx.inputs[0].prevout = OutPoint {
+      hash: TxHash::from_lendian([0x11; 32]),
+      index: 0,
+    };
+    assert_eq!(tx.check(), Some(TxInvalid::CoinbaseCommitmentNotCoinbase));
+    assert_eq!(TxInvalid::CoinbaseCommitmentNotCoinbase.to_string(), "bad-cbtx-invalid");
   }
 
   #[rstest]
