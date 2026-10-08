@@ -25,6 +25,7 @@ use dash_types::dlgt_scodec;
 use dash_types::type_id::TypeId;
 use dash_types::{qtypestr, type_cvrt};
 use rand_core::CryptoRng;
+use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use core::fmt::{Debug, Formatter, Result as FmtResult};
@@ -167,6 +168,16 @@ impl BlsSecretKey<BlsScIetf> {
   }
 }
 
+impl<S: BlsScheme> BlsSkBytes<S> {
+  /// Tells whether the bytes are the sole encoding of a secret key in scheme
+  /// `S`. Null bytes count as canonical, so a caller requiring a secret key
+  /// also checks [`is_null`](Self::is_null).
+  pub fn is_canonical(&self) -> bool {
+    let bytes = self.as_bytes();
+    self.is_null() || BlsSecretKey::<S>::from_bytes(bytes).is_ok_and(|sk| bool::from(sk.to_bytes().ct_eq(bytes)))
+  }
+}
+
 impl<S: BlsScheme> Clone for BlsSecretKey<S> {
   fn clone(&self) -> Self {
     Self(self.0.clone())
@@ -230,6 +241,20 @@ mod tests {
   use hex_conservative::DisplayHex;
   use rstest::rstest;
   use serde::Deserialize;
+
+  fn assert_sk_bytes_canonical<S: BlsScheme>() {
+    let clean = BlsSecretKey::<S>::from_ikm(&RSEED[0]).unwrap().to_bytes();
+    assert!(BlsSkBytes::<S>::from_bytes(*clean).is_canonical());
+    assert!(BlsSkBytes::<S>::from_bytes([0u8; 32]).is_canonical());
+    assert!(!BlsSkBytes::<S>::from_bytes(GROUP_ORDER).is_canonical());
+  }
+
+  #[rstest]
+  #[case::chia(assert_sk_bytes_canonical::<BlsScChia>)]
+  #[case::ietf(assert_sk_bytes_canonical::<BlsScIetf>)]
+  fn sk_bytes_canonical_scalars_and_null(#[case] assertion: fn()) {
+    assertion();
+  }
 
   #[derive(Clone, Copy, Debug)]
   enum Tweak {

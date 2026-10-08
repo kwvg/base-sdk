@@ -72,6 +72,16 @@ impl<S: BlsScheme> BlsSignature<S> {
   }
 }
 
+impl<S: BlsScheme> BlsSigBytes<S> {
+  /// Tells whether the bytes are the sole encoding of a signature in scheme
+  /// `S`. Null bytes count as canonical, so a caller requiring a signature
+  /// also checks [`is_null`](Self::is_null).
+  pub fn is_canonical(&self) -> bool {
+    let bytes = self.as_bytes();
+    self.is_null() || BlsSignature::<S>::from_bytes(bytes).is_ok_and(|sig| sig.to_bytes() == *bytes)
+  }
+}
+
 impl<S: BlsScheme> Clone for BlsSignature<S> {
   fn clone(&self) -> Self {
     *self
@@ -206,6 +216,28 @@ mod tests {
   #[case::chia(assert_sign_is_deterministic::<BlsScChia>)]
   #[case::ietf(assert_sign_is_deterministic::<BlsScIetf>)]
   fn signing_is_deterministic(#[case] assertion: fn()) {
+    assertion();
+  }
+
+  fn assert_sig_bytes_canonical<S: BlsScheme>() {
+    let sk = BlsSecretKey::<S>::from_ikm(&RSEED[0]).unwrap();
+    let clean = sk.sign(S::msg_ref(&MSG_DEADBEEF)).to_bytes();
+    assert!(BlsSigBytes::<S>::from_bytes(clean).is_canonical());
+    assert!(BlsSigBytes::<S>::from_bytes([0u8; 96]).is_canonical());
+
+    let mut infinity = [0u8; 96];
+    infinity[0] = 0xc0;
+    assert!(!BlsSigBytes::<S>::from_bytes(infinity).is_canonical());
+
+    let mut out_of_range = clean;
+    out_of_range[48] |= 0xe0;
+    assert!(!BlsSigBytes::<S>::from_bytes(out_of_range).is_canonical());
+  }
+
+  #[rstest]
+  #[case::chia(assert_sig_bytes_canonical::<BlsScChia>)]
+  #[case::ietf(assert_sig_bytes_canonical::<BlsScIetf>)]
+  fn sig_bytes_canonical_signatures_and_null(#[case] assertion: fn()) {
     assertion();
   }
 
