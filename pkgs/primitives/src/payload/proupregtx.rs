@@ -7,13 +7,14 @@
 //! ProUpRegTx registrar-update payload (type 3).
 
 use super::{InputsHash, ProTxInvalid};
-use crate::codec::codec_payload;
+use crate::codec::impl_payload;
 use crate::prelude::*;
-use crate::TxHash;
+use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
 use dash_pkc::bls::{BlsPkBytes, BlsScIetf};
 use dash_script::{PubKeyHash, Recipient};
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Checkable;
 
@@ -46,16 +47,33 @@ pub struct ProUpRegTx {
   pub vch_sig: Vec<u8>,
 }
 
-codec_payload!(ProUpRegTx {
-  version,
-  pro_tx_hash,
-  mode,
-  pub_key_operator,
-  key_id_voting,
-  script_payout,
-  inputs_hash,
-  vch_sig,
-});
+impl_payload!(ProUpRegTx);
+
+impl BaseCodec for ProUpRegTx {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    Ok(Self {
+      version: u16::decode(data)?,
+      pro_tx_hash: TxHash::decode(data)?,
+      mode: u16::decode(data)?,
+      pub_key_operator: BlsPkBytes::decode(data)?,
+      key_id_voting: PubKeyHash::decode(data)?,
+      script_payout: ScriptPubKeyBuf::decode(data)?,
+      inputs_hash: InputsHash::decode(data)?,
+      vch_sig: Vec::decode(data)?,
+    })
+  }
+
+  fn encode(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    self.pro_tx_hash.encode(buf);
+    self.mode.encode(buf);
+    self.pub_key_operator.encode(buf);
+    self.key_id_voting.encode(buf);
+    self.script_payout.encode(buf);
+    self.inputs_hash.encode(buf);
+    self.vch_sig.encode(buf);
+  }
+}
 
 impl Checkable for ProUpRegTx {
   type Error = ProTxInvalid;
@@ -87,6 +105,8 @@ impl Checkable for ProUpRegTx {
     None
   }
 }
+
+hash_impl!(ProUpRegTx);
 
 impl fmt::Display for ProUpRegTx {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

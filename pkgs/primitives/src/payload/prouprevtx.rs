@@ -7,11 +7,12 @@
 //! ProUpRevTx revocation payload (type 4).
 
 use super::{InputsHash, ProTxInvalid};
-use crate::codec::codec_payload;
+use crate::codec::impl_payload;
 use crate::support::RevocationReason;
-use crate::TxHash;
+use crate::{hash_impl, TxHash};
 
 use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Checkable;
 
@@ -37,13 +38,27 @@ pub struct ProUpRevTx {
   pub sig: BlsSigBytes<BlsScIetf>,
 }
 
-codec_payload!(ProUpRevTx {
-  version,
-  pro_tx_hash,
-  reason,
-  inputs_hash,
-  sig,
-});
+impl_payload!(ProUpRevTx);
+
+impl BaseCodec for ProUpRevTx {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    Ok(Self {
+      version: u16::decode(data)?,
+      pro_tx_hash: TxHash::decode(data)?,
+      reason: RevocationReason::decode(data)?,
+      inputs_hash: InputsHash::decode(data)?,
+      sig: BlsSigBytes::decode(data)?,
+    })
+  }
+
+  fn encode(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    self.pro_tx_hash.encode(buf);
+    self.reason.encode(buf);
+    self.inputs_hash.encode(buf);
+    self.sig.encode(buf);
+  }
+}
 
 impl Checkable for ProUpRevTx {
   type Error = ProTxInvalid;
@@ -60,6 +75,8 @@ impl Checkable for ProUpRevTx {
     None
   }
 }
+
+hash_impl!(ProUpRevTx);
 
 impl fmt::Display for ProUpRevTx {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
