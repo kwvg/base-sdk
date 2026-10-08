@@ -9,10 +9,12 @@
 use super::{InputsHash, ProTxInvalid};
 use crate::codec::impl_payload;
 use crate::prelude::*;
+use crate::types::{BlsPubKey, BlsScheme};
 use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
-use dash_pkc::bls::{BlsPkBytes, BlsScIetf};
+#[cfg(feature = "serde")]
+use dash_pkc::bls::BLS_PK_LEN;
 use dash_script::{PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
@@ -26,7 +28,7 @@ use core::fmt;
 /// - v2: BasicBLS
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", from = "__ProUpRegFields"))]
 pub struct ProUpRegTx {
   /// 1=LegacyBLS, 2=BasicBLS.
   pub version: u16,
@@ -35,7 +37,7 @@ pub struct ProUpRegTx {
   /// Reserved, always 0.
   pub mode: u16,
   /// Operator BLS public key (48 bytes).
-  pub pub_key_operator: BlsPkBytes<BlsScIetf>,
+  pub pub_key_operator: BlsPubKey,
   /// Voting key id (20 bytes).
   pub key_id_voting: PubKeyHash,
   /// Payout script.
@@ -51,11 +53,12 @@ impl_payload!(ProUpRegTx);
 
 impl BaseCodec for ProUpRegTx {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let version = u16::decode(data)?;
     Ok(Self {
-      version: u16::decode(data)?,
+      version,
       pro_tx_hash: TxHash::decode(data)?,
       mode: u16::decode(data)?,
-      pub_key_operator: BlsPkBytes::decode(data)?,
+      pub_key_operator: BlsPubKey::decode(data, BlsScheme::from_protx_version(version))?,
       key_id_voting: PubKeyHash::decode(data)?,
       script_payout: ScriptPubKeyBuf::decode(data)?,
       inputs_hash: InputsHash::decode(data)?,
@@ -108,6 +111,39 @@ impl Checkable for ProUpRegTx {
 
 hash_impl!(ProUpRegTx);
 
+/// Field set that tags the operator key from the payload version.
+#[cfg(feature = "serde")]
+#[derive(::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct __ProUpRegFields {
+  version: u16,
+  pro_tx_hash: TxHash,
+  mode: u16,
+  #[serde(deserialize_with = "crate::serialize::bls::pk_bytes")]
+  pub_key_operator: [u8; BLS_PK_LEN],
+  key_id_voting: PubKeyHash,
+  script_payout: ScriptPubKeyBuf,
+  inputs_hash: InputsHash,
+  #[serde(with = "dash_types::serialize::hex")]
+  vch_sig: Vec<u8>,
+}
+
+#[cfg(feature = "serde")]
+impl From<__ProUpRegFields> for ProUpRegTx {
+  fn from(fields: __ProUpRegFields) -> Self {
+    Self {
+      version: fields.version,
+      pro_tx_hash: fields.pro_tx_hash,
+      mode: fields.mode,
+      pub_key_operator: BlsPubKey::from_bytes(fields.pub_key_operator, BlsScheme::from_protx_version(fields.version)),
+      key_id_voting: fields.key_id_voting,
+      script_payout: fields.script_payout,
+      inputs_hash: fields.inputs_hash,
+      vch_sig: fields.vch_sig,
+    }
+  }
+}
+
 impl fmt::Display for ProUpRegTx {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "ProUpRegTx {{ v{} }}", self.version)
@@ -115,10 +151,11 @@ impl fmt::Display for ProUpRegTx {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
 
-  use dash_dev::{assert_serde_rt, check_sptx, Corpus};
+  use dash_dev::{assert_serde_rt, check_sptx, from_json, to_json, Corpus};
   use rstest::rstest;
 
   #[rstest]
@@ -126,5 +163,28 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupregtx");
     let items = corpus.entries::<ProUpRegTx>("proupregtx", check_sptx);
     assert_serde_rt("proupregtx", &items);
+  }
+
+  /// Payload versions 1 and 2 share a layout, so a corpus payload serves for
+  /// both once its version and tag change.
+  #[rstest]
+  #[case::legacy(1, BlsScheme::Legacy)]
+  #[case::basic(2, BlsScheme::Basic)]
+  fn pub_key_operator_is_tagged_from_the_version(#[case] version: u16, #[case] scheme: BlsScheme) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupregtx");
+    let mut item = corpus
+      .entries::<ProUpRegTx>("proupregtx", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    item.version = version;
+    item.pub_key_operator = BlsPubKey::from_bytes(*item.pub_key_operator.as_bytes(), scheme);
+
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    let decoded = ProUpRegTx::decode(&mut buf.as_slice()).unwrap();
+    assert_eq!(decoded.pub_key_operator.scheme(), scheme);
+    assert_eq!(decoded, item);
+    assert_eq!(from_json::<ProUpRegTx>(&to_json(&item)), item);
   }
 }

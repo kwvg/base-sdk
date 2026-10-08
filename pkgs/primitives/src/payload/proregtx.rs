@@ -13,11 +13,12 @@ use super::{
 use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
 use crate::prelude::*;
-use crate::types::{NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
+use crate::types::{BlsPubKey, BlsScheme, NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
 use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
-use dash_pkc::bls::{BlsPkBytes, BlsScIetf};
+#[cfg(feature = "serde")]
+use dash_pkc::bls::BLS_PK_LEN;
 use dash_script::{PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
@@ -32,7 +33,7 @@ use core::fmt;
 /// - v3: ExtAddr (extended network info)
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", from = "__ProRegFields"))]
 pub struct ProRegTx {
   /// 1=LegacyBLS, 2=BasicBLS, 3=ExtAddr.
   pub version: u16,
@@ -49,7 +50,7 @@ pub struct ProRegTx {
   /// Owner key id (20 bytes).
   pub key_id_owner: PubKeyHash,
   /// Operator BLS public key (48 bytes).
-  pub pub_key_operator: BlsPkBytes<BlsScIetf>,
+  pub pub_key_operator: BlsPubKey,
   /// Voting key id (20 bytes).
   pub key_id_voting: PubKeyHash,
   /// Operator reward in basis points (0-10000).
@@ -111,7 +112,7 @@ impl BaseCodec for ProRegTx {
       NetInfo::Legacy(NetInfoV1(ServiceV1::decode(data)?))
     };
     let key_id_owner = PubKeyHash::decode(data)?;
-    let pub_key_operator = BlsPkBytes::<BlsScIetf>::decode(data)?;
+    let pub_key_operator = BlsPubKey::decode(data, BlsScheme::from_protx_version(version))?;
     let key_id_voting = PubKeyHash::decode(data)?;
     let operator_reward = u16::decode(data)?;
     let script_payout = ScriptPubKeyBuf::decode(data)?;
@@ -259,6 +260,57 @@ impl Checkable for ProRegTx {
 
 hash_impl!(ProRegTx);
 
+/// Field set that tags the operator key from the payload version.
+#[cfg(feature = "serde")]
+#[derive(::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct __ProRegFields {
+  version: u16,
+  mn_type: MnType,
+  mode: u16,
+  collateral_hash: TxHash,
+  collateral_index: u32,
+  net_info: NetInfo,
+  key_id_owner: PubKeyHash,
+  #[serde(deserialize_with = "crate::serialize::bls::pk_bytes")]
+  pub_key_operator: [u8; BLS_PK_LEN],
+  key_id_voting: PubKeyHash,
+  operator_reward: u16,
+  script_payout: ScriptPubKeyBuf,
+  inputs_hash: InputsHash,
+  platform_node_id: Option<PlatformNodeId>,
+  #[serde(rename = "platformP2PPort")]
+  platform_p2p_port: Option<u16>,
+  #[serde(rename = "platformHTTPPort")]
+  platform_http_port: Option<u16>,
+  #[serde(with = "dash_types::serialize::hex")]
+  vch_sig: Vec<u8>,
+}
+
+#[cfg(feature = "serde")]
+impl From<__ProRegFields> for ProRegTx {
+  fn from(fields: __ProRegFields) -> Self {
+    Self {
+      version: fields.version,
+      mn_type: fields.mn_type,
+      mode: fields.mode,
+      collateral_hash: fields.collateral_hash,
+      collateral_index: fields.collateral_index,
+      net_info: fields.net_info,
+      key_id_owner: fields.key_id_owner,
+      pub_key_operator: BlsPubKey::from_bytes(fields.pub_key_operator, BlsScheme::from_protx_version(fields.version)),
+      key_id_voting: fields.key_id_voting,
+      operator_reward: fields.operator_reward,
+      script_payout: fields.script_payout,
+      inputs_hash: fields.inputs_hash,
+      platform_node_id: fields.platform_node_id,
+      platform_p2p_port: fields.platform_p2p_port,
+      platform_http_port: fields.platform_http_port,
+      vch_sig: fields.vch_sig,
+    }
+  }
+}
+
 impl fmt::Display for ProRegTx {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "ProRegTx {{ v{}, mn_type: {} }}", self.version, self.mn_type)
@@ -269,13 +321,41 @@ impl fmt::Display for ProRegTx {
 mod tests {
   use super::*;
 
-  use dash_dev::{assert_serde_rt, check_sptx, Corpus};
+  use dash_dev::{assert_serde_rt, check_sptx, from_json, to_json, Corpus};
   use rstest::rstest;
+
+  fn corpus_item(version: u16, mn_type: MnType) -> ProRegTx {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    let items: Vec<ProRegTx> = corpus
+      .entries::<ProRegTx>("proregtx", |_, _, _| {})
+      .into_values()
+      .filter(|item| item.version == version && item.mn_type == mn_type)
+      .collect();
+    assert!(!items.is_empty(), "no v{version} {mn_type} payload in the corpus");
+    items[0].clone()
+  }
 
   #[rstest]
   fn corpus_proregtx() {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
     let items = corpus.entries::<ProRegTx>("proregtx", check_sptx);
     assert_serde_rt("proregtx", &items);
+  }
+
+  /// Payload versions 1 and 2 share a layout, so a version 2 corpus payload
+  /// serves for both once its version and tag change.
+  #[rstest]
+  #[case::legacy(1, BlsScheme::Legacy)]
+  #[case::basic(2, BlsScheme::Basic)]
+  fn pub_key_operator_is_tagged_from_the_version(#[case] version: u16, #[case] scheme: BlsScheme) {
+    let mut item = corpus_item(2, MnType::Regular);
+    item.version = version;
+    item.pub_key_operator = BlsPubKey::from_bytes(*item.pub_key_operator.as_bytes(), scheme);
+
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    assert_eq!(ProRegTx::decode(&mut buf.as_slice()), Ok(item.clone()));
+    assert_eq!(item.pub_key_operator.scheme(), scheme);
+    assert_eq!(from_json::<ProRegTx>(&to_json(&item)), item);
   }
 }

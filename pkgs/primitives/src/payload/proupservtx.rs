@@ -10,11 +10,12 @@ use super::proregtx::check_platform_fields;
 use super::{check_sptx_netinfo, InputsHash, MnType, ProTxInvalid, PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR};
 use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
-use crate::types::{NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
+use crate::types::{BlsScheme, BlsSig, NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
 use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
-use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
+#[cfg(feature = "serde")]
+use dash_pkc::bls::BLS_SIG_LEN;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::{type_id::TypeId, Checkable, Numeric};
 
@@ -27,7 +28,7 @@ use core::fmt;
 /// - v3: ExtAddr (extended network info)
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", from = "__ProUpServFields"))]
 pub struct ProUpServTx {
   /// 1=LegacyBLS, 2=BasicBLS, 3=ExtAddr.
   pub version: u16,
@@ -50,7 +51,7 @@ pub struct ProUpServTx {
   #[cfg_attr(feature = "serde", serde(rename = "platformHTTPPort"))]
   pub platform_http_port: Option<u16>,
   /// Operator BLS signature.
-  pub sig: BlsSigBytes<BlsScIetf>,
+  pub sig: BlsSig,
 }
 
 impl_payload!(ProUpServTx);
@@ -94,7 +95,7 @@ impl BaseCodec for ProUpServTx {
       platform_node_id,
       platform_p2p_port,
       platform_http_port,
-      sig: BlsSigBytes::<BlsScIetf>::decode(data)?,
+      sig: BlsSig::decode(data, BlsScheme::from_protx_version(version))?,
     })
   }
 
@@ -179,6 +180,44 @@ impl Checkable for ProUpServTx {
 
 hash_impl!(ProUpServTx);
 
+/// Field set that tags the signature from the payload version.
+#[cfg(feature = "serde")]
+#[derive(::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct __ProUpServFields {
+  version: u16,
+  mn_type: MnType,
+  pro_tx_hash: TxHash,
+  net_info: NetInfo,
+  script_operator_payout: ScriptPubKeyBuf,
+  inputs_hash: InputsHash,
+  platform_node_id: Option<PlatformNodeId>,
+  #[serde(rename = "platformP2PPort")]
+  platform_p2p_port: Option<u16>,
+  #[serde(rename = "platformHTTPPort")]
+  platform_http_port: Option<u16>,
+  #[serde(deserialize_with = "crate::serialize::bls::sig_bytes")]
+  sig: [u8; BLS_SIG_LEN],
+}
+
+#[cfg(feature = "serde")]
+impl From<__ProUpServFields> for ProUpServTx {
+  fn from(fields: __ProUpServFields) -> Self {
+    Self {
+      version: fields.version,
+      mn_type: fields.mn_type,
+      pro_tx_hash: fields.pro_tx_hash,
+      net_info: fields.net_info,
+      script_operator_payout: fields.script_operator_payout,
+      inputs_hash: fields.inputs_hash,
+      platform_node_id: fields.platform_node_id,
+      platform_p2p_port: fields.platform_p2p_port,
+      platform_http_port: fields.platform_http_port,
+      sig: BlsSig::from_bytes(fields.sig, BlsScheme::from_protx_version(fields.version)),
+    }
+  }
+}
+
 impl fmt::Display for ProUpServTx {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "ProUpServTx {{ v{}, mn_type: {} }}", self.version, self.mn_type,)
@@ -188,6 +227,7 @@ impl fmt::Display for ProUpServTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
+  use crate::prelude::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
@@ -197,5 +237,23 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupservtx");
     let items = corpus.entries::<ProUpServTx>("proupservtx", check_sptx);
     assert_serde_rt("proupservtx", &items);
+  }
+
+  #[rstest]
+  fn sig_is_tagged_from_the_version() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupservtx");
+    let items = corpus.entries::<ProUpServTx>("proupservtx", |_, _, _| {});
+    let mut seen = BTreeSet::new();
+    for (label, item) in &items {
+      let scheme = item.sig.scheme();
+      let expected = if item.version == 1 {
+        BlsScheme::Legacy
+      } else {
+        BlsScheme::Basic
+      };
+      assert_eq!(scheme, expected, "{label}");
+      seen.insert(item.version.min(2));
+    }
+    assert_eq!(seen.len(), 2, "the corpus covers both schemes");
   }
 }
