@@ -48,7 +48,7 @@ impl<S: BlsSchemeId> BaseCodec for BlsIesBlobBytes<S> {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let ephemeral_pk = BlsPkBytes::<S>::decode(data)?;
     let iv_seed = <[u8; IV_SEED_LEN]>::decode(data)?;
-    let len = CompactSize::decode(data)?.into_len(data.len())?;
+    let len = CompactSize::decode_len(data)?;
     Ok(Self {
       ephemeral_pk,
       iv_seed,
@@ -182,10 +182,10 @@ impl<S: BlsSchemeId> BaseCodec for BlsIesMultiBytes<S> {
 
     // Each element is a `Vec` far wider than the length prefix that admitted it
     // so capacity is grown against content, not reserved.
-    let count = CompactSize::decode(data)?.into_len(data.len())?;
+    let count = CompactSize::decode_len(data)?;
     let mut blobs = Vec::new();
     for _ in 0..count {
-      let len = CompactSize::decode(data)?.into_len(data.len())?;
+      let len = CompactSize::decode_len(data)?;
       blobs.push(read_bytes(data, len)?.to_vec());
     }
 
@@ -404,13 +404,30 @@ mod tests {
   /// allocate for it.
   #[rstest]
   fn decode_rejects_overlong_lengths() {
+    let eof = |needed, remaining| DecodeError::Eof { needed, remaining };
+
     let mut encoded = blob(vec![0x11; 3]).to_bytes();
-    encoded[80] = 0xfe;
-    assert!(BlsIesBlobBytes::<BlsScIetf>::decode(&mut encoded.as_slice()).is_err());
+    encoded[80] = 4;
+    assert_eq!(
+      BlsIesBlobBytes::<BlsScIetf>::decode(&mut encoded.as_slice()),
+      Err(eof(4, 3))
+    );
+
+    // The multi-recipient image holds a blob count at offset 80 and the first
+    // blob length at offset 81.
+    let mut encoded = multi(vec![vec![0x11; 3]]).to_bytes();
+    encoded[80] = 5;
+    assert_eq!(
+      BlsIesMultiBytes::<BlsScIetf>::decode(&mut encoded.as_slice()),
+      Err(eof(5, 4))
+    );
 
     let mut encoded = multi(vec![vec![0x11; 3]]).to_bytes();
-    encoded[80] = 0xfe;
-    assert!(BlsIesMultiBytes::<BlsScIetf>::decode(&mut encoded.as_slice()).is_err());
+    encoded[81] = 4;
+    assert_eq!(
+      BlsIesMultiBytes::<BlsScIetf>::decode(&mut encoded.as_slice()),
+      Err(eof(4, 3))
+    );
   }
 
   /// Null key, empty ciphertext, null seed, and nothing besides.

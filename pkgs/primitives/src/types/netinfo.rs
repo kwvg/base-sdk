@@ -156,7 +156,7 @@ impl BaseCodec for NIEntry {
     match NIEntryCode::from_base(u8::decode(data)?) {
       NIEntryCode::Service => Ok(Self::Service(ServiceV2::decode(data)?)),
       NIEntryCode::Domain => {
-        let name_len = CompactSize::decode(data)?.into_len(data.len())?;
+        let name_len = CompactSize::decode_len(data)?;
         let name = codec::read_bytes(data, name_len)?.to_vec();
         let port = codec::read_u16_be(data)?;
         Ok(Self::Domain { name, port })
@@ -301,11 +301,11 @@ impl_type!(NetInfoV2);
 impl BaseCodec for NetInfoV2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = u8::decode(data)?;
-    let purpose_count = CompactSize::decode(data)?.into_len(data.len())?;
+    let purpose_count = CompactSize::decode_len(data)?;
     let mut entries = Vec::with_capacity(purpose_count);
     for _ in 0..purpose_count {
       let purpose = NIPurpose::from_base(u8::decode(data)?);
-      let entry_count = CompactSize::decode(data)?.into_len(data.len())?;
+      let entry_count = CompactSize::decode_len(data)?;
       let mut group = Vec::with_capacity(entry_count);
       for _ in 0..entry_count {
         group.push(NIEntry::decode(data)?);
@@ -666,6 +666,28 @@ mod tests {
   fn nientry_unknown_type_fails() {
     let wire = hex!("ff");
     assert!(NIEntry::decode(&mut &wire[..]).is_err());
+  }
+
+  #[rstest]
+  fn nientry_domain_past_the_input_is_eof() {
+    let wire = hex!("0204616263");
+    assert_eq!(
+      NIEntry::decode(&mut &wire[..]),
+      Err(DecodeError::Eof {
+        needed: 4,
+        remaining: 3
+      })
+    );
+  }
+
+  #[rstest]
+  #[case::purpose_count(&hex!("010200"), 2, 1)]
+  #[case::entry_count(&hex!("0101000201"), 2, 1)]
+  fn netinfov2_count_past_the_input_is_eof(#[case] wire: &[u8], #[case] needed: usize, #[case] remaining: usize) {
+    assert_eq!(
+      NetInfoV2::decode(&mut &wire[..]),
+      Err(DecodeError::Eof { needed, remaining })
+    );
   }
 
   #[rstest]

@@ -107,7 +107,26 @@ impl CompactSize {
     Self(value)
   }
 
-  /// Converts the value to a length no greater than `limit`.
+  /// Reads a length or count prefix. A prefix past the end of the input fails
+  /// before the caller allocates for it.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`DecodeError::Eof`] when the value exceeds the bytes left after
+  /// the prefix, and any error of [`BaseCodec::decode`].
+  pub fn decode_len(data: &mut &[u8]) -> Result<usize, DecodeError> {
+    let value = Self::decode(data)?.0;
+    match usize::try_from(value) {
+      Ok(len) if len <= data.len() => Ok(len),
+      _ => Err(DecodeError::Eof {
+        needed: usize::try_from(value).unwrap_or(usize::MAX),
+        remaining: data.len(),
+      }),
+    }
+  }
+
+  /// Bounds a length or count by a protocol limit. A prefix bounded only by
+  /// the input reads through [`CompactSize::decode_len`].
   ///
   /// # Errors
   ///
@@ -197,6 +216,36 @@ mod tests {
     );
     // A count field with no room to spare still admits the empty case.
     assert_eq!(CompactSize::new(0).into_len(0), Ok(0));
+  }
+
+  fn prefixed(value: u64, remaining: usize) -> Vec<u8> {
+    let mut buf = Vec::new();
+    CompactSize::new(value).encode(&mut buf);
+    buf.resize(buf.len() + remaining, 0);
+    buf
+  }
+
+  #[rstest]
+  #[case::empty(0, 0)]
+  #[case::exact(4, 4)]
+  #[case::spare(3, 4)]
+  fn decode_len_admits_lengths_within_the_input(#[case] value: u64, #[case] remaining: usize) {
+    let wire = prefixed(value, remaining);
+    let mut cursor = wire.as_slice();
+    assert_eq!(CompactSize::decode_len(&mut cursor), Ok(value as usize));
+    assert_eq!(cursor.len(), remaining, "decode_len consumes only the prefix");
+  }
+
+  #[rstest]
+  #[case::one_past(5, 4, 5)]
+  #[case::empty_input(1, 0, 1)]
+  #[case::u64_max(u64::MAX, 4, usize::MAX)]
+  fn decode_len_reports_eof_past_the_input(#[case] value: u64, #[case] remaining: usize, #[case] needed: usize) {
+    let wire = prefixed(value, remaining);
+    assert_eq!(
+      CompactSize::decode_len(&mut wire.as_slice()),
+      Err(DecodeError::Eof { needed, remaining })
+    );
   }
 
   #[rstest]
