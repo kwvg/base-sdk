@@ -6,9 +6,9 @@
 
 //! Dash block (header + transactions).
 
-use crate::merkle::compute_merkle_root;
+use crate::merkle::merkle_root_mutated;
 use crate::prelude::*;
-use crate::transaction::{Transaction, TxHash, TxInvalid};
+use crate::transaction::{Transaction, TxInvalid};
 use crate::{codec_base, codec_type, hash_impl};
 
 use dash_num::{make_hash, Arith256, CompactTarget, Hash256};
@@ -193,8 +193,13 @@ impl Block {
   /// Returns `(root, mutated)` where `mutated` is `true` when the
   /// tree contains a duplicated-pair anomaly (CVE-2012-2459).
   pub fn merkle(&self) -> (MerkleRoot, bool) {
-    let leaves: Vec<TxHash> = self.transactions.iter().map(|tx| tx.hash()).collect();
-    compute_merkle_root(&leaves)
+    let leaves: Vec<Hash256> = self
+      .transactions
+      .iter()
+      .map(|tx| Hash256::from_lendian(*tx.hash().as_bytes()))
+      .collect();
+    let (root, mutated) = merkle_root_mutated(&leaves);
+    (MerkleRoot::from_lendian(*root.as_bytes()), mutated)
   }
 }
 

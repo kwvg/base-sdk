@@ -39,6 +39,7 @@ pub use codec::MAX_SPTX_PAYLOAD_SIZE;
 pub use gov::{
   GovData, GovObject, GovObjectType, GovVote, Proposal, ProposalInvalid, Trigger, VoteOutcome, VoteSignal,
 };
+pub use merkle::{merkle_root, merkle_root_mutated};
 pub use payload::{
   AssetLock, AssetLockInvalid, AssetUnlock, AssetUnlockInvalid, CbTxInvalid, CoinbaseCommitment, Commitment,
   CommitmentInvalid, FinalCommitment, InputsHash, MnHardFork, MnHardForkInvalid, MnType, PayloadError, PayloadInvalid,
