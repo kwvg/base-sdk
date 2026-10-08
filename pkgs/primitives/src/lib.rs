@@ -15,6 +15,7 @@ extern crate std;
 mod block;
 mod codec;
 mod gov;
+mod merkle;
 mod payload;
 #[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
 mod prelude;
