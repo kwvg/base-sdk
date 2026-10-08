@@ -153,8 +153,12 @@ impl Checkable for Block {
       return Some(BlockInvalid::DuplicateTransaction);
     }
 
-    if self.transactions.is_empty() {
-      return Some(BlockInvalid::BadBlockLength { size: 0 });
+    let mut encoded = Vec::new();
+    self.encode(&mut encoded);
+    let size = encoded.len();
+    if self.transactions.is_empty() || self.transactions.len() > MAX_DIP0001_BLOCK_SIZE || size > MAX_DIP0001_BLOCK_SIZE
+    {
+      return Some(BlockInvalid::BadBlockLength { size });
     }
 
     if !self.transactions[0].is_coinbase() {
@@ -248,6 +252,14 @@ mod tests {
     assert_eq!(error.to_string(), reason);
   }
 
+  fn genesis() -> Block {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "blocks");
+    corpus
+      .entries::<Block>("blocks", |_, _, _| {})
+      .remove("00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6")
+      .unwrap()
+  }
+
   /// Gives an edited block its merkle root, the easiest target and a nonce
   /// that meets it, so the checks after the proof of work decide.
   fn seal(block: &mut Block) {
@@ -258,13 +270,59 @@ mod tests {
     }
   }
 
+  fn wire_len<T: BaseCodec>(item: &T) -> usize {
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    buf.len()
+  }
+
+  /// Builds a spend of `size` bytes, for sizes that need a five-byte script
+  /// length prefix.
+  fn spend(index: u32, size: usize) -> Transaction {
+    let mut tx = Transaction {
+      version: 1,
+      tx_type: crate::TxType::Spend,
+      inputs: vec![crate::TxIn {
+        prevout: crate::OutPoint {
+          hash: crate::TxHash::from_lendian([0x11; 32]),
+          index,
+        },
+        script_sig: bitcoin_primitives::script::ScriptSigBuf::new(),
+        sequence: u32::MAX,
+      }],
+      outputs: vec![crate::TxOut {
+        value: bitcoin_units::Amount::ZERO,
+        script_pubkey: bitcoin_primitives::script::ScriptPubKeyBuf::from_bytes(vec![0x00; 0x1_0000]),
+      }],
+      lock_time: 0,
+      extra_payload: Vec::new(),
+    };
+    let overhead = wire_len(&tx) - 0x1_0000;
+    tx.outputs[0].script_pubkey = bitcoin_primitives::script::ScriptPubKeyBuf::from_bytes(vec![0x00; size - overhead]);
+    tx
+  }
+
+  #[rstest]
+  #[case::at_the_limit(0, None)]
+  #[case::past_the_limit(1, Some(BlockInvalid::BadBlockLength { size: MAX_DIP0001_BLOCK_SIZE + 1 }))]
+  fn serialized_size_is_capped_at_the_dip0001_block_size(
+    #[case] excess: usize,
+    #[case] expected: Option<BlockInvalid>,
+  ) {
+    let mut block = genesis();
+    // One spend this large exceeds the transaction cap, so two fill the block.
+    let fill = MAX_DIP0001_BLOCK_SIZE - wire_len(&block) + excess;
+    block.transactions.push(spend(0, fill / 2));
+    block.transactions.push(spend(1, fill - fill / 2));
+    assert_eq!(wire_len(&block), MAX_DIP0001_BLOCK_SIZE + excess);
+
+    seal(&mut block);
+    assert_eq!(block.check(), expected);
+  }
+
   #[rstest]
   fn null_first_input_with_more_inputs_is_a_missing_coinbase() {
-    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "blocks");
-    let mut block = corpus
-      .entries::<Block>("blocks", |_, _, _| {})
-      .remove("00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6")
-      .unwrap();
+    let mut block = genesis();
 
     let mut extra = block.transactions[0].inputs[0].clone();
     extra.prevout = crate::OutPoint {
