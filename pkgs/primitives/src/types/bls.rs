@@ -37,6 +37,16 @@ impl BlsScheme {
       Self::Basic
     }
   }
+
+  /// Scheme of the BLS fields in a final commitment of `version`. Versions 1
+  /// and 2 use the legacy scheme; later versions use basic.
+  pub const fn from_commitment_version(version: u16) -> Self {
+    if matches!(version, 1 | 2) {
+      Self::Legacy
+    } else {
+      Self::Basic
+    }
+  }
 }
 
 /// Declares a scheme-tagged wrapper over a pkc BLS byte bag.
@@ -145,6 +155,15 @@ mod tests {
   #[case::v3(3, BlsScheme::Basic)]
   fn protx_version_selects_the_scheme(#[case] version: u16, #[case] scheme: BlsScheme) {
     assert_eq!(BlsScheme::from_protx_version(version), scheme);
+  }
+
+  #[rstest]
+  #[case::v1(1, BlsScheme::Legacy)]
+  #[case::v2(2, BlsScheme::Legacy)]
+  #[case::v3(3, BlsScheme::Basic)]
+  #[case::v4(4, BlsScheme::Basic)]
+  fn commitment_version_selects_the_scheme(#[case] version: u16, #[case] scheme: BlsScheme) {
+    assert_eq!(BlsScheme::from_commitment_version(version), scheme);
   }
 
   #[rstest]
