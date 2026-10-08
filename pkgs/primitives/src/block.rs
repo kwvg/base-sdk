@@ -111,8 +111,8 @@ pub enum BlockInvalid {
 impl fmt::Display for BlockInvalid {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::BadProofOfWork => write!(f, "bad-proof-of-work"),
-      Self::BadMerkleRoot => write!(f, "bad-merkle-root"),
+      Self::BadProofOfWork => write!(f, "high-hash"),
+      Self::BadMerkleRoot => write!(f, "bad-txnmrklroot"),
       Self::DuplicateTransaction => write!(f, "bad-txns-duplicate"),
       Self::BadBlockLength { size } => write!(f, "bad-blk-length: {size} bytes"),
       Self::MissingCoinbase => write!(f, "bad-cb-missing"),
@@ -238,6 +238,14 @@ mod tests {
       assert!(!mutated, "{label}: merkle mutated");
     });
     assert_serde_rt("blocks", &items);
+  }
+
+  #[rstest]
+  #[case::proof_of_work(BlockInvalid::BadProofOfWork, "high-hash")]
+  #[case::merkle_root(BlockInvalid::BadMerkleRoot, "bad-txnmrklroot")]
+  #[case::duplicate(BlockInvalid::DuplicateTransaction, "bad-txns-duplicate")]
+  fn reasons_use_the_reference_strings(#[case] error: BlockInvalid, #[case] reason: &str) {
+    assert_eq!(error.to_string(), reason);
   }
 
   /// Appending a copy of the last transaction to an odd list leaves the
