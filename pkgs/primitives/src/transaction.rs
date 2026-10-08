@@ -7,6 +7,7 @@
 //! Dash transaction with version/type packing and optional extra payload for
 //! special transactions.
 
+use crate::block::MAX_LEGACY_BLOCK_SIZE;
 use crate::payload::{PayloadError, PayloadInvalid, TxType};
 use crate::prelude::*;
 use crate::{codec_type, hash_impl};
@@ -254,6 +255,12 @@ impl Checkable for Transaction {
       return Some(TxInvalid::EmptyOutputs);
     }
 
+    let mut encoded = Vec::new();
+    self.encode(&mut encoded);
+    if encoded.len() > MAX_LEGACY_BLOCK_SIZE {
+      return Some(TxInvalid::Oversize { size: encoded.len() });
+    }
+
     if !self.has_extra_payload() && !self.extra_payload.is_empty() {
       return Some(TxInvalid::PayloadNotAllowed);
     }
@@ -459,6 +466,45 @@ mod tests {
     let tx = Transaction::decode(&mut wire.as_slice()).unwrap();
     assert_eq!((tx.version, tx.tx_type.to_base()), (version, tx_type));
     assert_eq!(tx.raw_version() as u32, repacked);
+  }
+
+  fn wire_len(tx: &Transaction) -> usize {
+    let mut buf = Vec::new();
+    tx.encode(&mut buf);
+    buf.len()
+  }
+
+  /// Builds a spend whose serialized size is exactly `size` bytes, for any
+  /// size large enough to need a five-byte script length prefix.
+  fn spend_of_size(size: usize) -> Transaction {
+    let mut tx = bare(1, 0);
+    tx.inputs.push(TxIn {
+      prevout: OutPoint {
+        hash: TxHash::from_lendian([0x11; 32]),
+        index: 0,
+      },
+      script_sig: ScriptSigBuf::new(),
+      sequence: u32::MAX,
+    });
+    tx.outputs.push(TxOut {
+      value: Amount::ZERO,
+      script_pubkey: ScriptPubKeyBuf::from_bytes(vec![0x00; 0x1_0000]),
+    });
+    let overhead = wire_len(&tx) - 0x1_0000;
+    tx.outputs[0].script_pubkey = ScriptPubKeyBuf::from_bytes(vec![0x00; size - overhead]);
+    assert_eq!(wire_len(&tx), size);
+    tx
+  }
+
+  #[rstest]
+  fn serialized_size_is_capped_at_the_legacy_block_size() {
+    assert_eq!(spend_of_size(MAX_LEGACY_BLOCK_SIZE).check(), None);
+    assert_eq!(
+      spend_of_size(MAX_LEGACY_BLOCK_SIZE + 1).check(),
+      Some(TxInvalid::Oversize {
+        size: MAX_LEGACY_BLOCK_SIZE + 1
+      })
+    );
   }
 
   #[rstest]
