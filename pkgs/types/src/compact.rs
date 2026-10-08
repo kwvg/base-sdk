@@ -9,6 +9,39 @@
 use crate::codec::{BaseCodec, DecodeError, EncodeBuf};
 use crate::Numeric;
 
+/// The largest byte length or element count a range-checked CompactSize read
+/// accepts.
+pub const MAX_SIZE: u64 = 0x0200_0000;
+
+/// An unsigned integer type that a type-bounded CompactSize read produces.
+pub trait CompactUint: private::Sealed + Sized {
+  /// The largest value of the type.
+  const MAX: u64;
+
+  /// Narrows a decoded value to the type.
+  fn from_u64(value: u64) -> Option<Self>;
+}
+
+mod private {
+  pub trait Sealed {}
+}
+
+macro_rules! impl_compact_uint {
+  ($($ty:ty),+) => {$(
+    impl private::Sealed for $ty {}
+
+    impl CompactUint for $ty {
+      const MAX: u64 = <$ty>::MAX as u64;
+
+      fn from_u64(value: u64) -> Option<Self> {
+        Self::try_from(value).ok()
+      }
+    }
+  )+};
+}
+
+impl_compact_uint!(u8, u16, u32, u64);
+
 /// An unsigned integer encoded in variable-width CompactSize.
 #[repr(transparent)]
 #[cfg_attr(feature = "serde", derive(::serde::Deserialize, ::serde::Serialize))]
@@ -107,15 +140,16 @@ impl CompactSize {
     Self(value)
   }
 
-  /// Reads a length or count prefix. A prefix past the end of the input fails
-  /// before the caller allocates for it.
+  /// Reads a length or count prefix. A prefix above [`MAX_SIZE`] or past the
+  /// end of the input fails before the caller allocates for it.
   ///
   /// # Errors
   ///
-  /// Returns [`DecodeError::Eof`] when the value exceeds the bytes left after
+  /// Returns [`DecodeError::CompactSizeExceedsLimit`] when the value exceeds
+  /// [`MAX_SIZE`], [`DecodeError::Eof`] when it exceeds the bytes left after
   /// the prefix, and any error of [`BaseCodec::decode`].
   pub fn decode_len(data: &mut &[u8]) -> Result<usize, DecodeError> {
-    let value = Self::decode(data)?.0;
+    let value = Self::decode_checked(data)?.0;
     match usize::try_from(value) {
       Ok(len) if len <= data.len() => Ok(len),
       _ => Err(DecodeError::Eof {
@@ -123,6 +157,55 @@ impl CompactSize {
         remaining: data.len(),
       }),
     }
+  }
+
+  /// Reads a CompactSize-encoded integer field that the format bounds by
+  /// [`MAX_SIZE`]. Length and count prefixes read through
+  /// [`CompactSize::decode_len`].
+  ///
+  /// # Errors
+  ///
+  /// Returns [`DecodeError::CompactSizeExceedsLimit`] when the value exceeds
+  /// [`MAX_SIZE`], and any error of [`BaseCodec::decode`].
+  pub fn decode_checked(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let value = Self::decode(data)?;
+    if value.0 > MAX_SIZE {
+      return Err(DecodeError::CompactSizeExceedsLimit {
+        limit: MAX_SIZE as usize,
+        value: value.0,
+      });
+    }
+    Ok(value)
+  }
+
+  /// Reads a CompactSize-encoded integer field of type `T` that the format
+  /// leaves unbounded by [`MAX_SIZE`].
+  ///
+  /// # Errors
+  ///
+  /// Returns [`DecodeError::CompactSizeExceedsLimit`] when the value exceeds
+  /// the maximum of `T`, and any error of [`BaseCodec::decode`].
+  pub fn decode_as<T: CompactUint>(data: &mut &[u8]) -> Result<T, DecodeError> {
+    Self::decode(data)?.into_uint()
+  }
+
+  /// Reads a CompactSize-encoded integer field of type `T` that the format
+  /// also bounds by [`MAX_SIZE`].
+  ///
+  /// # Errors
+  ///
+  /// Returns [`DecodeError::CompactSizeExceedsLimit`] when the value exceeds
+  /// [`MAX_SIZE`] or the maximum of `T`, and any error of
+  /// [`BaseCodec::decode`].
+  pub fn decode_checked_as<T: CompactUint>(data: &mut &[u8]) -> Result<T, DecodeError> {
+    Self::decode_checked(data)?.into_uint()
+  }
+
+  fn into_uint<T: CompactUint>(self) -> Result<T, DecodeError> {
+    T::from_u64(self.0).ok_or(DecodeError::CompactSizeExceedsLimit {
+      limit: usize::try_from(T::MAX).unwrap_or(usize::MAX),
+      value: self.0,
+    })
   }
 
   /// Bounds a length or count by a protocol limit. A prefix bounded only by
@@ -162,7 +245,7 @@ impl From<CompactSize> for u64 {
 
 #[cfg(test)]
 mod tests {
-  use super::CompactSize;
+  use super::{CompactSize, MAX_SIZE};
   use crate::codec::{BaseCodec, DecodeError};
   use crate::prelude::*;
   use crate::Numeric;
@@ -239,12 +322,87 @@ mod tests {
   #[rstest]
   #[case::one_past(5, 4, 5)]
   #[case::empty_input(1, 0, 1)]
-  #[case::u64_max(u64::MAX, 4, usize::MAX)]
+  #[case::max_size(MAX_SIZE, 4, MAX_SIZE as usize)]
   fn decode_len_reports_eof_past_the_input(#[case] value: u64, #[case] remaining: usize, #[case] needed: usize) {
     let wire = prefixed(value, remaining);
     assert_eq!(
       CompactSize::decode_len(&mut wire.as_slice()),
       Err(DecodeError::Eof { needed, remaining })
+    );
+  }
+
+  fn exceeds(limit: u64, value: u64) -> DecodeError {
+    DecodeError::CompactSizeExceedsLimit {
+      limit: usize::try_from(limit).unwrap_or(usize::MAX),
+      value,
+    }
+  }
+
+  #[rstest]
+  #[case::zero(0, Ok(0))]
+  #[case::max_size(MAX_SIZE, Ok(MAX_SIZE))]
+  #[case::past_max_size(MAX_SIZE + 1, Err(exceeds(MAX_SIZE, MAX_SIZE + 1)))]
+  #[case::u64_max(u64::MAX, Err(exceeds(MAX_SIZE, u64::MAX)))]
+  fn decode_checked_rejects_values_past_max_size(#[case] value: u64, #[case] expected: Result<u64, DecodeError>) {
+    let wire = prefixed(value, 0);
+    assert_eq!(
+      CompactSize::decode_checked(&mut wire.as_slice()).map(|v| v.to_base()),
+      expected
+    );
+  }
+
+  /// The range check runs before the input bound, so an oversized prefix
+  /// reports the limit even when the input is short.
+  #[rstest]
+  #[case::past_max_size(MAX_SIZE + 1)]
+  #[case::u64_max(u64::MAX)]
+  fn decode_len_rejects_prefixes_past_max_size(#[case] value: u64) {
+    let wire = prefixed(value, 1);
+    assert_eq!(
+      CompactSize::decode_len(&mut wire.as_slice()),
+      Err(exceeds(MAX_SIZE, value))
+    );
+  }
+
+  #[rstest]
+  fn decode_as_bounds_the_value_by_the_type() {
+    let read_u8 = |v: u64| CompactSize::decode_as::<u8>(&mut prefixed(v, 0).as_slice());
+    let read_u16 = |v: u64| CompactSize::decode_as::<u16>(&mut prefixed(v, 0).as_slice());
+    let read_u32 = |v: u64| CompactSize::decode_as::<u32>(&mut prefixed(v, 0).as_slice());
+    let read_u64 = |v: u64| CompactSize::decode_as::<u64>(&mut prefixed(v, 0).as_slice());
+
+    assert_eq!(read_u8(0xFF), Ok(u8::MAX));
+    assert_eq!(read_u8(0x100), Err(exceeds(0xFF, 0x100)));
+    assert_eq!(read_u16(0xFFFF), Ok(u16::MAX));
+    assert_eq!(read_u16(0x1_0000), Err(exceeds(0xFFFF, 0x1_0000)));
+    assert_eq!(read_u32(0xFFFF_FFFF), Ok(u32::MAX));
+    assert_eq!(read_u32(0x1_0000_0000), Err(exceeds(0xFFFF_FFFF, 0x1_0000_0000)));
+    assert_eq!(read_u64(u64::MAX), Ok(u64::MAX));
+  }
+
+  #[rstest]
+  fn decode_checked_as_applies_max_size_before_the_type() {
+    let read_u8 = |v: u64| CompactSize::decode_checked_as::<u8>(&mut prefixed(v, 0).as_slice());
+    let read_u32 = |v: u64| CompactSize::decode_checked_as::<u32>(&mut prefixed(v, 0).as_slice());
+    let read_u64 = |v: u64| CompactSize::decode_checked_as::<u64>(&mut prefixed(v, 0).as_slice());
+
+    assert_eq!(read_u8(0xFF), Ok(u8::MAX));
+    assert_eq!(read_u8(0x100), Err(exceeds(0xFF, 0x100)));
+    assert_eq!(read_u8(MAX_SIZE + 1), Err(exceeds(MAX_SIZE, MAX_SIZE + 1)));
+    assert_eq!(read_u32(MAX_SIZE), Ok(0x0200_0000));
+    assert_eq!(read_u32(MAX_SIZE + 1), Err(exceeds(MAX_SIZE, MAX_SIZE + 1)));
+    assert_eq!(read_u64(u64::MAX), Err(exceeds(MAX_SIZE, u64::MAX)));
+  }
+
+  #[rstest]
+  fn typed_reads_propagate_decode_errors() {
+    assert!(matches!(
+      CompactSize::decode_checked_as::<u32>(&mut &[0xFD][..]),
+      Err(DecodeError::Eof { .. })
+    ));
+    assert_eq!(
+      CompactSize::decode_as::<u16>(&mut &[0xFD, 0xFC, 0x00][..]),
+      Err(DecodeError::NonMinimalCompactSize { value: 0xFC })
     );
   }
 

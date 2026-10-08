@@ -43,7 +43,7 @@ cfg_if::cfg_if! {
     pub mod codec;
     pub mod type_id;
 
-    pub use compact::CompactSize;
+    pub use compact::{CompactSize, CompactUint, MAX_SIZE};
     pub use entity::{VecDecoder, VecEncoder, MAX_SER_SIZE};
     pub use secret::{ArrDecoder, ArrEncoder, ArrayBuf, MAX_ARR_SIZE};
   }

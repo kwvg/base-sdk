@@ -70,7 +70,7 @@ pub mod bitcoin_primitives {
   #[cfg(test)]
   #[expect(clippy::unwrap_used, reason = "test code")]
   mod tests {
-    use crate::codec::BaseCodec;
+    use crate::codec::{BaseCodec, DecodeError};
     use crate::prelude::*;
 
     use bitcoin_primitives::script::{ScriptBuf, ScriptPubKeyTag};
@@ -91,6 +91,19 @@ pub mod bitcoin_primitives {
       let mut buf = Vec::new();
       script.encode(&mut buf);
       assert_eq!(buf, alloc::vec![2, 0x51, 0x52]);
+    }
+
+    #[rstest]
+    fn codec_rejects_a_length_past_max_size() {
+      // `MAX_SIZE + 1` encodes as `FE 01 00 00 02`.
+      let wire: &[u8] = &[0xFE, 0x01, 0x00, 0x00, 0x02, 0x51];
+      assert_eq!(
+        ScriptBuf::<ScriptPubKeyTag>::decode(&mut &*wire).map(|script| script.as_bytes().len()),
+        Err(DecodeError::CompactSizeExceedsLimit {
+          limit: 0x0200_0000,
+          value: 0x0200_0001,
+        })
+      );
     }
   }
 }
