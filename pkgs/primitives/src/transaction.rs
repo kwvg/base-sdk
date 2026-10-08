@@ -371,9 +371,10 @@ impl Transaction {
     }))
   }
 
-  /// Returns `true` when the first input spends the null outpoint.
+  /// Tells whether the transaction is a coinbase. A null first input followed
+  /// by more inputs does not make a coinbase.
   pub(crate) fn is_coinbase(&self) -> bool {
-    !self.inputs.is_empty() && self.inputs[0].prevout.is_null()
+    self.inputs.len() == 1 && self.inputs[0].prevout.is_null()
   }
 }
 
@@ -391,6 +392,7 @@ impl fmt::Display for Transaction {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
 
@@ -405,5 +407,22 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), section);
     let items = corpus.entries::<Transaction>(section, check_tx);
     assert_serde_rt(section, &items);
+  }
+
+  #[rstest]
+  fn null_first_input_with_more_inputs_is_not_a_coinbase() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "coinbase");
+    let items = corpus.entries::<Transaction>("coinbase", |_, _, _| {});
+    let mut tx = items.into_values().find(|tx| tx.tx_type == TxType::Spend).unwrap();
+    assert!(tx.is_coinbase());
+
+    let mut extra = tx.inputs[0].clone();
+    extra.prevout = OutPoint {
+      hash: TxHash::from_lendian([0x11; 32]),
+      index: 0,
+    };
+    tx.inputs.push(extra);
+    assert!(!tx.is_coinbase());
+    assert_eq!(tx.check(), Some(TxInvalid::NullPrevout { index: 0 }));
   }
 }

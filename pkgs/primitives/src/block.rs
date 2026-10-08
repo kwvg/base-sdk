@@ -248,6 +248,34 @@ mod tests {
     assert_eq!(error.to_string(), reason);
   }
 
+  /// Gives an edited block its merkle root, the easiest target and a nonce
+  /// that meets it, so the checks after the proof of work decide.
+  fn seal(block: &mut Block) {
+    block.header.merkle_root = block.merkle().0;
+    block.header.bits = 0x207f_ffff;
+    while block.check() == Some(BlockInvalid::BadProofOfWork) {
+      block.header.nonce += 1;
+    }
+  }
+
+  #[rstest]
+  fn null_first_input_with_more_inputs_is_a_missing_coinbase() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "blocks");
+    let mut block = corpus
+      .entries::<Block>("blocks", |_, _, _| {})
+      .remove("00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6")
+      .unwrap();
+
+    let mut extra = block.transactions[0].inputs[0].clone();
+    extra.prevout = crate::OutPoint {
+      hash: crate::TxHash::from_lendian([0x11; 32]),
+      index: 0,
+    };
+    block.transactions[0].inputs.push(extra);
+    seal(&mut block);
+    assert_eq!(block.check(), Some(BlockInvalid::MissingCoinbase));
+  }
+
   /// Appending a copy of the last transaction to an odd list leaves the
   /// merkle root unchanged, so only the mutation flag exposes the duplicate.
   #[rstest]
