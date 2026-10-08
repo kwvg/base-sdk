@@ -177,8 +177,10 @@ impl fmt::Display for TxInvalid {
 
 /// A Dash transaction.
 ///
-/// The wire format packs `version` (i16) and `tx_type` (u16) into a single
-/// `i32`: `raw = (tx_type << 16) | (version & 0xffff)`.
+/// The wire format packs `version` (i16) and `tx_type` (u16) into one `i32`,
+/// with the version sign-extended before the type is merged in. A negative
+/// version therefore encodes with all type bits set, so decoding and
+/// re-encoding such a transaction changes its bytes and its hash.
 ///
 /// Special transactions (type != Spend, version >= 3) carry an `extra_payload`
 /// decoded separately by payload-specific decoders.
@@ -335,9 +337,7 @@ impl Hashable for Transaction {
 impl Transaction {
   /// Returns the packed i32 version field as on the wire.
   pub fn raw_version(&self) -> i32 {
-    let v = (self.version as u16) as i32;
-    let t = (self.tx_type.to_base() as i32) << 16;
-    v | t
+    i32::from(self.version) | (i32::from(self.tx_type.to_base()) << 16)
   }
 
   /// Returns true when this transaction carries an extra payload.
@@ -407,6 +407,58 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), section);
     let items = corpus.entries::<Transaction>(section, check_tx);
     assert_serde_rt(section, &items);
+  }
+
+  fn bare(version: i16, tx_type: u16) -> Transaction {
+    Transaction {
+      version,
+      tx_type: TxType::from_base(tx_type),
+      inputs: Vec::new(),
+      outputs: Vec::new(),
+      lock_time: 0,
+      extra_payload: Vec::new(),
+    }
+  }
+
+  #[rstest]
+  #[case::negative_spend(-1, 0, 0xFFFF_FFFF)]
+  #[case::negative_two_spend(-2, 0, 0xFFFF_FFFE)]
+  #[case::negative_typed(-1, 5, 0xFFFF_FFFF)]
+  #[case::min_typed(i16::MIN, 5, 0xFFFF_8000)]
+  #[case::positive_typed(3, 5, 0x0005_0003)]
+  #[case::high_type(3, 0x8000, 0x8000_0003)]
+  fn packs_the_sign_extended_version(#[case] version: i16, #[case] tx_type: u16, #[case] raw: u32) {
+    let tx = bare(version, tx_type);
+    assert_eq!(tx.raw_version() as u32, raw);
+
+    let mut buf = Vec::new();
+    tx.encode(&mut buf);
+    assert_eq!(buf[..4], raw.to_le_bytes());
+  }
+
+  #[rstest]
+  #[case::all_ones(0xFFFF_FFFF, -1, 0xFFFF, 0xFFFF_FFFF)]
+  #[case::negative_spend(0x0000_FFFE, -2, 0, 0xFFFF_FFFE)]
+  #[case::negative_typed(0x0005_FFFF, -1, 5, 0xFFFF_FFFF)]
+  #[case::min_typed(0x0005_8000, i16::MIN, 5, 0xFFFF_8000)]
+  #[case::negative_high_type(0xFFFF_FFFE, -2, 0xFFFF, 0xFFFF_FFFE)]
+  #[case::high_type(0x8000_0003, 3, 0x8000, 0x8000_0003)]
+  fn unpacks_and_repacks_the_version(
+    #[case] raw: u32,
+    #[case] version: i16,
+    #[case] tx_type: u16,
+    #[case] repacked: u32,
+  ) {
+    // Empty input and output counts and a zero lock time follow the version.
+    let mut wire = raw.to_le_bytes().to_vec();
+    wire.resize(10, 0x00);
+    if version >= 3 && tx_type != 0 {
+      wire.push(0x00);
+    }
+
+    let tx = Transaction::decode(&mut wire.as_slice()).unwrap();
+    assert_eq!((tx.version, tx.tx_type.to_base()), (version, tx_type));
+    assert_eq!(tx.raw_version() as u32, repacked);
   }
 
   #[rstest]
