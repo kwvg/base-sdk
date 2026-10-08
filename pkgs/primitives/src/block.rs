@@ -94,6 +94,8 @@ pub enum BlockInvalid {
   BadProofOfWork,
   /// Computed merkle root does not match the header.
   BadMerkleRoot,
+  /// `bad-txns-duplicate`
+  DuplicateTransaction,
   /// `bad-blk-length`
   BadBlockLength { size: usize },
   /// `bad-cb-missing`
@@ -111,6 +113,7 @@ impl fmt::Display for BlockInvalid {
     match self {
       Self::BadProofOfWork => write!(f, "bad-proof-of-work"),
       Self::BadMerkleRoot => write!(f, "bad-merkle-root"),
+      Self::DuplicateTransaction => write!(f, "bad-txns-duplicate"),
       Self::BadBlockLength { size } => write!(f, "bad-blk-length: {size} bytes"),
       Self::MissingCoinbase => write!(f, "bad-cb-missing"),
       Self::MultipleCoinbases { index } => write!(f, "bad-cb-multiple: tx {index}"),
@@ -142,9 +145,12 @@ impl Checkable for Block {
       return Some(BlockInvalid::BadProofOfWork);
     }
 
-    let (root, _mutated) = self.merkle();
+    let (root, mutated) = self.merkle();
     if root != self.header.merkle_root {
       return Some(BlockInvalid::BadMerkleRoot);
+    }
+    if mutated {
+      return Some(BlockInvalid::DuplicateTransaction);
     }
 
     if self.transactions.is_empty() {
@@ -232,5 +238,22 @@ mod tests {
       assert!(!mutated, "{label}: merkle mutated");
     });
     assert_serde_rt("blocks", &items);
+  }
+
+  /// Appending a copy of the last transaction to an odd list leaves the
+  /// merkle root unchanged, so only the mutation flag exposes the duplicate.
+  #[rstest]
+  #[case::three_txs("0000000000000001bc04663e2eb95852a8b30963e5a40c089ad6d675f620bc21")]
+  #[case::five_txs("000000000000001bf41cff06b76780050682ca29e61a91c391893d4745579777")]
+  fn duplicated_last_transaction_is_rejected(#[case] label: &str) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "blocks");
+    let mut block = corpus.entries::<Block>("blocks", |_, _, _| {}).remove(label).unwrap();
+    assert_eq!(block.transactions.len() % 2, 1, "{label}: odd transaction count");
+    assert_eq!(block.check(), None, "{label}: unmodified block");
+
+    let last = block.transactions.last().unwrap().clone();
+    block.transactions.push(last);
+    assert_eq!(block.merkle(), (block.header.merkle_root, true));
+    assert_eq!(block.check(), Some(BlockInvalid::DuplicateTransaction));
   }
 }
