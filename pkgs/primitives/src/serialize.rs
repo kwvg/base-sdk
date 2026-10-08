@@ -62,6 +62,7 @@ pub mod amount {
 /// own version.
 pub mod bls {
   use crate::prelude::*;
+  use crate::types::{BlsScheme, BlsSig};
 
   use dash_pkc::bls::{BLS_PK_LEN, BLS_SIG_LEN};
   use hex_conservative::decode_to_array;
@@ -82,6 +83,29 @@ pub mod bls {
   /// Returns an error when the input is not 96 bytes of hex.
   pub fn sig_bytes<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<[u8; BLS_SIG_LEN], D::Error> {
     bytes(deserializer)
+  }
+
+  /// Reads a hex signature whose field the format fixes as basic.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the input is not 96 bytes of hex.
+  pub fn sig_basic<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<BlsSig, D::Error> {
+    Ok(BlsSig::from_bytes(bytes(deserializer)?, BlsScheme::Basic))
+  }
+
+  /// Reads an optional hex signature whose field the format fixes as basic.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the input is neither null nor 96 bytes of hex.
+  pub fn sig_basic_opt<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<BlsSig>, D::Error> {
+    match <Option<String> as serde::Deserialize>::deserialize(deserializer)? {
+      Some(hex) => decode_to_array(&hex)
+        .map(|sig| Some(BlsSig::from_bytes(sig, BlsScheme::Basic)))
+        .map_err(serde::de::Error::custom),
+      None => Ok(None),
+    }
   }
 
   fn bytes<'de, const N: usize, D: serde::Deserializer<'de>>(deserializer: D) -> Result<[u8; N], D::Error> {

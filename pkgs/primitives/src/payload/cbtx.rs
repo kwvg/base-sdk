@@ -7,10 +7,10 @@
 //! CoinbaseCommitment coinbase commitment payload (type 5).
 
 use crate::codec::impl_payload;
+use crate::types::{BlsScheme, BlsSig};
 use crate::{hash_impl, MerkleRoot};
 
 use bitcoin_units::BlockHeight;
-use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::{Checkable, CompactSize, Numeric};
@@ -36,8 +36,12 @@ pub struct CoinbaseCommitment {
   pub merkle_root_quorums: Option<MerkleRoot>,
   /// Best ChainLock height difference (v3+, CompactSize).
   pub best_cl_height_diff: Option<u64>,
-  /// Best ChainLock BLS signature (v3+).
-  pub best_cl_signature: Option<BlsSigBytes<BlsScIetf>>,
+  /// Best ChainLock BLS signature (v3+), always in the basic scheme.
+  #[cfg_attr(
+    feature = "serde",
+    serde(default, deserialize_with = "crate::serialize::bls::sig_basic_opt")
+  )]
+  pub best_cl_signature: Option<BlsSig>,
   /// Credit pool balance in duffs (v3+).
   pub credit_pool_balance: Option<i64>,
 }
@@ -57,7 +61,9 @@ impl BaseCodec for CoinbaseCommitment {
     let (best_cl_height_diff, best_cl_signature, credit_pool_balance) = if version >= 3 {
       (
         Some(CompactSize::decode(data)?.to_base()),
-        Some(BlsSigBytes::<BlsScIetf>::decode(data)?),
+        // The signature first appears in CbTx v3, after the v19 switch to
+        // the basic scheme.
+        Some(BlsSig::decode(data, BlsScheme::Basic)?),
         Some(i64::decode(data)?),
       )
     } else {
@@ -166,5 +172,17 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "cbtx");
     let items = corpus.entries::<CoinbaseCommitment>("cbtx", check_sptx);
     assert_serde_rt("cbtx", &items);
+  }
+
+  #[rstest]
+  fn signature_is_basic() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "cbtx");
+    for (label, item) in corpus.entries::<CoinbaseCommitment>("cbtx", |_, _, _| {}) {
+      assert_eq!(
+        item.best_cl_signature.map(|sig| sig.scheme()),
+        (item.version >= 3).then_some(BlsScheme::Basic),
+        "{label}"
+      );
+    }
   }
 }

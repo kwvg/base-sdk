@@ -7,9 +7,11 @@
 //! AssetUnlock (type 9): Platform to L1.
 
 use super::QuorumHash;
-use crate::codec::codec_payload;
+use crate::codec::impl_payload;
+use crate::hash_impl;
+use crate::types::{BlsScheme, BlsSig};
 
-use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::Checkable;
 
@@ -30,18 +32,36 @@ pub struct AssetUnlock {
   pub requested_height: u32,
   /// Quorum hash.
   pub quorum_hash: QuorumHash,
-  /// Quorum BLS authorization signature.
-  pub quorum_sig: BlsSigBytes<BlsScIetf>,
+  /// Quorum BLS authorization signature, always in the basic scheme.
+  #[cfg_attr(feature = "serde", serde(deserialize_with = "crate::serialize::bls::sig_basic"))]
+  pub quorum_sig: BlsSig,
 }
 
-codec_payload!(AssetUnlock {
-  version,
-  index,
-  fee,
-  requested_height,
-  quorum_hash,
-  quorum_sig,
-});
+impl_payload!(AssetUnlock);
+
+impl BaseCodec for AssetUnlock {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    Ok(Self {
+      version: u8::decode(data)?,
+      index: u64::decode(data)?,
+      fee: u32::decode(data)?,
+      requested_height: u32::decode(data)?,
+      quorum_hash: QuorumHash::decode(data)?,
+      // Asset unlocks arrive with v20, after the v19 switch to the basic
+      // scheme.
+      quorum_sig: BlsSig::decode(data, BlsScheme::Basic)?,
+    })
+  }
+
+  fn encode(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    self.index.encode(buf);
+    self.fee.encode(buf);
+    self.requested_height.encode(buf);
+    self.quorum_hash.encode(buf);
+    self.quorum_sig.encode(buf);
+  }
+}
 
 /// Asset unlock validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
@@ -77,6 +97,8 @@ impl Checkable for AssetUnlock {
   }
 }
 
+hash_impl!(AssetUnlock);
+
 impl fmt::Display for AssetUnlock {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "AssetUnlock {{ v{}, index: {} }}", self.version, self.index,)
@@ -95,5 +117,13 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
     let items = corpus.entries::<AssetUnlock>("assetunlock", check_sptx);
     assert_serde_rt("assetunlock", &items);
+  }
+
+  #[rstest]
+  fn signature_is_basic() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
+    for (label, item) in corpus.entries::<AssetUnlock>("assetunlock", |_, _, _| {}) {
+      assert_eq!(item.quorum_sig.scheme(), BlsScheme::Basic, "{label}");
+    }
   }
 }

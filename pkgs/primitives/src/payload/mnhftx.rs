@@ -7,9 +7,11 @@
 //! MnHardFork hard-fork signal (type 7).
 
 use super::QuorumHash;
-use crate::codec::codec_payload;
+use crate::codec::impl_payload;
+use crate::hash_impl;
+use crate::types::{BlsScheme, BlsSig};
 
-use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::Checkable;
 
@@ -29,16 +31,31 @@ pub struct MnHardFork {
   pub version_bit: u8,
   /// Quorum hash.
   pub quorum_hash: QuorumHash,
-  /// Quorum BLS signature.
-  pub sig: BlsSigBytes<BlsScIetf>,
+  /// Quorum BLS signature, always in the basic scheme.
+  #[cfg_attr(feature = "serde", serde(deserialize_with = "crate::serialize::bls::sig_basic"))]
+  pub sig: BlsSig,
 }
 
-codec_payload!(MnHardFork {
-  version,
-  version_bit,
-  quorum_hash,
-  sig,
-});
+impl_payload!(MnHardFork);
+
+impl BaseCodec for MnHardFork {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    Ok(Self {
+      version: u8::decode(data)?,
+      version_bit: u8::decode(data)?,
+      quorum_hash: QuorumHash::decode(data)?,
+      // MNHF signals arrive with v20, after the v19 switch to the basic scheme.
+      sig: BlsSig::decode(data, BlsScheme::Basic)?,
+    })
+  }
+
+  fn encode(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    self.version_bit.encode(buf);
+    self.quorum_hash.encode(buf);
+    self.sig.encode(buf);
+  }
+}
 
 /// MNHF signal validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
@@ -74,6 +91,8 @@ impl Checkable for MnHardFork {
   }
 }
 
+hash_impl!(MnHardFork);
+
 impl fmt::Display for MnHardFork {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "MnHardFork {{ v{}, bit: {} }}", self.version, self.version_bit,)
@@ -92,5 +111,13 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "mnhftx");
     let items = corpus.entries::<MnHardFork>("mnhftx", check_sptx);
     assert_serde_rt("mnhftx", &items);
+  }
+
+  #[rstest]
+  fn signature_is_basic() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "mnhftx");
+    for (label, item) in corpus.entries::<MnHardFork>("mnhftx", |_, _, _| {}) {
+      assert_eq!(item.sig.scheme(), BlsScheme::Basic, "{label}");
+    }
   }
 }
