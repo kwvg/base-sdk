@@ -584,6 +584,20 @@ mod tests {
   }
 
   #[rstest]
+  fn corpus_net_info_is_already_canonical() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    for (label, item) in corpus.entries::<ProRegTx>("proregtx", |_, _, _| {}) {
+      let (mut wire, mut canonical) = (Vec::new(), Vec::new());
+      match &item.net_info {
+        NetInfo::Legacy(v1) => v1.encode(&mut wire),
+        NetInfo::Extended(v2) => v2.encode(&mut wire),
+      }
+      item.net_info.encode_canonical(&mut canonical);
+      assert_eq!(canonical, wire, "{label}");
+    }
+  }
+
+  #[rstest]
   fn net_info_must_match_the_version() {
     let v2 = corpus_item(2, MnType::Regular);
     let v3 = corpus_item(3, MnType::Evo);

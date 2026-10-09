@@ -7,7 +7,7 @@
 //! Network information types and trait.
 
 use super::netaddr::{is_bad_port, NetAddr};
-use super::{AddrV2, NetAddrError, ServiceV1, ServiceV2};
+use super::{AddrV1, AddrV2, NetAddrError, ServiceV1, ServiceV2};
 use crate::hash_impl;
 use crate::prelude::*;
 
@@ -186,37 +186,40 @@ impl BaseCodec for NIEntry {
   }
 }
 
-/// Validates a domain name per RFC 1035 consensus rules.
-fn check_domain(name: &[u8]) -> Option<NIError> {
-  let s = match core::str::from_utf8(name) {
-    Ok(s) => s,
-    Err(_) => return Some(NIError::Malformed),
-  };
+/// Returns the name when it is a lowercase RFC 1035 domain of at least two
+/// labels, the shape every kept domain entry has.
+fn valid_domain(name: &[u8]) -> Option<&str> {
+  let s = core::str::from_utf8(name).ok()?;
   if s.len() < DOMAIN_MIN || s.len() > DOMAIN_MAX {
-    return Some(NIError::Malformed);
+    return None;
   }
   if s.bytes().any(|b| b.is_ascii_uppercase()) {
-    return Some(NIError::Malformed);
+    return None;
   }
   if !s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-') {
-    return Some(NIError::Malformed);
+    return None;
   }
   if s.as_bytes()[0] == b'.' || s.as_bytes()[s.len() - 1] == b'.' {
-    return Some(NIError::Malformed);
+    return None;
   }
   let mut label_count = 0usize;
   for label in s.split('.') {
     if label.is_empty() || label.len() > DOMAIN_LABEL_MAX {
-      return Some(NIError::Malformed);
+      return None;
     }
     if label.as_bytes()[0] == b'-' || label.as_bytes()[label.len() - 1] == b'-' {
-      return Some(NIError::Malformed);
+      return None;
     }
     label_count += 1;
   }
-  if label_count < 2 {
+  (label_count >= 2).then_some(s)
+}
+
+/// Validates a domain name per RFC 1035 consensus rules.
+fn check_domain(name: &[u8]) -> Option<NIError> {
+  let Some(s) = valid_domain(name) else {
     return Some(NIError::Malformed);
-  }
+  };
   // Reject reserved and privacy TLDs.
   if TLDS_BAD.iter().chain(TLDS_PRIVACY.iter()).any(|tld| s.ends_with(tld)) {
     return Some(NIError::Malformed);
@@ -254,6 +257,28 @@ impl Checkable for NIEntry {
 }
 
 hash_impl!(NIEntry);
+
+impl NIEntry {
+  /// Code written in place of an entry that fails to decode.
+  const INVALID_CODE: u8 = 0xff;
+
+  /// Tells whether decoding keeps the entry rather than clearing it to an
+  /// invalid entry.
+  fn is_kept(&self) -> bool {
+    match self {
+      Self::Service(svc) => !matches!(svc.addr, AddrV2::Unknown { .. }) && svc.addr.check().is_none(),
+      Self::Domain { name, port } => *port != 0 && valid_domain(name).is_some(),
+    }
+  }
+
+  fn encode_canonical(&self, buf: &mut impl EncodeBuf) {
+    if self.is_kept() {
+      self.encode(buf);
+    } else {
+      Self::INVALID_CODE.encode(buf);
+    }
+  }
+}
 
 impl fmt::Display for NIEntry {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -459,6 +484,28 @@ impl NetInfoV2 {
     &self.entries
   }
 
+  /// Writes the encoding a payload hash covers. Purposes are sorted with the
+  /// first group of each kept, and cleared entries are written as their
+  /// invalid code.
+  pub fn encode_canonical(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    if !Self::is_known_version(self.version) {
+      return;
+    }
+    let mut groups = BTreeMap::new();
+    for (purpose, group) in &self.entries {
+      groups.entry(purpose.to_base()).or_insert(group);
+    }
+    CompactSize::from(groups.len()).encode(buf);
+    for (purpose, group) in groups {
+      purpose.encode(buf);
+      CompactSize::from(group.len()).encode(buf);
+      for entry in group {
+        entry.encode_canonical(buf);
+      }
+    }
+  }
+
   /// Rejects a service entry that `routing` does not admit. Domain entries
   /// carry no address to route.
   pub fn check_routing(&self, routing: Routing) -> Option<NIError> {
@@ -608,6 +655,20 @@ impl Checkable for NetInfoV1 {
 hash_impl!(NetInfoV1);
 
 impl NetInfoV1 {
+  /// Writes the encoding a payload hash covers, which is all zero for an
+  /// empty service.
+  pub fn encode_canonical(&self, buf: &mut impl EncodeBuf) {
+    if self.is_empty() {
+      ServiceV1 {
+        addr: AddrV1::default(),
+        port: 0,
+      }
+      .encode(buf);
+    } else {
+      self.0.encode(buf);
+    }
+  }
+
   /// Rejects the service address when `routing` does not admit it.
   pub fn check_routing(&self, routing: Routing) -> Option<NIError> {
     routing.check(&self.0.addr)
@@ -680,6 +741,15 @@ impl Checkable for NetInfo {
 }
 
 impl NetInfo {
+  /// Writes the encoding a payload hash covers. The wire encoding, and with
+  /// it the txid, keeps the bytes as decoded.
+  pub fn encode_canonical(&self, buf: &mut impl EncodeBuf) {
+    match self {
+      Self::Legacy(v1) => v1.encode_canonical(buf),
+      Self::Extended(v2) => v2.encode_canonical(buf),
+    }
+  }
+
   /// Rejects a service address that `routing` does not admit, which
   /// [`Checkable::check`] cannot judge without the network.
   pub fn check_routing(&self, routing: Routing) -> Option<NIError> {
@@ -1082,6 +1152,80 @@ mod tests {
     assert_eq!(v2.check_routing(Routing::Required), expected);
     assert_eq!(v2.check_routing(Routing::Any), None);
     assert_eq!(NetInfo::Extended(v2).check_routing(Routing::Required), expected);
+  }
+
+  fn canonical(net_info: &NetInfo) -> Vec<u8> {
+    let mut buf = Vec::new();
+    net_info.encode_canonical(&mut buf);
+    buf
+  }
+
+  fn wire(entry: &NIEntry) -> Vec<u8> {
+    let mut buf = Vec::new();
+    entry.encode(&mut buf);
+    buf
+  }
+
+  /// Duplicate purposes keep their first group, and purposes are written in
+  /// ascending order.
+  #[rstest]
+  fn canonical_extended_sorts_purposes_and_keeps_the_first_group() {
+    let core = svc(AddrV2::Ipv4([8, 8, 8, 8]), 9999);
+    let shadowed = svc(AddrV2::Ipv4([9, 9, 9, 9]), 9999);
+    let https = dom(b"example.com", 443);
+    let v2 = NetInfoV2::new(vec![
+      (NIPurpose::PlatformHttps, vec![https.clone()]),
+      (NIPurpose::CoreP2p, vec![core.clone()]),
+      (NIPurpose::CoreP2p, vec![shadowed]),
+    ]);
+    let mut expected = vec![0x01, 0x02, 0x00, 0x01];
+    expected.extend(wire(&core));
+    expected.extend([0x02, 0x01]);
+    expected.extend(wire(&https));
+    assert_eq!(canonical(&NetInfo::Extended(v2)), expected);
+  }
+
+  #[rstest]
+  #[case::null_service(svc(AddrV2::Ipv4([0; 4]), 9999))]
+  #[case::unknown_network(svc(AddrV2::Unknown { network: 99, addr: vec![1, 2] }, 9999))]
+  #[case::uppercase_domain(dom(b"Example.com", 443))]
+  #[case::zero_port_domain(dom(b"example.com", 0))]
+  #[case::dotless_domain(dom(b"localhost", 443))]
+  fn canonical_extended_writes_cleared_entries_as_invalid(#[case] entry: NIEntry) {
+    let v2 = NetInfoV2::new(vec![(NIPurpose::CoreP2p, vec![entry])]);
+    assert_eq!(canonical(&NetInfo::Extended(v2)), [0x01, 0x01, 0x00, 0x01, 0xff]);
+  }
+
+  /// A domain with a reserved TLD decodes, and only validation rejects it, so
+  /// the canonical encoding keeps it.
+  #[rstest]
+  fn canonical_extended_keeps_entries_validation_rejects() {
+    let entry = dom(b"example.onion", 443);
+    let v2 = NetInfoV2::new(vec![(NIPurpose::PlatformHttps, vec![entry.clone()])]);
+    let mut expected = vec![0x01, 0x01, 0x02, 0x01];
+    expected.extend(wire(&entry));
+    assert_eq!(canonical(&NetInfo::Extended(v2)), expected);
+  }
+
+  #[rstest]
+  #[case::zero(0)]
+  #[case::future(2)]
+  fn canonical_unknown_version_is_its_version_byte(#[case] version: u8) {
+    let v2 = NetInfoV2::unknown_version(version).unwrap();
+    assert_eq!(canonical(&NetInfo::Extended(v2)), [version]);
+  }
+
+  #[rstest]
+  #[case::invalid("0.0.0.0", 9999, true)]
+  #[case::null_with_port("[::]", 9999, true)]
+  #[case::valid("8.8.8.8", 9999, false)]
+  fn canonical_legacy_zeroes_an_invalid_service(#[case] addr: &str, #[case] port: u16, #[case] zeroed: bool) {
+    let addr: AddrV1 = addr.parse().unwrap();
+    let service = ServiceV1 { addr, port };
+    let mut raw = Vec::new();
+    service.encode(&mut raw);
+    let expected = if zeroed { vec![0; 18] } else { raw };
+    assert_eq!(canonical(&NetInfo::Legacy(NetInfoV1(service))), expected);
   }
 
   fn valid_v2() -> NetInfoV2 {
