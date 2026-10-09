@@ -13,7 +13,7 @@ use crate::{hash_impl, MerkleRoot};
 use bitcoin_units::BlockHeight;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
-use dash_types::{Checkable, CompactSize, Numeric};
+use dash_types::{Checkable, CompactSize};
 
 use core::fmt;
 
@@ -34,8 +34,10 @@ pub struct CoinbaseCommitment {
   pub merkle_root_mn_list: MerkleRoot,
   /// Merkle root of quorum commitments (v2+).
   pub merkle_root_quorums: Option<MerkleRoot>,
-  /// Best ChainLock height difference (v3+, CompactSize).
-  pub best_cl_height_diff: Option<u64>,
+  /// Best ChainLock height difference (v3+), at most [`MAX_SIZE`] on the wire.
+  ///
+  /// [`MAX_SIZE`]: dash_types::MAX_SIZE
+  pub best_cl_height_diff: Option<u32>,
   /// Best ChainLock BLS signature (v3+), always in the basic scheme.
   #[cfg_attr(
     feature = "serde",
@@ -60,7 +62,7 @@ impl BaseCodec for CoinbaseCommitment {
     };
     let (best_cl_height_diff, best_cl_signature, credit_pool_balance) = if version >= 3 {
       (
-        Some(CompactSize::decode(data)?.to_base()),
+        Some(CompactSize::decode_checked_as::<u32>(data)?),
         // The signature first appears in CbTx v3, after the v19 switch to
         // the basic scheme.
         Some(BlsSig::decode(data, BlsScheme::Basic)?),
@@ -93,7 +95,7 @@ impl BaseCodec for CoinbaseCommitment {
       self.best_cl_signature,
       self.credit_pool_balance,
     ) {
-      CompactSize::from(diff).encode(buf);
+      CompactSize::from(u64::from(diff)).encode(buf);
       sig.encode(buf);
       bal.encode(buf);
     }
@@ -175,7 +177,67 @@ mod tests {
   use crate::prelude::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
+  use dash_types::MAX_SIZE;
   use rstest::rstest;
+
+  fn v3_item() -> CoinbaseCommitment {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "cbtx");
+    corpus
+      .entries::<CoinbaseCommitment>("cbtx", |_, _, _| {})
+      .into_values()
+      .find(|item| item.version == 3)
+      .unwrap()
+  }
+
+  #[rstest]
+  #[case::zero(0)]
+  #[case::max_size(MAX_SIZE as u32)]
+  fn height_diff_up_to_max_size_round_trips(#[case] diff: u32) {
+    let mut item = v3_item();
+    item.best_cl_height_diff = Some(diff);
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    assert_eq!(CoinbaseCommitment::decode(&mut buf.as_slice()), Ok(item));
+  }
+
+  #[rstest]
+  #[case::past_max_size(MAX_SIZE as u32 + 1)]
+  #[case::u32_max(u32::MAX)]
+  fn height_diff_past_max_size_is_rejected(#[case] diff: u32) {
+    let mut item = v3_item();
+    item.best_cl_height_diff = Some(diff);
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    assert_eq!(
+      CoinbaseCommitment::decode(&mut buf.as_slice()),
+      Err(DecodeError::CompactSizeExceedsLimit {
+        limit: MAX_SIZE as usize,
+        value: u64::from(diff),
+      })
+    );
+  }
+
+  /// A diff past `u32::MAX` meets the range check before the type bound, so
+  /// the error names `MAX_SIZE`.
+  #[rstest]
+  fn height_diff_past_u32_reports_max_size() {
+    let mut item = v3_item();
+    item.best_cl_height_diff = Some(0);
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    // The diff sits after the version, height and two merkle roots.
+    let offset = 2 + 4 + 32 + 32;
+    let mut wire = buf[..offset].to_vec();
+    CompactSize::new(u64::from(u32::MAX) + 1).encode(&mut wire);
+    wire.extend(buf[offset + 1..].iter().copied());
+    assert_eq!(
+      CoinbaseCommitment::decode(&mut wire.as_slice()),
+      Err(DecodeError::CompactSizeExceedsLimit {
+        limit: MAX_SIZE as usize,
+        value: u64::from(u32::MAX) + 1,
+      })
+    );
+  }
 
   #[rstest]
   fn corpus_cbtx() {
