@@ -16,7 +16,6 @@ use crate::types::{BlsScheme, BlsSig, NITrait, NetInfo, NetInfoV1, NetInfoV2, Se
 use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
-#[cfg(feature = "serde")]
 use dash_pkc::bls::BLS_SIG_LEN;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::{type_id::TypeId, Checkable, Numeric};
@@ -28,32 +27,28 @@ use core::fmt;
 /// - v1: LegacyBLS (no mn_type field)
 /// - v2: BasicBLS (adds mn_type)
 /// - v3: ExtAddr (extended network info)
+///
+/// The version-coupled fields are private, so [`ProUpServTx::new`] keeps them
+/// in step with the version and masternode type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", from = "__ProUpServFields"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", try_from = "__ProUpServFields"))]
 pub struct ProUpServTx {
-  /// 1=LegacyBLS, 2=BasicBLS, 3=ExtAddr.
-  pub version: u16,
-  /// v2+ only; defaults to Regular for v1.
-  pub mn_type: MnType,
+  version: u16,
+  mn_type: MnType,
   /// ProTx hash identifying the masternode.
   pub pro_tx_hash: TxHash,
-  /// Legacy ServiceV1 or extended NetInfo.
-  pub net_info: NetInfo,
+  net_info: NetInfo,
   /// Operator payout script.
   pub script_operator_payout: ScriptPubKeyBuf,
   /// Hash of all inputs.
   pub inputs_hash: InputsHash,
-  /// Platform node id (Evo only).
-  pub platform_node_id: Option<PlatformNodeId>,
-  /// Platform P2P port (Evo + version < 3 only).
+  platform_node_id: Option<PlatformNodeId>,
   #[cfg_attr(feature = "serde", serde(rename = "platformP2PPort"))]
-  pub platform_p2p_port: Option<u16>,
-  /// Platform HTTP port (Evo + version < 3 only).
+  platform_p2p_port: Option<u16>,
   #[cfg_attr(feature = "serde", serde(rename = "platformHTTPPort"))]
-  pub platform_http_port: Option<u16>,
-  /// Operator BLS signature.
-  pub sig: BlsSig,
+  platform_http_port: Option<u16>,
+  sig: BlsSig,
 }
 
 impl_payload!(ProUpServTx);
@@ -107,23 +102,20 @@ impl BaseCodec for ProUpServTx {
       self.mn_type.to_base().encode(buf);
     }
     self.pro_tx_hash.encode(buf);
-    // Branch on version to match the decode path. Validation
-    // guarantees the variant matches the version.
-    if self.version >= 3 {
-      if let NetInfo::Extended(ext) = &self.net_info {
-        ext.encode(buf);
-      }
-    } else if let NetInfo::Legacy(svc) = &self.net_info {
-      svc.encode(buf);
+    match &self.net_info {
+      NetInfo::Legacy(svc) => svc.encode(buf),
+      NetInfo::Extended(ext) => ext.encode(buf),
     }
     self.script_operator_payout.encode(buf);
     self.inputs_hash.encode(buf);
-    if self.mn_type == MnType::Evo {
-      self.platform_node_id.unwrap_or_default().encode(buf);
-      if self.version < 3 {
-        self.platform_p2p_port.unwrap_or(0).encode(buf);
-        self.platform_http_port.unwrap_or(0).encode(buf);
-      }
+    if let Some(node_id) = self.platform_node_id {
+      node_id.encode(buf);
+    }
+    if let Some(port) = self.platform_p2p_port {
+      port.encode(buf);
+    }
+    if let Some(port) = self.platform_http_port {
+      port.encode(buf);
     }
     self.sig.encode(buf);
   }
@@ -150,9 +142,8 @@ impl Checkable for ProUpServTx {
       return Some(ProTxInvalid::EvoVersionTooLow { version: self.version });
     }
 
-    let is_extended = matches!(self.net_info, NetInfo::Extended(_));
-    if is_extended != (self.version >= PROTX_VERSION_EXT_ADDR) {
-      return Some(ProTxInvalid::NetInfoVersionMismatch);
+    if let Some(e) = self.check_fields() {
+      return Some(e);
     }
 
     match &self.net_info {
@@ -171,23 +162,111 @@ impl Checkable for ProUpServTx {
       }
     }
 
-    if let Some(e) = check_platform_fields(
-      self.mn_type,
-      self.version,
-      &self.platform_node_id,
-      self.platform_p2p_port,
-      self.platform_http_port,
-    ) {
-      return Some(e);
-    }
-
     None
   }
 }
 
 hash_impl!(ProUpServTx);
 
-/// Field set that tags the signature from the payload version.
+impl ProUpServTx {
+  /// Builds a service update whose masternode type, net info and platform
+  /// fields match the version. The version selects the scheme of `sig`.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`ProTxInvalid::EvoVersionTooLow`] or [`ProTxInvalid::BadMnType`]
+  /// for a version 1 type other than regular, which version 1 cannot encode,
+  /// [`ProTxInvalid::NetInfoVersionMismatch`], or
+  /// [`ProTxInvalid::BadPlatformFields`].
+  #[expect(clippy::too_many_arguments, reason = "one argument per wire field")]
+  pub fn new(
+    version: u16,
+    mn_type: MnType,
+    pro_tx_hash: TxHash,
+    net_info: NetInfo,
+    script_operator_payout: ScriptPubKeyBuf,
+    inputs_hash: InputsHash,
+    platform_node_id: Option<PlatformNodeId>,
+    platform_p2p_port: Option<u16>,
+    platform_http_port: Option<u16>,
+    sig: [u8; BLS_SIG_LEN],
+  ) -> Result<Self, ProTxInvalid> {
+    let protx = Self {
+      version,
+      mn_type,
+      pro_tx_hash,
+      net_info,
+      script_operator_payout,
+      inputs_hash,
+      platform_node_id,
+      platform_p2p_port,
+      platform_http_port,
+      sig: BlsSig::from_bytes(sig, BlsScheme::from_protx_version(version)),
+    };
+    match protx.check_fields() {
+      Some(error) => Err(error),
+      None => Ok(protx),
+    }
+  }
+
+  /// Payload version.
+  pub const fn version(&self) -> u16 {
+    self.version
+  }
+
+  /// Masternode type, always regular at version 1.
+  pub const fn mn_type(&self) -> MnType {
+    self.mn_type
+  }
+
+  /// Network addresses, legacy before version 3 and extended from it.
+  pub const fn net_info(&self) -> &NetInfo {
+    &self.net_info
+  }
+
+  /// Platform node id, carried by evo masternodes.
+  pub const fn platform_node_id(&self) -> Option<PlatformNodeId> {
+    self.platform_node_id
+  }
+
+  /// Platform P2P port, carried by evo masternodes before version 3.
+  pub const fn platform_p2p_port(&self) -> Option<u16> {
+    self.platform_p2p_port
+  }
+
+  /// Platform HTTP port, carried by evo masternodes before version 3.
+  pub const fn platform_http_port(&self) -> Option<u16> {
+    self.platform_http_port
+  }
+
+  /// Operator BLS signature, in the scheme the version selects.
+  pub const fn sig(&self) -> &BlsSig {
+    &self.sig
+  }
+
+  fn check_fields(&self) -> Option<ProTxInvalid> {
+    if self.version < PROTX_VERSION_BASIC_BLS {
+      match self.mn_type {
+        MnType::Regular => {}
+        MnType::Evo => return Some(ProTxInvalid::EvoVersionTooLow { version: self.version }),
+        MnType::Unknown(_) => return Some(ProTxInvalid::BadMnType { mn_type: self.mn_type }),
+      }
+    }
+    let is_extended = matches!(self.net_info, NetInfo::Extended(_));
+    if is_extended != (self.version >= PROTX_VERSION_EXT_ADDR) {
+      return Some(ProTxInvalid::NetInfoVersionMismatch);
+    }
+    check_platform_fields(
+      self.mn_type,
+      self.version,
+      &self.platform_node_id,
+      self.platform_p2p_port,
+      self.platform_http_port,
+    )
+  }
+}
+
+/// Field set that builds a deserialized update through [`ProUpServTx::new`].
 #[cfg(feature = "serde")]
 #[derive(::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -208,20 +287,22 @@ struct __ProUpServFields {
 }
 
 #[cfg(feature = "serde")]
-impl From<__ProUpServFields> for ProUpServTx {
-  fn from(fields: __ProUpServFields) -> Self {
-    Self {
-      version: fields.version,
-      mn_type: fields.mn_type,
-      pro_tx_hash: fields.pro_tx_hash,
-      net_info: fields.net_info,
-      script_operator_payout: fields.script_operator_payout,
-      inputs_hash: fields.inputs_hash,
-      platform_node_id: fields.platform_node_id,
-      platform_p2p_port: fields.platform_p2p_port,
-      platform_http_port: fields.platform_http_port,
-      sig: BlsSig::from_bytes(fields.sig, BlsScheme::from_protx_version(fields.version)),
-    }
+impl TryFrom<__ProUpServFields> for ProUpServTx {
+  type Error = ProTxInvalid;
+
+  fn try_from(fields: __ProUpServFields) -> Result<Self, Self::Error> {
+    Self::new(
+      fields.version,
+      fields.mn_type,
+      fields.pro_tx_hash,
+      fields.net_info,
+      fields.script_operator_payout,
+      fields.inputs_hash,
+      fields.platform_node_id,
+      fields.platform_p2p_port,
+      fields.platform_http_port,
+      fields.sig,
+    )
   }
 }
 
@@ -236,7 +317,7 @@ mod tests {
   use super::*;
   use crate::prelude::*;
 
-  use dash_dev::{assert_serde_rt, check_sptx, Corpus};
+  use dash_dev::{assert_serde_rt, check_sptx, json_rejects, to_json, Corpus};
   use rstest::rstest;
 
   fn corpus_item(version: u16, mn_type: MnType) -> ProUpServTx {
@@ -248,6 +329,98 @@ mod tests {
       .collect();
     assert!(!items.is_empty(), "no v{version} {mn_type} payload in the corpus");
     items[0].clone()
+  }
+
+  /// Rebuilds `item` through [`ProUpServTx::new`] after `edit` changes it.
+  fn rebuild(item: &ProUpServTx, edit: impl FnOnce(&mut ProUpServTx)) -> Result<ProUpServTx, ProTxInvalid> {
+    let mut t = item.clone();
+    edit(&mut t);
+    ProUpServTx::new(
+      t.version,
+      t.mn_type,
+      t.pro_tx_hash,
+      t.net_info,
+      t.script_operator_payout,
+      t.inputs_hash,
+      t.platform_node_id,
+      t.platform_p2p_port,
+      t.platform_http_port,
+      *t.sig.as_bytes(),
+    )
+  }
+
+  #[rstest]
+  #[case::regular_v1(1, MnType::Regular)]
+  #[case::regular_v2(2, MnType::Regular)]
+  #[case::evo_v2(2, MnType::Evo)]
+  #[case::evo_v3(3, MnType::Evo)]
+  fn consistent_payloads_rebuild_unchanged(#[case] version: u16, #[case] mn_type: MnType) {
+    let item = corpus_item(version, mn_type);
+    assert_eq!(rebuild(&item, |_| {}), Ok(item.clone()));
+    assert_eq!(
+      (item.version(), item.mn_type(), item.net_info(), item.sig()),
+      (item.version, item.mn_type, &item.net_info, &item.sig)
+    );
+    assert_eq!(
+      (
+        item.platform_node_id(),
+        item.platform_p2p_port(),
+        item.platform_http_port()
+      ),
+      (item.platform_node_id, item.platform_p2p_port, item.platform_http_port)
+    );
+  }
+
+  #[rstest]
+  #[case::evo(MnType::Evo, ProTxInvalid::EvoVersionTooLow { version: 1 })]
+  #[case::unknown(MnType::Unknown(7), ProTxInvalid::BadMnType { mn_type: MnType::Unknown(7) })]
+  fn version_one_is_regular_only(#[case] mn_type: MnType, #[case] error: ProTxInvalid) {
+    let item = corpus_item(1, MnType::Regular);
+    assert_eq!(rebuild(&item, |t| t.mn_type = mn_type), Err(error));
+  }
+
+  #[rstest]
+  fn net_info_must_match_the_version() {
+    let v2 = corpus_item(2, MnType::Evo);
+    let v3 = corpus_item(3, MnType::Evo);
+    let extended = v3.net_info.clone();
+    assert_eq!(
+      rebuild(&v2, |t| t.net_info = extended),
+      Err(ProTxInvalid::NetInfoVersionMismatch)
+    );
+    let legacy = v2.net_info.clone();
+    assert_eq!(
+      rebuild(&v3, |t| t.net_info = legacy),
+      Err(ProTxInvalid::NetInfoVersionMismatch)
+    );
+  }
+
+  #[rstest]
+  #[case::evo_v2_without_node_id(2, MnType::Evo, |t: &mut ProUpServTx| t.platform_node_id = None)]
+  #[case::evo_v2_without_p2p_port(2, MnType::Evo, |t: &mut ProUpServTx| t.platform_p2p_port = None)]
+  #[case::evo_v3_with_ports(3, MnType::Evo, |t: &mut ProUpServTx| t.platform_http_port = Some(1))]
+  #[case::regular_with_node_id(2, MnType::Regular, |t: &mut ProUpServTx| t.platform_node_id = Some(PlatformNodeId::default()))]
+  fn platform_fields_must_match_type_and_version(
+    #[case] version: u16,
+    #[case] mn_type: MnType,
+    #[case] edit: fn(&mut ProUpServTx),
+  ) {
+    let item = corpus_item(version, mn_type);
+    assert_eq!(rebuild(&item, edit), Err(ProTxInvalid::BadPlatformFields));
+  }
+
+  #[rstest]
+  fn signature_takes_the_scheme_of_the_version() {
+    let v1 = corpus_item(1, MnType::Regular);
+    let rebuilt = rebuild(&v1, |_| {});
+    assert_eq!(rebuilt.map(|t| t.sig().scheme()), Ok(BlsScheme::Legacy));
+  }
+
+  #[rstest]
+  fn deserialization_goes_through_new() {
+    let item = corpus_item(2, MnType::Evo);
+    let json = to_json(&item).replace("\"platformP2PPort\":", "\"platformP2PPort\":null,\"unused\":");
+    assert!(json_rejects::<ProUpServTx>(&json));
   }
 
   #[rstest]
