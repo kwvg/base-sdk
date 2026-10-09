@@ -17,7 +17,6 @@ use crate::types::{BlsPubKey, BlsScheme, NITrait, NetInfo, NetInfoV1, NetInfoV2,
 use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
-#[cfg(feature = "serde")]
 use dash_pkc::bls::BLS_PK_LEN;
 use dash_script::{PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
@@ -31,26 +30,25 @@ use core::fmt;
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
 /// - v3: ExtAddr (extended network info)
+///
+/// The version-coupled fields are private, so [`ProRegTx::new`] keeps them in
+/// step with the version and masternode type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", from = "__ProRegFields"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", try_from = "__ProRegFields"))]
 pub struct ProRegTx {
-  /// 1=LegacyBLS, 2=BasicBLS, 3=ExtAddr.
-  pub version: u16,
-  /// Masternode type (Regular or Evo).
-  pub mn_type: MnType,
+  version: u16,
+  mn_type: MnType,
   /// Reserved, always 0.
   pub mode: u16,
   /// Collateral hash.
   pub collateral_hash: TxHash,
   /// Collateral index.
   pub collateral_index: u32,
-  /// Legacy ServiceV1 or extended NetInfo.
-  pub net_info: NetInfo,
+  net_info: NetInfo,
   /// Owner key id (20 bytes).
   pub key_id_owner: PubKeyHash,
-  /// Operator BLS public key (48 bytes).
-  pub pub_key_operator: BlsPubKey,
+  pub_key_operator: BlsPubKey,
   /// Voting key id (20 bytes).
   pub key_id_voting: PubKeyHash,
   /// Operator reward in basis points (0-10000).
@@ -59,14 +57,11 @@ pub struct ProRegTx {
   pub script_payout: ScriptPubKeyBuf,
   /// Hash of all inputs.
   pub inputs_hash: InputsHash,
-  /// Platform node id (Evo only).
-  pub platform_node_id: Option<PlatformNodeId>,
-  /// Platform P2P port (Evo + version < 3 only).
+  platform_node_id: Option<PlatformNodeId>,
   #[cfg_attr(feature = "serde", serde(rename = "platformP2PPort"))]
-  pub platform_p2p_port: Option<u16>,
-  /// Platform HTTP port (Evo + version < 3 only).
+  platform_p2p_port: Option<u16>,
   #[cfg_attr(feature = "serde", serde(rename = "platformHTTPPort"))]
-  pub platform_http_port: Option<u16>,
+  platform_http_port: Option<u16>,
   /// Owner ECDSA signature (variable-length).
   #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex"))]
   pub vch_sig: Vec<u8>,
@@ -154,14 +149,9 @@ impl BaseCodec for ProRegTx {
     self.mode.encode(buf);
     self.collateral_hash.encode(buf);
     self.collateral_index.encode(buf);
-    // Branch on version to match the decode path. Validation
-    // guarantees the variant matches the version.
-    if self.version >= 3 {
-      if let NetInfo::Extended(ext) = &self.net_info {
-        ext.encode(buf);
-      }
-    } else if let NetInfo::Legacy(svc) = &self.net_info {
-      svc.encode(buf);
+    match &self.net_info {
+      NetInfo::Legacy(svc) => svc.encode(buf),
+      NetInfo::Extended(ext) => ext.encode(buf),
     }
     self.key_id_owner.encode(buf);
     self.pub_key_operator.encode(buf);
@@ -169,12 +159,14 @@ impl BaseCodec for ProRegTx {
     self.operator_reward.encode(buf);
     self.script_payout.encode(buf);
     self.inputs_hash.encode(buf);
-    if self.mn_type == MnType::Evo {
-      self.platform_node_id.unwrap_or_default().encode(buf);
-      if self.version < 3 {
-        self.platform_p2p_port.unwrap_or(0).encode(buf);
-        self.platform_http_port.unwrap_or(0).encode(buf);
-      }
+    if let Some(node_id) = self.platform_node_id {
+      node_id.encode(buf);
+    }
+    if let Some(port) = self.platform_p2p_port {
+      port.encode(buf);
+    }
+    if let Some(port) = self.platform_http_port {
+      port.encode(buf);
     }
     self.vch_sig.encode(buf);
   }
@@ -213,9 +205,8 @@ impl Checkable for ProRegTx {
       _ => return Some(ProTxInvalid::BadPayoutScript),
     }
 
-    let is_extended = matches!(self.net_info, NetInfo::Extended(_));
-    if is_extended != (self.version >= PROTX_VERSION_EXT_ADDR) {
-      return Some(ProTxInvalid::NetInfoVersionMismatch);
+    if let Some(e) = self.check_fields() {
+      return Some(e);
     }
 
     if !self.net_info.is_empty() {
@@ -231,16 +222,6 @@ impl Checkable for ProRegTx {
           }
         }
       }
-    }
-
-    if let Some(e) = check_platform_fields(
-      self.mn_type,
-      self.version,
-      &self.platform_node_id,
-      self.platform_p2p_port,
-      self.platform_http_port,
-    ) {
-      return Some(e);
     }
 
     if let Some(Recipient::PubKeyHash(hash)) = &recipient {
@@ -261,7 +242,110 @@ impl Checkable for ProRegTx {
 
 hash_impl!(ProRegTx);
 
-/// Field set that tags the operator key from the payload version.
+impl ProRegTx {
+  /// Builds a registration whose net info and platform fields match the
+  /// version and masternode type. The version selects the scheme of
+  /// `pub_key_operator`.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`ProTxInvalid::NetInfoVersionMismatch`] or
+  /// [`ProTxInvalid::BadPlatformFields`] for a field that does not match.
+  #[expect(clippy::too_many_arguments, reason = "one argument per wire field")]
+  pub fn new(
+    version: u16,
+    mn_type: MnType,
+    mode: u16,
+    collateral_hash: TxHash,
+    collateral_index: u32,
+    net_info: NetInfo,
+    key_id_owner: PubKeyHash,
+    pub_key_operator: [u8; BLS_PK_LEN],
+    key_id_voting: PubKeyHash,
+    operator_reward: u16,
+    script_payout: ScriptPubKeyBuf,
+    inputs_hash: InputsHash,
+    platform_node_id: Option<PlatformNodeId>,
+    platform_p2p_port: Option<u16>,
+    platform_http_port: Option<u16>,
+    vch_sig: Vec<u8>,
+  ) -> Result<Self, ProTxInvalid> {
+    let protx = Self {
+      version,
+      mn_type,
+      mode,
+      collateral_hash,
+      collateral_index,
+      net_info,
+      key_id_owner,
+      pub_key_operator: BlsPubKey::from_bytes(pub_key_operator, BlsScheme::from_protx_version(version)),
+      key_id_voting,
+      operator_reward,
+      script_payout,
+      inputs_hash,
+      platform_node_id,
+      platform_p2p_port,
+      platform_http_port,
+      vch_sig,
+    };
+    match protx.check_fields() {
+      Some(error) => Err(error),
+      None => Ok(protx),
+    }
+  }
+
+  /// Payload version.
+  pub const fn version(&self) -> u16 {
+    self.version
+  }
+
+  /// Masternode type.
+  pub const fn mn_type(&self) -> MnType {
+    self.mn_type
+  }
+
+  /// Network addresses, legacy before version 3 and extended from it.
+  pub const fn net_info(&self) -> &NetInfo {
+    &self.net_info
+  }
+
+  /// Operator BLS public key, in the scheme the version selects.
+  pub const fn pub_key_operator(&self) -> &BlsPubKey {
+    &self.pub_key_operator
+  }
+
+  /// Platform node id, carried by evo masternodes.
+  pub const fn platform_node_id(&self) -> Option<PlatformNodeId> {
+    self.platform_node_id
+  }
+
+  /// Platform P2P port, carried by evo masternodes before version 3.
+  pub const fn platform_p2p_port(&self) -> Option<u16> {
+    self.platform_p2p_port
+  }
+
+  /// Platform HTTP port, carried by evo masternodes before version 3.
+  pub const fn platform_http_port(&self) -> Option<u16> {
+    self.platform_http_port
+  }
+
+  fn check_fields(&self) -> Option<ProTxInvalid> {
+    let is_extended = matches!(self.net_info, NetInfo::Extended(_));
+    if is_extended != (self.version >= PROTX_VERSION_EXT_ADDR) {
+      return Some(ProTxInvalid::NetInfoVersionMismatch);
+    }
+    check_platform_fields(
+      self.mn_type,
+      self.version,
+      &self.platform_node_id,
+      self.platform_p2p_port,
+      self.platform_http_port,
+    )
+  }
+}
+
+/// Field set that tags the operator key from the payload version and builds
+/// the registration through [`ProRegTx::new`].
 #[cfg(feature = "serde")]
 #[derive(::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -289,26 +373,28 @@ struct __ProRegFields {
 }
 
 #[cfg(feature = "serde")]
-impl From<__ProRegFields> for ProRegTx {
-  fn from(fields: __ProRegFields) -> Self {
-    Self {
-      version: fields.version,
-      mn_type: fields.mn_type,
-      mode: fields.mode,
-      collateral_hash: fields.collateral_hash,
-      collateral_index: fields.collateral_index,
-      net_info: fields.net_info,
-      key_id_owner: fields.key_id_owner,
-      pub_key_operator: BlsPubKey::from_bytes(fields.pub_key_operator, BlsScheme::from_protx_version(fields.version)),
-      key_id_voting: fields.key_id_voting,
-      operator_reward: fields.operator_reward,
-      script_payout: fields.script_payout,
-      inputs_hash: fields.inputs_hash,
-      platform_node_id: fields.platform_node_id,
-      platform_p2p_port: fields.platform_p2p_port,
-      platform_http_port: fields.platform_http_port,
-      vch_sig: fields.vch_sig,
-    }
+impl TryFrom<__ProRegFields> for ProRegTx {
+  type Error = ProTxInvalid;
+
+  fn try_from(fields: __ProRegFields) -> Result<Self, Self::Error> {
+    Self::new(
+      fields.version,
+      fields.mn_type,
+      fields.mode,
+      fields.collateral_hash,
+      fields.collateral_index,
+      fields.net_info,
+      fields.key_id_owner,
+      fields.pub_key_operator,
+      fields.key_id_voting,
+      fields.operator_reward,
+      fields.script_payout,
+      fields.inputs_hash,
+      fields.platform_node_id,
+      fields.platform_p2p_port,
+      fields.platform_http_port,
+      fields.vch_sig,
+    )
   }
 }
 
@@ -322,7 +408,7 @@ impl fmt::Display for ProRegTx {
 mod tests {
   use super::*;
 
-  use dash_dev::{assert_serde_rt, check_sptx, from_json, to_json, Corpus};
+  use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
   use rstest::rstest;
 
   fn corpus_item(version: u16, mn_type: MnType) -> ProRegTx {
@@ -368,6 +454,99 @@ mod tests {
     assert_eq!(ProRegTx::decode(&mut buf.as_slice()), Ok(item.clone()));
     assert_eq!(item.pub_key_operator.scheme(), scheme);
     assert_eq!(from_json::<ProRegTx>(&to_json(&item)), item);
+  }
+
+  /// Rebuilds `item` through [`ProRegTx::new`] after `edit` changes it.
+  fn rebuild(item: &ProRegTx, edit: impl FnOnce(&mut ProRegTx)) -> Result<ProRegTx, ProTxInvalid> {
+    let mut t = item.clone();
+    edit(&mut t);
+    ProRegTx::new(
+      t.version,
+      t.mn_type,
+      t.mode,
+      t.collateral_hash,
+      t.collateral_index,
+      t.net_info,
+      t.key_id_owner,
+      *t.pub_key_operator.as_bytes(),
+      t.key_id_voting,
+      t.operator_reward,
+      t.script_payout,
+      t.inputs_hash,
+      t.platform_node_id,
+      t.platform_p2p_port,
+      t.platform_http_port,
+      t.vch_sig,
+    )
+  }
+
+  #[rstest]
+  #[case::regular_v2(2, MnType::Regular)]
+  #[case::evo_v2(2, MnType::Evo)]
+  #[case::evo_v3(3, MnType::Evo)]
+  fn consistent_payloads_rebuild_unchanged(#[case] version: u16, #[case] mn_type: MnType) {
+    let item = corpus_item(version, mn_type);
+    assert_eq!(rebuild(&item, |_| {}), Ok(item.clone()));
+    assert_eq!(
+      (item.version(), item.mn_type(), item.net_info(), item.pub_key_operator()),
+      (item.version, item.mn_type, &item.net_info, &item.pub_key_operator)
+    );
+    assert_eq!(
+      (
+        item.platform_node_id(),
+        item.platform_p2p_port(),
+        item.platform_http_port()
+      ),
+      (item.platform_node_id, item.platform_p2p_port, item.platform_http_port)
+    );
+  }
+
+  #[rstest]
+  fn net_info_must_match_the_version() {
+    let v2 = corpus_item(2, MnType::Regular);
+    let v3 = corpus_item(3, MnType::Evo);
+    let extended = v3.net_info.clone();
+    assert_eq!(
+      rebuild(&v2, |t| t.net_info = extended),
+      Err(ProTxInvalid::NetInfoVersionMismatch)
+    );
+    let legacy = v2.net_info.clone();
+    assert_eq!(
+      rebuild(&v3, |t| t.net_info = legacy),
+      Err(ProTxInvalid::NetInfoVersionMismatch)
+    );
+  }
+
+  #[rstest]
+  #[case::legacy(1, BlsScheme::Legacy)]
+  #[case::basic(2, BlsScheme::Basic)]
+  fn operator_key_takes_the_scheme_of_the_version(#[case] version: u16, #[case] scheme: BlsScheme) {
+    let v2 = corpus_item(2, MnType::Regular);
+    let rebuilt = rebuild(&v2, |t| t.version = version);
+    assert_eq!(rebuilt.map(|t| t.pub_key_operator().scheme()), Ok(scheme));
+  }
+
+  #[rstest]
+  #[case::evo_v2_without_node_id(2, MnType::Evo, |t: &mut ProRegTx| t.platform_node_id = None)]
+  #[case::evo_v2_without_p2p_port(2, MnType::Evo, |t: &mut ProRegTx| t.platform_p2p_port = None)]
+  #[case::evo_v2_without_http_port(2, MnType::Evo, |t: &mut ProRegTx| t.platform_http_port = None)]
+  #[case::evo_v3_with_ports(3, MnType::Evo, |t: &mut ProRegTx| t.platform_p2p_port = Some(1))]
+  #[case::regular_with_node_id(2, MnType::Regular, |t: &mut ProRegTx| t.platform_node_id = Some(PlatformNodeId::default()))]
+  #[case::regular_with_port(2, MnType::Regular, |t: &mut ProRegTx| t.platform_http_port = Some(1))]
+  fn platform_fields_must_match_type_and_version(
+    #[case] version: u16,
+    #[case] mn_type: MnType,
+    #[case] edit: fn(&mut ProRegTx),
+  ) {
+    let item = corpus_item(version, mn_type);
+    assert_eq!(rebuild(&item, edit), Err(ProTxInvalid::BadPlatformFields));
+  }
+
+  #[rstest]
+  fn deserialization_goes_through_new() {
+    let item = corpus_item(2, MnType::Evo);
+    let json = to_json(&item).replace("\"platformP2PPort\":", "\"platformP2PPort\":null,\"unused\":");
+    assert!(json_rejects::<ProRegTx>(&json));
   }
 
   #[rstest]
