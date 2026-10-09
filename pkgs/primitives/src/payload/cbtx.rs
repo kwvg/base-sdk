@@ -109,6 +109,8 @@ pub enum CbTxInvalid {
   MissingField,
   /// `bad-cbtx-unexpected-field`
   UnexpectedField,
+  /// `bad-cbtx-payload`
+  BadPayload,
 }
 
 impl core::fmt::Display for CbTxInvalid {
@@ -117,6 +119,7 @@ impl core::fmt::Display for CbTxInvalid {
       Self::BadVersion { version } => write!(f, "bad-cbtx-version: {version}"),
       Self::MissingField => write!(f, "bad-cbtx-missing-field"),
       Self::UnexpectedField => write!(f, "bad-cbtx-unexpected-field"),
+      Self::BadPayload => write!(f, "bad-cbtx-payload"),
     }
   }
 }
@@ -127,6 +130,11 @@ impl Checkable for CoinbaseCommitment {
   fn check(&self) -> Option<Self::Error> {
     if self.version == 0 || self.version >= 4 {
       return Some(CbTxInvalid::BadVersion { version: self.version });
+    }
+
+    // A non-canonical signature counts as a payload decode failure.
+    if self.best_cl_signature.is_some_and(|sig| !sig.is_canonical()) {
+      return Some(CbTxInvalid::BadPayload);
     }
 
     if self.version >= 2 {
@@ -161,8 +169,10 @@ impl fmt::Display for CoinbaseCommitment {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
+  use crate::prelude::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
@@ -184,5 +194,18 @@ mod tests {
         "{label}"
       );
     }
+  }
+  #[rstest]
+  fn non_canonical_signature_is_a_bad_payload() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "cbtx");
+    let mut item = corpus
+      .entries::<CoinbaseCommitment>("cbtx", |_, _, _| {})
+      .into_values()
+      .find(|item| item.best_cl_signature.is_some())
+      .unwrap();
+    assert_eq!(item.check(), None);
+    item.best_cl_signature = item.best_cl_signature.map(|sig| sig.corrupted());
+    assert_eq!(item.check(), Some(CbTxInvalid::BadPayload));
+    assert_eq!(CbTxInvalid::BadPayload.to_string(), "bad-cbtx-payload");
   }
 }

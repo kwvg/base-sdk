@@ -195,12 +195,15 @@ impl BaseCodec for FinalCommitment {
 pub enum CommitmentInvalid {
   /// `bad-qc-quorum-index`
   BadQuorumIndex,
+  /// `bad-qc-payload`
+  BadPayload,
 }
 
 impl fmt::Display for CommitmentInvalid {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::BadQuorumIndex => write!(f, "bad-qc-quorum-index"),
+      Self::BadPayload => write!(f, "bad-qc-payload"),
     }
   }
 }
@@ -209,6 +212,13 @@ impl Checkable for FinalCommitment {
   type Error = CommitmentInvalid;
 
   fn check(&self) -> Option<Self::Error> {
+    // Non-canonical BLS fields count as a payload decode failure. A null
+    // commitment holds zero bytes, which count as canonical.
+    let qc = &self.commitment;
+    if !(qc.quorum_public_key.is_canonical() && qc.quorum_sig.is_canonical() && qc.members_sig.is_canonical()) {
+      return Some(CommitmentInvalid::BadPayload);
+    }
+
     let indexed = self.commitment.version == 2 || self.commitment.version == 4;
     if indexed != self.commitment.quorum_index.is_some() {
       return Some(CommitmentInvalid::BadQuorumIndex);
@@ -276,5 +286,37 @@ mod tests {
     assert_eq!(schemes(&decoded.commitment), (scheme, scheme, scheme));
     assert_eq!(decoded, item);
     assert_eq!(from_json::<FinalCommitment>(&to_json(&item)), item);
+  }
+
+  #[rstest]
+  #[case::quorum_public_key(|qc: &mut Commitment| qc.quorum_public_key = qc.quorum_public_key.corrupted())]
+  #[case::quorum_sig(|qc: &mut Commitment| qc.quorum_sig = qc.quorum_sig.corrupted())]
+  #[case::members_sig(|qc: &mut Commitment| qc.members_sig = qc.members_sig.corrupted())]
+  fn non_canonical_bls_field_is_a_bad_payload(#[case] corrupt: fn(&mut Commitment)) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "qctx");
+    let mut item = corpus
+      .entries::<FinalCommitment>("qctx", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    assert_eq!(item.check(), None);
+    corrupt(&mut item.commitment);
+    assert_eq!(item.check(), Some(CommitmentInvalid::BadPayload));
+    assert_eq!(CommitmentInvalid::BadPayload.to_string(), "bad-qc-payload");
+  }
+
+  #[rstest]
+  fn null_bls_fields_pass() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "qctx");
+    let mut item = corpus
+      .entries::<FinalCommitment>("qctx", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    let qc = &mut item.commitment;
+    qc.quorum_public_key = BlsPubKey::from_bytes([0; BLS_PK_LEN], BlsScheme::Basic);
+    qc.quorum_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], BlsScheme::Basic);
+    qc.members_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], BlsScheme::Basic);
+    assert_eq!(item.check(), None);
   }
 }

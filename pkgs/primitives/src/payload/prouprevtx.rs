@@ -71,6 +71,11 @@ impl Checkable for ProUpRevTx {
       return Some(ProTxInvalid::BadVersion { version: self.version });
     }
 
+    // A non-canonical signature counts as a payload decode failure.
+    if !self.sig.is_canonical() {
+      return Some(ProTxInvalid::BadPayload);
+    }
+
     if matches!(self.reason, RevocationReason::Unknown(_)) {
       return Some(ProTxInvalid::BadReason { reason: self.reason });
     }
@@ -150,5 +155,19 @@ mod tests {
     assert_eq!(decoded.sig.scheme(), scheme);
     assert_eq!(decoded, item);
     assert_eq!(from_json::<ProUpRevTx>(&to_json(&item)), item);
+  }
+
+  #[rstest]
+  fn non_canonical_signature_is_a_bad_payload() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "prouprevtx");
+    let mut item = corpus
+      .entries::<ProUpRevTx>("prouprevtx", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    assert_eq!(item.check(), None);
+    item.sig = item.sig.corrupted();
+    assert_eq!(item.check(), Some(ProTxInvalid::BadPayload));
+    assert_eq!(ProTxInvalid::BadPayload.to_string(), "bad-protx-payload");
   }
 }

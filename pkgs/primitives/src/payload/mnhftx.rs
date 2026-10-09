@@ -64,6 +64,8 @@ pub enum MnHardForkInvalid {
   BadVersion { version: u8 },
   /// `bad-mnhf-nbit-out-of-bounds`
   VersionBitOutOfBounds { bit: u8 },
+  /// `bad-mnhf-payload`
+  BadPayload,
 }
 
 impl core::fmt::Display for MnHardForkInvalid {
@@ -71,6 +73,7 @@ impl core::fmt::Display for MnHardForkInvalid {
     match self {
       Self::BadVersion { version } => write!(f, "bad-mnhf-version: {version}"),
       Self::VersionBitOutOfBounds { bit } => write!(f, "bad-mnhf-nbit-out-of-bounds: {bit}"),
+      Self::BadPayload => write!(f, "bad-mnhf-payload"),
     }
   }
 }
@@ -81,6 +84,11 @@ impl Checkable for MnHardFork {
   fn check(&self) -> Option<Self::Error> {
     if self.version == 0 || self.version > 1 {
       return Some(MnHardForkInvalid::BadVersion { version: self.version });
+    }
+
+    // A non-canonical signature counts as a payload decode failure.
+    if !self.sig.is_canonical() {
+      return Some(MnHardForkInvalid::BadPayload);
     }
 
     if self.version_bit >= VERSIONBITS_NUM_BITS {
@@ -100,8 +108,10 @@ impl fmt::Display for MnHardFork {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
+  use crate::prelude::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
@@ -119,5 +129,18 @@ mod tests {
     for (label, item) in corpus.entries::<MnHardFork>("mnhftx", |_, _, _| {}) {
       assert_eq!(item.sig.scheme(), BlsScheme::Basic, "{label}");
     }
+  }
+  #[rstest]
+  fn non_canonical_signature_is_a_bad_payload() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "mnhftx");
+    let mut item = corpus
+      .entries::<MnHardFork>("mnhftx", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    assert_eq!(item.check(), None);
+    item.sig = item.sig.corrupted();
+    assert_eq!(item.check(), Some(MnHardForkInvalid::BadPayload));
+    assert_eq!(MnHardForkInvalid::BadPayload.to_string(), "bad-mnhf-payload");
   }
 }

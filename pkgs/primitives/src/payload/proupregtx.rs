@@ -90,7 +90,8 @@ impl Checkable for ProUpRegTx {
       return Some(ProTxInvalid::BadMode { mode: self.mode });
     }
 
-    if self.pub_key_operator.is_null() {
+    // A non-canonical operator key is an invalid key, reported as null.
+    if self.pub_key_operator.is_null() || !self.pub_key_operator.is_canonical() {
       return Some(ProTxInvalid::NullKey);
     }
     if self.key_id_voting.is_null() {
@@ -186,5 +187,18 @@ mod tests {
     assert_eq!(decoded.pub_key_operator.scheme(), scheme);
     assert_eq!(decoded, item);
     assert_eq!(from_json::<ProUpRegTx>(&to_json(&item)), item);
+  }
+
+  #[rstest]
+  fn non_canonical_operator_key_is_a_null_key() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupregtx");
+    let mut item = corpus
+      .entries::<ProUpRegTx>("proupregtx", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    assert_eq!(item.check(), None);
+    item.pub_key_operator = item.pub_key_operator.corrupted();
+    assert_eq!(item.check(), Some(ProTxInvalid::NullKey));
   }
 }

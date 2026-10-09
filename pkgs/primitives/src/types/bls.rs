@@ -125,6 +125,28 @@ macro_rules! bls_tagged {
       pub fn is_null(&self) -> bool {
         self.as_bytes().iter().all(|&byte| byte == 0)
       }
+
+      /// Copy with a leading-byte flag set that no canonical encoding in the
+      /// scheme carries.
+      #[cfg(test)]
+      pub(crate) fn corrupted(&self) -> Self {
+        let mut bytes = *self.as_bytes();
+        match self.scheme() {
+          BlsScheme::Legacy => bytes[0] |= 0x20,
+          BlsScheme::Basic => bytes[0] ^= 0x80,
+        }
+        Self::from_bytes(bytes, self.scheme())
+      }
+
+      /// Tells whether the bytes are the sole encoding of a point in their
+      /// scheme. Null bytes count as canonical, so a caller requiring a point
+      /// also checks [`is_null`](Self::is_null).
+      pub fn is_canonical(&self) -> bool {
+        match self {
+          Self::Legacy(bytes) => bytes.is_canonical(),
+          Self::Basic(bytes) => bytes.is_canonical(),
+        }
+      }
     }
   };
 }
@@ -216,6 +238,38 @@ mod tests {
   fn null_is_all_zero() {
     assert!(BlsPubKey::from_bytes([0; BLS_PK_LEN], BlsScheme::Basic).is_null());
     assert!(!BlsSig::from_bytes([1; BLS_SIG_LEN], BlsScheme::Legacy).is_null());
+  }
+
+  fn key<S: dash_pkc::bls::BlsScheme>() -> [u8; BLS_PK_LEN] {
+    dash_pkc::bls::BlsSecretKey::<S>::from_ikm(&[7; 32])
+      .unwrap()
+      .public_key()
+      .to_bytes()
+  }
+
+  #[rstest]
+  #[case::legacy(key::<dash_pkc::bls::BlsScChia>(), BlsScheme::Legacy)]
+  #[case::basic(key::<dash_pkc::bls::BlsScIetf>(), BlsScheme::Basic)]
+  fn canonical_keys_and_null_pass(#[case] raw: [u8; BLS_PK_LEN], #[case] scheme: BlsScheme) {
+    let key = BlsPubKey::from_bytes(raw, scheme);
+    assert!(key.is_canonical());
+    assert!(!key.corrupted().is_canonical());
+    assert!(BlsPubKey::from_bytes([0; BLS_PK_LEN], scheme).is_canonical());
+  }
+
+  /// A basic key with its sign bit set carries a flag the legacy scheme
+  /// masks, and the check does not retry it as basic.
+  #[rstest]
+  fn a_basic_key_is_not_canonical_as_legacy() {
+    let raw = (0..=u8::MAX)
+      .map(|seed| {
+        let sk = dash_pkc::bls::BlsSecretKey::<dash_pkc::bls::BlsScIetf>::from_ikm(&[seed; 32]).unwrap();
+        sk.public_key().to_bytes()
+      })
+      .find(|raw| raw[0] & 0x20 != 0)
+      .unwrap();
+    assert!(BlsPubKey::from_bytes(raw, BlsScheme::Basic).is_canonical());
+    assert!(!BlsPubKey::from_bytes(raw, BlsScheme::Legacy).is_canonical());
   }
 
   #[cfg(feature = "serde")]

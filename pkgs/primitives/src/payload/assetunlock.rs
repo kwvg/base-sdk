@@ -70,6 +70,8 @@ pub enum AssetUnlockInvalid {
   BadVersion { version: u8 },
   /// `bad-txns-assetunlock-fee-outofrange`
   FeeOutOfRange { fee: u32 },
+  /// `bad-assetunlocktx-payload`
+  BadPayload,
 }
 
 impl core::fmt::Display for AssetUnlockInvalid {
@@ -77,6 +79,7 @@ impl core::fmt::Display for AssetUnlockInvalid {
     match self {
       Self::BadVersion { version } => write!(f, "bad-assetunlocktx-version: {version}"),
       Self::FeeOutOfRange { fee } => write!(f, "bad-txns-assetunlock-fee-outofrange: {fee}"),
+      Self::BadPayload => write!(f, "bad-assetunlocktx-payload"),
     }
   }
 }
@@ -87,6 +90,11 @@ impl Checkable for AssetUnlock {
   fn check(&self) -> Option<Self::Error> {
     if self.version == 0 || self.version > 1 {
       return Some(AssetUnlockInvalid::BadVersion { version: self.version });
+    }
+
+    // A non-canonical signature counts as a payload decode failure.
+    if !self.quorum_sig.is_canonical() {
+      return Some(AssetUnlockInvalid::BadPayload);
     }
 
     if self.fee == 0 {
@@ -106,8 +114,10 @@ impl fmt::Display for AssetUnlock {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
+  use crate::prelude::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
@@ -125,5 +135,18 @@ mod tests {
     for (label, item) in corpus.entries::<AssetUnlock>("assetunlock", |_, _, _| {}) {
       assert_eq!(item.quorum_sig.scheme(), BlsScheme::Basic, "{label}");
     }
+  }
+  #[rstest]
+  fn non_canonical_signature_is_a_bad_payload() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
+    let mut item = corpus
+      .entries::<AssetUnlock>("assetunlock", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    assert_eq!(item.check(), None);
+    item.quorum_sig = item.quorum_sig.corrupted();
+    assert_eq!(item.check(), Some(AssetUnlockInvalid::BadPayload));
+    assert_eq!(AssetUnlockInvalid::BadPayload.to_string(), "bad-assetunlocktx-payload");
   }
 }

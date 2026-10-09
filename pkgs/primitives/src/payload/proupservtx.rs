@@ -135,6 +135,11 @@ impl Checkable for ProUpServTx {
       return Some(ProTxInvalid::BadVersion { version: self.version });
     }
 
+    // A non-canonical signature counts as a payload decode failure.
+    if !self.sig.is_canonical() {
+      return Some(ProTxInvalid::BadPayload);
+    }
+
     if matches!(self.mn_type, MnType::Unknown(_)) {
       return Some(ProTxInvalid::BadMnType { mn_type: self.mn_type });
     }
@@ -255,5 +260,19 @@ mod tests {
       seen.insert(item.version.min(2));
     }
     assert_eq!(seen.len(), 2, "the corpus covers both schemes");
+  }
+
+  /// Corpus payloads of both schemes reject a corrupted signature.
+  #[rstest]
+  fn non_canonical_signature_is_a_bad_payload() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupservtx");
+    let mut seen = BTreeSet::new();
+    for (label, mut item) in corpus.entries::<ProUpServTx>("proupservtx", |_, _, _| {}) {
+      assert_eq!(item.check(), None, "{label}");
+      seen.insert(item.version.min(2));
+      item.sig = item.sig.corrupted();
+      assert_eq!(item.check(), Some(ProTxInvalid::BadPayload), "{label}");
+    }
+    assert_eq!(seen.len(), 2);
   }
 }
