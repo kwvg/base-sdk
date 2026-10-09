@@ -276,9 +276,6 @@ pub(crate) fn decode_version(data: &mut &[u8]) -> Result<u16, DecodeError> {
 
 /// Checks that an extended net info payload is trivially valid.
 pub(crate) fn check_sptx_netinfo(ext: &NetInfoV2, version: u16, mn_type: MnType) -> Option<ProTxInvalid> {
-  if let Some(error) = ext.check() {
-    return Some(ProTxInvalid::NetInfoInvalid { error });
-  }
   if !ext.has_entries(NIPurpose::CoreP2p) {
     return Some(ProTxInvalid::NetInfoEmpty);
   }
@@ -295,7 +292,8 @@ pub(crate) fn check_sptx_netinfo(ext: &NetInfoV2, version: u16, mn_type: MnType)
   {
     return Some(ProTxInvalid::NetInfoEmpty);
   }
-  None
+  // The purpose checks precede validation of the entries themselves.
+  ext.check().map(|error| ProTxInvalid::NetInfoInvalid { error })
 }
 
 /// A decoded special transaction payload.

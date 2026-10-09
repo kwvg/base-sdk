@@ -409,6 +409,7 @@ mod tests {
   use super::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
+  use hex_conservative::hex;
   use rstest::rstest;
 
   fn corpus_item(version: u16, mn_type: MnType) -> ProRegTx {
@@ -499,6 +500,18 @@ mod tests {
       ),
       (item.platform_node_id, item.platform_p2p_port, item.platform_http_port)
     );
+  }
+
+  /// An empty purpose group and an unknown version both reach the purpose
+  /// checks, which find no core P2P entry.
+  #[rstest]
+  #[case::empty_group(&hex!("01010000"))]
+  #[case::unknown_version(&hex!("00"))]
+  fn non_empty_net_info_without_entries_is_checked(#[case] wire: &[u8]) {
+    let item = corpus_item(3, MnType::Evo);
+    let checked = NetInfoV2::decode(&mut &wire[..])
+      .map(|v2| rebuild(&item, |t| t.net_info = NetInfo::Extended(v2)).map(|t| t.check()));
+    assert_eq!(checked, Ok(Ok(Some(ProTxInvalid::NetInfoEmpty))));
   }
 
   #[rstest]

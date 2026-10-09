@@ -510,8 +510,10 @@ impl NITrait for NetInfoV2 {
       })
   }
 
+  /// A value of an unknown version, or with an empty purpose group, is not
+  /// empty.
   fn is_empty(&self) -> bool {
-    self.entries.iter().all(|(_, group)| group.is_empty())
+    self.version == Self::CURRENT_VERSION && self.entries.is_empty()
   }
 
   fn has_entries(&self, purpose: NIPurpose) -> bool {
@@ -759,6 +761,15 @@ mod tests {
     let mut buf = Vec::new();
     decoded.encode(&mut buf);
     assert_eq!(buf, [version]);
+  }
+
+  #[rstest]
+  #[case::no_groups(&hex!("0100"), true)]
+  #[case::empty_group(&hex!("01010000"), false)]
+  #[case::unknown_version(&hex!("00"), false)]
+  fn empty_means_current_version_and_no_groups(#[case] wire: &[u8], #[case] empty: bool) {
+    let v2 = NetInfoV2::decode(&mut &wire[..]).unwrap();
+    assert_eq!(v2.is_empty(), empty);
   }
 
   #[rstest]
