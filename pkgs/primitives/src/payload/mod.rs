@@ -21,11 +21,12 @@ mod quorum;
 
 use crate::hash_impl;
 use crate::prelude::*;
-use crate::types::{NIError, NIPurpose, NITrait, NetAddrError, NetInfoV2};
+use crate::types::{NIError, NIPurpose, NITrait, NetAddrError, NetInfo, NetInfoV2};
 
-use dash_num::make_hash;
-use dash_types::codec::{BaseCodec, DecodeError};
+use dash_num::{make_hash, Hash256};
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
+use dash_types::Numeric;
 use dash_types::{enum_map, impl_num, Checkable};
 
 use core::fmt;
@@ -271,6 +272,31 @@ impl<T: Checkable<Error = ProTxInvalid>> Checkable for ProTxPayload<T> {
       }),
     }
   }
+}
+
+/// Encoding of a ProTx payload's net info.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub(crate) enum NetInfoForm {
+  /// The bytes as decoded, which the txid covers.
+  Wire,
+  /// The canonical encoding, which the payload hash covers.
+  Hash,
+}
+
+/// Writes `net_info` in `form`.
+pub(crate) fn encode_net_info(net_info: &NetInfo, form: NetInfoForm, buf: &mut impl EncodeBuf) {
+  match (form, net_info) {
+    (NetInfoForm::Wire, NetInfo::Legacy(v1)) => v1.encode(buf),
+    (NetInfoForm::Wire, NetInfo::Extended(v2)) => v2.encode(buf),
+    (NetInfoForm::Hash, _) => net_info.encode_canonical(buf),
+  }
+}
+
+/// Hashes the bytes `write` produces with SHA256d.
+pub(crate) fn payload_hash(write: impl FnOnce(&mut Vec<u8>)) -> Hash256 {
+  let mut buf = Vec::new();
+  write(&mut buf);
+  Hash256::from_lendian(bitcoin_hashes::sha256d::Hash::hash(&buf).to_byte_array())
 }
 
 /// Reads the version of a ProTx payload with fields.

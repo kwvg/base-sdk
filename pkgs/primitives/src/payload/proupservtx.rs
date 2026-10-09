@@ -8,16 +8,19 @@
 
 use super::proregtx::check_platform_fields;
 use super::{
-  check_sptx_netinfo, decode_version, InputsHash, MnType, ProTxInvalid, PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
+  check_sptx_netinfo, decode_version, encode_net_info, payload_hash, InputsHash, MnType, NetInfoForm, ProTxInvalid,
+  PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
 };
 use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
 use crate::types::{BlsScheme, BlsSig, NITrait, NetInfo, NetInfoV1, NetInfoV2, Routing, ServiceV1};
-use crate::{hash_impl, TxHash};
+use crate::TxHash;
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
+use dash_num::Hash256;
 use dash_pkc::bls::BLS_SIG_LEN;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
+use dash_types::Hashable;
 use dash_types::{type_id::TypeId, Checkable, Numeric};
 
 use core::fmt;
@@ -97,26 +100,7 @@ impl BaseCodec for ProUpServTx {
   }
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
-    self.version.encode(buf);
-    if self.version >= 2 {
-      self.mn_type.to_base().encode(buf);
-    }
-    self.pro_tx_hash.encode(buf);
-    match &self.net_info {
-      NetInfo::Legacy(svc) => svc.encode(buf),
-      NetInfo::Extended(ext) => ext.encode(buf),
-    }
-    self.script_operator_payout.encode(buf);
-    self.inputs_hash.encode(buf);
-    if let Some(node_id) = self.platform_node_id {
-      node_id.encode(buf);
-    }
-    if let Some(port) = self.platform_p2p_port {
-      port.encode(buf);
-    }
-    if let Some(port) = self.platform_http_port {
-      port.encode(buf);
-    }
+    self.encode_unsigned(NetInfoForm::Wire, buf);
     self.sig.encode(buf);
   }
 }
@@ -166,9 +150,37 @@ impl Checkable for ProUpServTx {
   }
 }
 
-hash_impl!(ProUpServTx);
+/// The hash leaves out the operator signature, which signs the hash, and
+/// covers the net info in its canonical encoding.
+impl Hashable for ProUpServTx {
+  type Hash = Hash256;
+
+  fn hash(&self) -> Hash256 {
+    payload_hash(|buf| self.encode_unsigned(NetInfoForm::Hash, buf))
+  }
+}
 
 impl ProUpServTx {
+  fn encode_unsigned(&self, form: NetInfoForm, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    if self.version >= 2 {
+      self.mn_type.to_base().encode(buf);
+    }
+    self.pro_tx_hash.encode(buf);
+    encode_net_info(&self.net_info, form, buf);
+    self.script_operator_payout.encode(buf);
+    self.inputs_hash.encode(buf);
+    if let Some(node_id) = self.platform_node_id {
+      node_id.encode(buf);
+    }
+    if let Some(port) = self.platform_p2p_port {
+      port.encode(buf);
+    }
+    if let Some(port) = self.platform_http_port {
+      port.encode(buf);
+    }
+  }
+
   /// Builds a service update whose masternode type, net info and platform
   /// fields match the version. The version selects the scheme of `sig`.
   ///
@@ -465,6 +477,45 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupservtx");
     let items = corpus.entries::<ProUpServTx>("proupservtx", check_sptx);
     assert_serde_rt("proupservtx", &items);
+  }
+
+  /// The corpus holds the version 3 registration these updates refer to. Each
+  /// operator signature verifies under the registered operator key over the
+  /// hash without the signature, which covers the extended net info.
+  #[rstest]
+  fn operator_signature_verifies_over_the_payload_hash() {
+    use crate::ProRegTx;
+
+    use dash_pkc::bls::{BlsPublicKey, BlsScIetf, BlsSigId, BlsSignature};
+    use dash_types::Hashable;
+
+    let registrations =
+      Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx").entries::<ProRegTx>("proregtx", |_, _, _| {});
+    let updates =
+      Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupservtx").entries::<ProUpServTx>("proupservtx", |_, _, _| {});
+    let mut verified = 0;
+    for (label, update) in &updates {
+      let Some(registration) = registrations.get(&update.pro_tx_hash.to_string()) else {
+        continue;
+      };
+      assert_eq!(update.version, 3, "{label}");
+      let key = BlsPublicKey::<BlsScIetf>::from_bytes(registration.pub_key_operator().as_bytes());
+      let sig = BlsSignature::<BlsScIetf>::from_bytes(update.sig.as_bytes());
+      let hash = *update.hash().as_bytes();
+      let verifies = |hash: &[u8]| match (&key, &sig) {
+        (Ok(key), Ok(sig)) => key.verify_with(hash, sig, BlsSigId::Basic).is_ok(),
+        _ => false,
+      };
+      assert!(verifies(&hash), "{label}");
+      let mut signed = Vec::new();
+      update.encode(&mut signed);
+      assert!(
+        !verifies(&bitcoin_hashes::sha256d::Hash::hash(&signed).to_byte_array()),
+        "{label}"
+      );
+      verified += 1;
+    }
+    assert_eq!(verified, 3);
   }
 
   #[rstest]

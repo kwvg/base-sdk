@@ -6,17 +6,19 @@
 
 //! ProUpRevTx revocation payload (type 4).
 
-use super::{decode_version, InputsHash, ProTxInvalid, PROTX_VERSION_EXT_ADDR};
+use super::{decode_version, payload_hash, InputsHash, ProTxInvalid, PROTX_VERSION_EXT_ADDR};
 use crate::codec::impl_payload;
 use crate::support::RevocationReason;
 use crate::types::{BlsScheme, BlsSig};
-use crate::{hash_impl, TxHash};
+use crate::TxHash;
 
+use dash_num::Hash256;
 #[cfg(feature = "serde")]
 use dash_pkc::bls::BLS_SIG_LEN;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Checkable;
+use dash_types::Hashable;
 
 use core::fmt;
 
@@ -55,10 +57,7 @@ impl BaseCodec for ProUpRevTx {
   }
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
-    self.version.encode(buf);
-    self.pro_tx_hash.encode(buf);
-    self.reason.encode(buf);
-    self.inputs_hash.encode(buf);
+    self.encode_unsigned(buf);
     self.sig.encode(buf);
   }
 }
@@ -84,7 +83,23 @@ impl Checkable for ProUpRevTx {
   }
 }
 
-hash_impl!(ProUpRevTx);
+/// The hash leaves out the operator signature, which signs the hash.
+impl Hashable for ProUpRevTx {
+  type Hash = Hash256;
+
+  fn hash(&self) -> Hash256 {
+    payload_hash(|buf| self.encode_unsigned(buf))
+  }
+}
+
+impl ProUpRevTx {
+  fn encode_unsigned(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    self.pro_tx_hash.encode(buf);
+    self.reason.encode(buf);
+    self.inputs_hash.encode(buf);
+  }
+}
 
 /// Field set that tags the signature from the payload version.
 #[cfg(feature = "serde")]
