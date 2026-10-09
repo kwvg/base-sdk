@@ -54,12 +54,12 @@ enum_map! {
   pub enum RevocationReason, u16, Unknown {
     /// No specific reason.
     NotSpecified = 0 => "not_specified",
-    /// Key material has been compromised.
-    KeyCompromise = 1 => "key_compromise",
-    /// Operator is changing keys.
-    ChangeOfKeys = 2 => "change_of_keys",
-    /// Service level violation.
-    ViolationOfService = 3 => "violation_of_service",
+    /// The operator terminates the service.
+    TerminationOfService = 1 => "termination_of_service",
+    /// The operator keys are compromised.
+    CompromisedKeys = 2 => "compromised_keys",
+    /// The operator is changing keys.
+    ChangeOfKeys = 3 => "change_of_keys",
   }
 }
 
@@ -239,5 +239,33 @@ impl Iterator for DynBitsetIterator<'_> {
       }
     }
     None
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::RevocationReason;
+  use crate::prelude::*;
+
+  use dash_types::Numeric;
+  use rstest::rstest;
+
+  #[rstest]
+  #[case::not_specified(0, RevocationReason::NotSpecified, "not_specified")]
+  #[case::termination_of_service(1, RevocationReason::TerminationOfService, "termination_of_service")]
+  #[case::compromised_keys(2, RevocationReason::CompromisedKeys, "compromised_keys")]
+  #[case::change_of_keys(3, RevocationReason::ChangeOfKeys, "change_of_keys")]
+  fn revocation_reasons_follow_the_reference_codes(
+    #[case] code: u16,
+    #[case] reason: RevocationReason,
+    #[case] label: &str,
+  ) {
+    assert_eq!(RevocationReason::from_base(code), reason);
+    assert_eq!(reason.to_string(), label);
+  }
+
+  #[rstest]
+  fn codes_past_change_of_keys_are_unknown() {
+    assert_eq!(RevocationReason::from_base(4), RevocationReason::Unknown(4));
   }
 }
