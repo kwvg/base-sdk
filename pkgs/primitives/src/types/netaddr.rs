@@ -187,6 +187,12 @@ pub trait NetAddr {
   /// Returns `true` when every address byte is zero.
   fn is_null(&self) -> bool;
 
+  /// Returns `true` when the address passes its [`Checkable`] check, the
+  /// validity a routable address requires.
+  ///
+  /// [`Checkable`]: dash_types::Checkable
+  fn is_valid(&self) -> bool;
+
   /// Returns `true` for Tor v3 addresses.
   fn is_tor(&self) -> bool {
     false
@@ -390,43 +396,26 @@ pub trait NetAddr {
     b.len() == 16 && b[0] == 0x20 && b[1] == 0x01 && b[2] == 0x00 && (b[3] & 0xf0) == 0x20
   }
 
-  /// Returns `true` when the address is globally routable.
-  ///
-  /// This classification matches the reference implementation's `IsRoutable()`
-  /// and is used in consensus-adjacent paths (masternode registration and
-  /// service validation).
+  /// Returns `true` when the address is globally routable, which requires a
+  /// valid address outside the private, documentation, local and other
+  /// reserved ranges that `IsRoutable` excludes.
   fn is_routable(&self) -> bool {
-    if self.is_null() {
+    if !self.is_valid() {
       return false;
     }
-    if self.is_privacy_net() {
-      return true;
-    }
-    if self.is_ipv4() {
-      let b = self.bytes();
-      // 0/8 (current-net), 127/8 (loopback), 255.255.255.255 (broadcast)
-      if b.len() == 4 && (b[0] == 0 || b[0] == 127 || b == [255, 255, 255, 255]) {
-        return false;
-      }
-      return !self.is_rfc1918()
-        && !self.is_rfc2544()
-        && !self.is_rfc3927()
-        && !self.is_rfc5737()
-        && !self.is_rfc6598();
-    }
-    if self.is_ipv6() {
-      let b = self.bytes();
-      // ::1 loopback
-      if b.len() == 16 && b[..15] == [0; 15] && b[15] == 1 {
-        return false;
-      }
-      return !self.is_rfc3849()
-        && !self.is_rfc4193()
-        && !self.is_rfc4843()
-        && !self.is_rfc4862()
-        && !self.is_rfc7343();
-    }
-    false
+    let b = self.bytes();
+    let loopback = (self.is_ipv4() && b.len() == 4 && (b[0] == 0 || b[0] == 127))
+      || (self.is_ipv6() && b.len() == 16 && b[..15] == [0; 15] && b[15] == 1);
+    !(self.is_rfc1918()
+      || self.is_rfc2544()
+      || self.is_rfc3927()
+      || self.is_rfc4862()
+      || self.is_rfc6598()
+      || self.is_rfc5737()
+      || self.is_rfc4193()
+      || self.is_rfc4843()
+      || self.is_rfc7343()
+      || loopback)
   }
 
   /// Returns `true` when a node can plausibly connect to this address.

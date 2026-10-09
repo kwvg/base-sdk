@@ -12,7 +12,7 @@ use super::{
 };
 use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
-use crate::types::{BlsScheme, BlsSig, NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
+use crate::types::{BlsScheme, BlsSig, NITrait, NetInfo, NetInfoV1, NetInfoV2, Routing, ServiceV1};
 use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
@@ -244,6 +244,14 @@ impl ProUpServTx {
     &self.sig
   }
 
+  /// Rejects a service address that `routing` does not admit.
+  pub fn check_routing(&self, routing: Routing) -> Option<ProTxInvalid> {
+    self
+      .net_info
+      .check_routing(routing)
+      .map(|error| ProTxInvalid::NetInfoInvalid { error })
+  }
+
   fn check_fields(&self) -> Option<ProTxInvalid> {
     if self.version < PROTX_VERSION_BASIC_BLS {
       match self.mn_type {
@@ -316,7 +324,7 @@ impl fmt::Display for ProUpServTx {
 mod tests {
   use super::*;
   use crate::prelude::*;
-  use crate::types::AddrV1;
+  use crate::types::{AddrV1, NIError};
 
   use dash_dev::{assert_serde_rt, check_sptx, json_rejects, to_json, Corpus};
   use rstest::rstest;
@@ -389,6 +397,23 @@ mod tests {
     };
     let built = rebuild(&item, |t| t.net_info = NetInfo::Legacy(NetInfoV1(service)));
     assert_eq!(built.map(|t| t.check()), Ok(Some(ProTxInvalid::NetInfoEmpty)));
+  }
+
+  #[rstest]
+  fn private_service_is_unroutable() {
+    let item = corpus_item(2, MnType::Regular);
+    assert_eq!(item.check_routing(Routing::Required), None);
+    let service = ServiceV1 {
+      addr: AddrV1([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 192, 168, 0, 1]),
+      port: 9999,
+    };
+    let built = rebuild(&item, |t| t.net_info = NetInfo::Legacy(NetInfoV1(service)));
+    assert_eq!(
+      built.map(|t| t.check_routing(Routing::Required)),
+      Ok(Some(ProTxInvalid::NetInfoInvalid {
+        error: NIError::NotRoutable
+      }))
+    );
   }
 
   #[rstest]

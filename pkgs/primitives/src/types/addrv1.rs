@@ -132,6 +132,10 @@ impl fmt::Debug for AddrV1 {
 }
 
 impl NetAddr for AddrV1 {
+  fn is_valid(&self) -> bool {
+    self.check().is_none()
+  }
+
   fn bytes(&self) -> &[u8] {
     if self.is_ipv4() {
       &self.0[12..]

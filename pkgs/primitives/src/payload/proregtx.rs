@@ -13,7 +13,7 @@ use super::{
 use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
 use crate::prelude::*;
-use crate::types::{BlsPubKey, BlsScheme, NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
+use crate::types::{BlsPubKey, BlsScheme, NITrait, NetInfo, NetInfoV1, NetInfoV2, Routing, ServiceV1};
 use crate::{hash_impl, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
@@ -329,6 +329,18 @@ impl ProRegTx {
     self.platform_http_port
   }
 
+  /// Rejects a service address that `routing` does not admit. An empty net
+  /// info has no address to route.
+  pub fn check_routing(&self, routing: Routing) -> Option<ProTxInvalid> {
+    if self.net_info.is_empty() {
+      return None;
+    }
+    self
+      .net_info
+      .check_routing(routing)
+      .map(|error| ProTxInvalid::NetInfoInvalid { error })
+  }
+
   fn check_fields(&self) -> Option<ProTxInvalid> {
     let is_extended = matches!(self.net_info, NetInfo::Extended(_));
     if is_extended != (self.version >= PROTX_VERSION_EXT_ADDR) {
@@ -553,6 +565,22 @@ mod tests {
     );
     let reason = built.map(|t| t.check().map(|e| e.to_string()));
     assert!(matches!(reason, Ok(Some(r)) if r.starts_with("bad-protx-netinfo-addr-type")));
+  }
+
+  #[rstest]
+  fn corpus_services_are_routable() {
+    assert_eq!(corpus_item(2, MnType::Regular).check_routing(Routing::Required), None);
+  }
+
+  #[rstest]
+  #[case::private(AddrV1(hex!("00000000000000000000ffff0a000001")), Some(ProTxInvalid::NetInfoInvalid { error: NIError::NotRoutable }))]
+  #[case::empty(AddrV1([0; 16]), None)]
+  fn routing_applies_to_non_empty_net_info(#[case] addr: AddrV1, #[case] expected: Option<ProTxInvalid>) {
+    let item = corpus_item(2, MnType::Regular);
+    let service = ServiceV1 { addr, port: 9999 };
+    let built = rebuild(&item, |t| t.net_info = NetInfo::Legacy(NetInfoV1(service)));
+    assert_eq!(built.as_ref().map(|t| t.check_routing(Routing::Required)), Ok(expected));
+    assert_eq!(built.map(|t| t.check_routing(Routing::Any)), Ok(None));
   }
 
   #[rstest]

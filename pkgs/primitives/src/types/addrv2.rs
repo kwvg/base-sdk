@@ -181,6 +181,10 @@ impl AddrV2 {
 }
 
 impl NetAddr for AddrV2 {
+  fn is_valid(&self) -> bool {
+    self.check().is_none()
+  }
+
   fn bytes(&self) -> &[u8] {
     self.bytes()
   }

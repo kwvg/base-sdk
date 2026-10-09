@@ -135,8 +135,9 @@ pub enum ProTxInvalid {
   NetInfoVersionMismatch,
   /// `bad-protx-netinfo-empty`
   NetInfoEmpty,
-  /// `bad-protx-netinfo-addr`, `-port`, `-addr-type`, `-maxlimit`, `-bad` or
-  /// `bad-protx-dup-netinfo-entry`, by the kind of `error`
+  /// `bad-protx-netinfo-addr`, `-port`, `-addr-type`, `-addr-unroutable`,
+  /// `-maxlimit`, `-bad` or `bad-protx-dup-netinfo-entry`, by the kind of
+  /// `error`
   NetInfoInvalid {
     /// The underlying error.
     error: NIError,
@@ -176,6 +177,7 @@ impl fmt::Display for ProTxInvalid {
           NIError::Duplicate => "bad-protx-dup-netinfo-entry",
           NIError::MaxLimit { .. } => "bad-protx-netinfo-maxlimit",
           NIError::Malformed => "bad-protx-netinfo-bad",
+          NIError::NotRoutable => "bad-protx-netinfo-addr-unroutable",
         };
         write!(f, "{reason}: {error}")
       }
@@ -484,6 +486,7 @@ mod tests {
   #[case::duplicate(NIError::Duplicate, "bad-protx-dup-netinfo-entry")]
   #[case::max_limit(NIError::MaxLimit { count: 9, max: 8 }, "bad-protx-netinfo-maxlimit")]
   #[case::malformed(NIError::Malformed, "bad-protx-netinfo-bad")]
+  #[case::not_routable(NIError::NotRoutable, "bad-protx-netinfo-addr-unroutable")]
   fn net_info_errors_use_the_reference_reasons(#[case] error: NIError, #[case] reason: &str) {
     let shown = ProTxInvalid::NetInfoInvalid { error }.to_string();
     assert!(shown.starts_with(&format!("{reason}: ")), "{shown}");

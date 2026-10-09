@@ -56,5 +56,5 @@ pub use transaction::{
 };
 pub use types::{
   is_bad_port, AddrV1, AddrV2, BlsPubKey, BlsScheme, BlsSig, NIEntry, NIEntryCode, NIError, NIPurpose, NITrait,
-  NetAddr, NetAddrError, NetInfo, NetInfoV1, NetInfoV2, NetworkType, ServiceV1, ServiceV2,
+  NetAddr, NetAddrError, NetInfo, NetInfoV1, NetInfoV2, NetworkType, Routing, ServiceV1, ServiceV2,
 };

@@ -112,6 +112,8 @@ pub enum NIError {
   },
   /// Structural integrity violation.
   Malformed,
+  /// A service address is not publicly routable under [`Routing::Required`].
+  NotRoutable,
 }
 
 impl fmt::Display for NIError {
@@ -127,6 +129,7 @@ impl fmt::Display for NIError {
         write!(f, "too many entries: {count} exceeds limit {max}")
       }
       Self::Malformed => f.write_str("malformed structure"),
+      Self::NotRoutable => f.write_str("unroutable address"),
     }
   }
 }
@@ -261,6 +264,26 @@ impl fmt::Display for NIEntry {
         write!(f, "{s}:{port}")
       }
     }
+  }
+}
+
+/// Whether masternode services must be publicly routable.
+///
+/// The network decides, so callers pass the policy of the chain they validate.
+/// Mainnet, testnet and devnet require routable services; regtest does not.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub enum Routing {
+  /// Every service address must be publicly routable.
+  Required,
+  /// Any valid service address is accepted.
+  Any,
+}
+
+impl Routing {
+  /// Rejects `addr` when the policy requires a routable address.
+  fn check(self, addr: &impl NetAddr) -> Option<NIError> {
+    (self == Self::Required && !addr.is_routable()).then_some(NIError::NotRoutable)
   }
 }
 
@@ -436,6 +459,19 @@ impl NetInfoV2 {
     &self.entries
   }
 
+  /// Rejects a service entry that `routing` does not admit. Domain entries
+  /// carry no address to route.
+  pub fn check_routing(&self, routing: Routing) -> Option<NIError> {
+    self
+      .entries
+      .iter()
+      .flat_map(|(_, group)| group)
+      .find_map(|entry| match entry {
+        NIEntry::Service(svc) => routing.check(&svc.addr),
+        NIEntry::Domain { .. } => None,
+      })
+  }
+
   const fn is_known_version(version: u8) -> bool {
     version != 0 && version <= Self::CURRENT_VERSION
   }
@@ -571,6 +607,13 @@ impl Checkable for NetInfoV1 {
 
 hash_impl!(NetInfoV1);
 
+impl NetInfoV1 {
+  /// Rejects the service address when `routing` does not admit it.
+  pub fn check_routing(&self, routing: Routing) -> Option<NIError> {
+    routing.check(&self.0.addr)
+  }
+}
+
 impl fmt::Display for NetInfoV1 {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     if self.0.addr.is_null() && self.0.port == 0 {
@@ -632,6 +675,17 @@ impl Checkable for NetInfo {
     match self {
       Self::Legacy(v1) => v1.check(),
       Self::Extended(v2) => v2.check(),
+    }
+  }
+}
+
+impl NetInfo {
+  /// Rejects a service address that `routing` does not admit, which
+  /// [`Checkable::check`] cannot judge without the network.
+  pub fn check_routing(&self, routing: Routing) -> Option<NIError> {
+    match self {
+      Self::Legacy(v1) => v1.check_routing(routing),
+      Self::Extended(v2) => v2.check_routing(routing),
     }
   }
 }
@@ -999,6 +1053,35 @@ mod tests {
       name: name.to_vec(),
       port,
     }
+  }
+
+  #[rstest]
+  #[case::public_required("8.8.8.8", Routing::Required, None)]
+  #[case::private_required("10.0.0.1", Routing::Required, Some(NIError::NotRoutable))]
+  #[case::loopback_required("127.0.0.1", Routing::Required, Some(NIError::NotRoutable))]
+  #[case::private_any("10.0.0.1", Routing::Any, None)]
+  fn legacy_routing(#[case] addr: &str, #[case] routing: Routing, #[case] expected: Option<NIError>) {
+    let addr: AddrV1 = addr.parse().unwrap();
+    assert_eq!(
+      NetInfoV1(ServiceV1 { addr, port: 9999 }).check_routing(routing),
+      expected
+    );
+  }
+
+  /// A network 2 address in `fc00::/8` is unique-local IPv6 and unroutable,
+  /// while the same bytes on network 6 are a routable CJDNS address.
+  #[rstest]
+  #[case::public(svc(AddrV2::Ipv4([8, 8, 8, 8]), 9999), None)]
+  #[case::private(svc(AddrV2::Ipv4([192, 168, 0, 1]), 9999), Some(NIError::NotRoutable))]
+  #[case::ipv6_fc(svc(AddrV2::Ipv6(hex!("fc000000000000000000000000000001")), 9999), Some(NIError::NotRoutable))]
+  #[case::cjdns(svc(AddrV2::Cjdns(hex!("fc000000000000000000000000000001")), 9999), None)]
+  #[case::tor(svc(AddrV2::TorV3([1; 32]), 9999), None)]
+  #[case::domain(dom(b"example.com", 443), None)]
+  fn extended_routing(#[case] entry: NIEntry, #[case] expected: Option<NIError>) {
+    let v2 = NetInfoV2::new(vec![(NIPurpose::CoreP2p, vec![entry])]);
+    assert_eq!(v2.check_routing(Routing::Required), expected);
+    assert_eq!(v2.check_routing(Routing::Any), None);
+    assert_eq!(NetInfo::Extended(v2).check_routing(Routing::Required), expected);
   }
 
   fn valid_v2() -> NetInfoV2 {
