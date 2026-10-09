@@ -286,14 +286,15 @@ pub trait NITrait: fmt::Display {
 ///
 /// Contains a versioned list of purpose-grouped network entries (core P2P,
 /// platform P2P, platform HTTPS).
+///
+/// A value of an unknown version holds only that version, as nothing follows
+/// it on the wire.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", try_from = "__NetInfoV2Fields"))]
 pub struct NetInfoV2 {
-  /// Format version.
-  pub version: u8,
-  /// Purpose-grouped entries.
-  pub entries: Vec<(NIPurpose, Vec<NIEntry>)>,
+  version: u8,
+  entries: Vec<(NIPurpose, Vec<NIEntry>)>,
 }
 
 impl_type!(NetInfoV2);
@@ -301,6 +302,9 @@ impl_type!(NetInfoV2);
 impl BaseCodec for NetInfoV2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
     let version = u8::decode(data)?;
+    if let Some(unknown) = Self::unknown_version(version) {
+      return Ok(unknown);
+    }
     let purpose_count = CompactSize::decode_len(data)?;
     let mut entries = Vec::with_capacity(purpose_count);
     for _ in 0..purpose_count {
@@ -317,6 +321,9 @@ impl BaseCodec for NetInfoV2 {
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
     self.version.encode(buf);
+    if !Self::is_known_version(self.version) {
+      return;
+    }
     CompactSize::from(self.entries.len()).encode(buf);
     for (purpose, group) in &self.entries {
       purpose.to_base().encode(buf);
@@ -400,7 +407,62 @@ hash_impl!(NetInfoV2);
 
 impl NetInfoV2 {
   /// Highest supported format version.
-  const CURRENT_VERSION: u8 = 1;
+  pub const CURRENT_VERSION: u8 = 1;
+
+  /// Builds a value of the current version holding `entries`.
+  pub fn new(entries: Vec<(NIPurpose, Vec<NIEntry>)>) -> Self {
+    Self {
+      version: Self::CURRENT_VERSION,
+      entries,
+    }
+  }
+
+  /// Builds a value of an unknown `version`, or returns `None` for a known
+  /// version.
+  pub fn unknown_version(version: u8) -> Option<Self> {
+    (!Self::is_known_version(version)).then(|| Self {
+      version,
+      entries: Vec::new(),
+    })
+  }
+
+  /// Format version.
+  pub const fn version(&self) -> u8 {
+    self.version
+  }
+
+  /// Purpose-grouped entries in wire order, empty for an unknown version.
+  pub fn groups(&self) -> &[(NIPurpose, Vec<NIEntry>)] {
+    &self.entries
+  }
+
+  const fn is_known_version(version: u8) -> bool {
+    version != 0 && version <= Self::CURRENT_VERSION
+  }
+}
+
+/// Field set that rejects deserialized entries under an unknown version.
+#[cfg(feature = "serde")]
+#[derive(::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct __NetInfoV2Fields {
+  version: u8,
+  entries: Vec<(NIPurpose, Vec<NIEntry>)>,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<__NetInfoV2Fields> for NetInfoV2 {
+  type Error = NIError;
+
+  fn try_from(fields: __NetInfoV2Fields) -> Result<Self, Self::Error> {
+    if NetInfoV2::is_known_version(fields.version) {
+      return Ok(NetInfoV2::new(fields.entries));
+    }
+    if !fields.entries.is_empty() {
+      return Err(NIError::Malformed);
+    }
+    NetInfoV2::unknown_version(fields.version).ok_or(NIError::Malformed)
+  }
 }
 
 impl fmt::Display for NetInfoV2 {
@@ -678,6 +740,47 @@ mod tests {
         remaining: 3
       })
     );
+  }
+
+  /// An unknown version ends the payload, so the bytes after it belong to the
+  /// next field.
+  #[rstest]
+  #[case::zero(0x00)]
+  #[case::future(0x02)]
+  #[case::max(0xff)]
+  fn unknown_version_reads_and_writes_only_its_byte(#[case] version: u8) {
+    let wire = [version, 0x01, 0x00];
+    let mut cursor = &wire[..];
+    let decoded = NetInfoV2::decode(&mut cursor).unwrap();
+    assert_eq!(cursor, &wire[1..]);
+    assert_eq!((decoded.version(), decoded.groups()), (version, &[][..]));
+    assert_eq!(Some(decoded.clone()), NetInfoV2::unknown_version(version));
+
+    let mut buf = Vec::new();
+    decoded.encode(&mut buf);
+    assert_eq!(buf, [version]);
+  }
+
+  #[rstest]
+  fn known_version_has_no_unknown_form() {
+    assert_eq!(NetInfoV2::unknown_version(NetInfoV2::CURRENT_VERSION), None);
+    assert_eq!(NetInfoV2::new(Vec::new()).version(), NetInfoV2::CURRENT_VERSION);
+  }
+
+  #[cfg(feature = "serde")]
+  #[rstest]
+  fn deserialization_rejects_entries_under_an_unknown_version() {
+    let entries = dash_dev::to_json(&vec![(NIPurpose::CoreP2p, Vec::<NIEntry>::new())]);
+    assert!(dash_dev::json_rejects::<NetInfoV2>(&format!(
+      r#"{{"version":0,"entries":{entries}}}"#
+    )));
+    assert_eq!(
+      dash_dev::from_json::<NetInfoV2>(r#"{"version":0,"entries":[]}"#),
+      NetInfoV2::unknown_version(0).unwrap()
+    );
+    assert!(!dash_dev::json_rejects::<NetInfoV2>(&format!(
+      r#"{{"version":1,"entries":{entries}}}"#
+    )));
   }
 
   #[rstest]
