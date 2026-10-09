@@ -21,7 +21,7 @@ mod quorum;
 
 use crate::hash_impl;
 use crate::prelude::*;
-use crate::types::{NIError, NIPurpose, NITrait, NetInfoV2};
+use crate::types::{NIError, NIPurpose, NITrait, NetAddrError, NetInfoV2};
 
 use dash_num::make_hash;
 use dash_types::codec::{BaseCodec, DecodeError};
@@ -135,7 +135,8 @@ pub enum ProTxInvalid {
   NetInfoVersionMismatch,
   /// `bad-protx-netinfo-empty`
   NetInfoEmpty,
-  /// `bad-protx-netinfo-bad`
+  /// `bad-protx-netinfo-addr`, `-port`, `-addr-type`, `-maxlimit`, `-bad` or
+  /// `bad-protx-dup-netinfo-entry`, by the kind of `error`
   NetInfoInvalid {
     /// The underlying error.
     error: NIError,
@@ -164,7 +165,20 @@ impl fmt::Display for ProTxInvalid {
       Self::BadPayoutScript => write!(f, "bad-protx-payee"),
       Self::NetInfoVersionMismatch => write!(f, "bad-protx-netinfo-version"),
       Self::NetInfoEmpty => write!(f, "bad-protx-netinfo-empty"),
-      Self::NetInfoInvalid { error } => write!(f, "bad-protx-netinfo-bad: {error}"),
+      Self::NetInfoInvalid { error } => {
+        let reason = match error {
+          NIError::BadAddr {
+            error: NetAddrError::BadPort { .. },
+          }
+          | NIError::BadPort { .. } => "bad-protx-netinfo-port",
+          NIError::BadAddr { .. } => "bad-protx-netinfo-addr",
+          NIError::BadType { .. } => "bad-protx-netinfo-addr-type",
+          NIError::Duplicate => "bad-protx-dup-netinfo-entry",
+          NIError::MaxLimit { .. } => "bad-protx-netinfo-maxlimit",
+          NIError::Malformed => "bad-protx-netinfo-bad",
+        };
+        write!(f, "{reason}: {error}")
+      }
       Self::PayoutKeyReuse => write!(f, "bad-protx-payee-reuse"),
       Self::OperatorRewardTooHigh { reward } => write!(f, "bad-protx-operator-reward: {reward}"),
       Self::BadReason { reason } => write!(f, "bad-protx-reason: {reason}"),
@@ -453,6 +467,7 @@ impl SpecialPayload {
 mod tests {
   use super::{PayloadInvalid, ProRegTx, ProTxInvalid, ProTxPayload, SpecialPayload, TxType, UnknownProTxVersion};
   use crate::prelude::*;
+  use crate::types::{NIError, NetAddrError};
   use crate::{OutPoint, Transaction, TxHash, TxIn, TxInvalid, TxOut};
 
   use bitcoin_primitives::script::{ScriptPubKeyBuf, ScriptSigBuf};
@@ -460,6 +475,19 @@ mod tests {
   use dash_types::codec::{BaseCodec, DecodeError};
   use dash_types::{Checkable, Numeric};
   use rstest::rstest;
+
+  #[rstest]
+  #[case::addr(NIError::BadAddr { error: NetAddrError::BadRange { value: 0 } }, "bad-protx-netinfo-addr")]
+  #[case::addr_port(NIError::BadAddr { error: NetAddrError::BadPort { port: 0 } }, "bad-protx-netinfo-port")]
+  #[case::port(NIError::BadPort { port: 0 }, "bad-protx-netinfo-port")]
+  #[case::addr_type(NIError::BadType { entry_type: 2 }, "bad-protx-netinfo-addr-type")]
+  #[case::duplicate(NIError::Duplicate, "bad-protx-dup-netinfo-entry")]
+  #[case::max_limit(NIError::MaxLimit { count: 9, max: 8 }, "bad-protx-netinfo-maxlimit")]
+  #[case::malformed(NIError::Malformed, "bad-protx-netinfo-bad")]
+  fn net_info_errors_use_the_reference_reasons(#[case] error: NIError, #[case] reason: &str) {
+    let shown = ProTxInvalid::NetInfoInvalid { error }.to_string();
+    assert!(shown.starts_with(&format!("{reason}: ")), "{shown}");
+  }
 
   #[rstest]
   #[case::zero(0, true)]

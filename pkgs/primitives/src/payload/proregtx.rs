@@ -407,7 +407,7 @@ impl fmt::Display for ProRegTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
-  use crate::types::AddrV1;
+  use crate::types::{AddrV1, NIError};
 
   use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
   use hex_conservative::hex;
@@ -536,6 +536,23 @@ mod tests {
       buf[2 + 2 + 2 + 32 + 4..][..18],
       [&[0; 16][..], &9999u16.to_be_bytes()[..]].concat()
     );
+  }
+
+  #[rstest]
+  fn legacy_service_must_be_ipv4() {
+    let item = corpus_item(2, MnType::Regular);
+    let service = ServiceV1 {
+      addr: AddrV1(hex!("20010000000000000000000000000001")),
+      port: 9999,
+    };
+    let built = rebuild(&item, |t| t.net_info = NetInfo::Legacy(NetInfoV1(service)));
+    let error = NIError::BadType { entry_type: 2 };
+    assert_eq!(
+      built.as_ref().map(|t| t.check()),
+      Ok(Some(ProTxInvalid::NetInfoInvalid { error }))
+    );
+    let reason = built.map(|t| t.check().map(|e| e.to_string()));
+    assert!(matches!(reason, Ok(Some(r)) if r.starts_with("bad-protx-netinfo-addr-type")));
   }
 
   #[rstest]

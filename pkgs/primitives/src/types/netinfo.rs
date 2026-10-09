@@ -557,10 +557,15 @@ impl Checkable for NetInfoV1 {
   type Error = NIError;
 
   fn check(&self) -> Option<Self::Error> {
-    if let Some(error) = self.0.check() {
+    if let Some(error) = self.0.addr.check() {
       return Some(NIError::BadAddr { error });
     }
-    None
+    if !self.0.addr.is_ipv4() {
+      return Some(NIError::BadType {
+        entry_type: self.0.addr.network().to_base(),
+      });
+    }
+    self.0.check().map(|error| NIError::BadAddr { error })
   }
 }
 
@@ -965,7 +970,8 @@ mod tests {
   #[case::valid("1.2.3.4", 9999, None)]
   #[case::bad_port("1.2.3.4", 0, Some(NIError::BadAddr { error: NetAddrError::BadPort { port: 0 } }))]
   #[case::null_addr_raw("[::0]", 9999, Some(NIError::BadAddr { error: NetAddrError::BadRange { value: 0 } }))]
-  #[case::ipv6_valid("[2001::1]", 9999, None)]
+  #[case::ipv6("[2001::1]", 9999, Some(NIError::BadType { entry_type: 2 }))]
+  #[case::ipv6_bad_port("[2001::1]", 0, Some(NIError::BadType { entry_type: 2 }))]
   fn check_v1(#[case] addr_str: &str, #[case] port: u16, #[case] expected: Option<NIError>) {
     let addr: AddrV1 = addr_str.parse().unwrap();
     let v1 = NetInfoV1(ServiceV1 { addr, port });
