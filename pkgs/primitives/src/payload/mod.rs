@@ -45,13 +45,13 @@ pub use dash_pkc::__private::__EddsaPkHash as PlatformNodeId;
 pub(crate) const MAX_OPERATOR_REWARD: u16 = 10_000;
 
 /// ProTx version: legacy BLS operator keys (v1).
-pub(crate) const PROTX_VERSION_LEGACY_BLS: u16 = 1;
+pub const PROTX_VERSION_LEGACY_BLS: u16 = 1;
 
 /// ProTx version: basic (IETF) BLS operator keys (v2).
-pub(crate) const PROTX_VERSION_BASIC_BLS: u16 = 2;
+pub const PROTX_VERSION_BASIC_BLS: u16 = 2;
 
 /// ProTx version: extended network addresses (v3).
-pub(crate) const PROTX_VERSION_EXT_ADDR: u16 = 3;
+pub const PROTX_VERSION_EXT_ADDR: u16 = 3;
 
 make_hash! {
   /// LLMQ quorum identifier.

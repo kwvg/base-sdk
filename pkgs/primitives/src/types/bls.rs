@@ -172,9 +172,9 @@ mod tests {
 
   #[rstest]
   #[case::v0(0, BlsScheme::Basic)]
-  #[case::v1(1, BlsScheme::Legacy)]
-  #[case::v2(2, BlsScheme::Basic)]
-  #[case::v3(3, BlsScheme::Basic)]
+  #[case::legacy_bls(crate::PROTX_VERSION_LEGACY_BLS, BlsScheme::Legacy)]
+  #[case::basic_bls(crate::PROTX_VERSION_BASIC_BLS, BlsScheme::Basic)]
+  #[case::ext_addr(crate::PROTX_VERSION_EXT_ADDR, BlsScheme::Basic)]
   fn protx_version_selects_the_scheme(#[case] version: u16, #[case] scheme: BlsScheme) {
     assert_eq!(BlsScheme::from_protx_version(version), scheme);
   }
