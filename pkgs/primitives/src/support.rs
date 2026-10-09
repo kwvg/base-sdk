@@ -92,7 +92,7 @@ struct DynBitsetSerde {
 
 impl BaseCodec for DynBitset {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let num_bits = CompactSize::decode(data)?.to_base();
+    let num_bits = CompactSize::decode_checked(data)?.to_base();
     let byte_len = usize::try_from(num_bits.div_ceil(8)).map_err(|_| DecodeError::CompactSizeExceedsLimit {
       limit: usize::MAX,
       value: num_bits,
@@ -244,11 +244,49 @@ impl Iterator for DynBitsetIterator<'_> {
 
 #[cfg(test)]
 mod tests {
-  use super::RevocationReason;
+  use super::{DynBitset, RevocationReason};
   use crate::prelude::*;
 
-  use dash_types::Numeric;
+  use dash_types::codec::{BaseCodec, DecodeError};
+  use dash_types::{CompactSize, Numeric, MAX_SIZE};
   use rstest::rstest;
+
+  fn prefixed(num_bits: u64, rest: &[u8]) -> Vec<u8> {
+    let mut wire = Vec::new();
+    CompactSize::new(num_bits).encode(&mut wire);
+    for &byte in rest {
+      byte.encode(&mut wire);
+    }
+    wire
+  }
+
+  #[rstest]
+  fn bit_count_past_max_size_exceeds_the_limit() {
+    assert_eq!(
+      DynBitset::decode(&mut prefixed(MAX_SIZE + 1, &[0xFF]).as_slice()),
+      Err(DecodeError::CompactSizeExceedsLimit {
+        limit: MAX_SIZE as usize,
+        value: MAX_SIZE + 1,
+      })
+    );
+  }
+
+  #[rstest]
+  fn bit_count_at_max_size_reaches_the_input_bound() {
+    assert!(matches!(
+      DynBitset::decode(&mut prefixed(MAX_SIZE, &[0xFF]).as_slice()),
+      Err(DecodeError::Eof { .. })
+    ));
+  }
+
+  #[rstest]
+  #[case::exact(8, &[0xA5], true)]
+  #[case::padding_clear(3, &[0x05], true)]
+  #[case::padding_set(3, &[0x0D], false)]
+  fn padding_bits_must_be_clear(#[case] num_bits: u64, #[case] rest: &[u8], #[case] ok: bool) {
+    let wire = prefixed(num_bits, rest);
+    assert_eq!(DynBitset::decode(&mut wire.as_slice()).is_ok(), ok);
+  }
 
   #[rstest]
   #[case::not_specified(0, RevocationReason::NotSpecified, "not_specified")]
