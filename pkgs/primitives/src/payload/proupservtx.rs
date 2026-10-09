@@ -131,7 +131,7 @@ impl Checkable for ProUpServTx {
   type Error = ProTxInvalid;
 
   fn check(&self) -> Option<Self::Error> {
-    if self.version == 0 {
+    if self.version == 0 || self.version > PROTX_VERSION_EXT_ADDR {
       return Some(ProTxInvalid::BadVersion { version: self.version });
     }
 
@@ -237,11 +237,32 @@ mod tests {
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
 
+  fn corpus_item(version: u16, mn_type: MnType) -> ProUpServTx {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupservtx");
+    let items: Vec<ProUpServTx> = corpus
+      .entries::<ProUpServTx>("proupservtx", |_, _, _| {})
+      .into_values()
+      .filter(|item| item.version == version && item.mn_type == mn_type)
+      .collect();
+    assert!(!items.is_empty(), "no v{version} {mn_type} payload in the corpus");
+    items[0].clone()
+  }
+
   #[rstest]
   fn corpus_proupservtx() {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupservtx");
     let items = corpus.entries::<ProUpServTx>("proupservtx", check_sptx);
     assert_serde_rt("proupservtx", &items);
+  }
+
+  #[rstest]
+  #[case::zero(0)]
+  #[case::past_ext_addr(4)]
+  #[case::max(u16::MAX)]
+  fn version_outside_one_to_three_is_rejected(#[case] version: u16) {
+    let mut item = corpus_item(2, MnType::Regular);
+    item.version = version;
+    assert_eq!(item.check(), Some(ProTxInvalid::BadVersion { version }));
   }
 
   #[rstest]

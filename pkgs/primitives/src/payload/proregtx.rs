@@ -184,7 +184,7 @@ impl Checkable for ProRegTx {
   type Error = ProTxInvalid;
 
   fn check(&self) -> Option<Self::Error> {
-    if self.version == 0 {
+    if self.version == 0 || self.version > PROTX_VERSION_EXT_ADDR {
       return Some(ProTxInvalid::BadVersion { version: self.version });
     }
 
@@ -341,6 +341,16 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
     let items = corpus.entries::<ProRegTx>("proregtx", check_sptx);
     assert_serde_rt("proregtx", &items);
+  }
+
+  #[rstest]
+  #[case::zero(0)]
+  #[case::past_ext_addr(4)]
+  #[case::max(u16::MAX)]
+  fn version_outside_one_to_three_is_rejected(#[case] version: u16) {
+    let mut item = corpus_item(2, MnType::Regular);
+    item.version = version;
+    assert_eq!(item.check(), Some(ProTxInvalid::BadVersion { version }));
   }
 
   /// Payload versions 1 and 2 share a layout, so a version 2 corpus payload
