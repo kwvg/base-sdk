@@ -7,7 +7,9 @@
 //! ProUpServTx service-update payload (type 2).
 
 use super::proregtx::check_platform_fields;
-use super::{check_sptx_netinfo, InputsHash, MnType, ProTxInvalid, PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR};
+use super::{
+  check_sptx_netinfo, decode_version, InputsHash, MnType, ProTxInvalid, PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
+};
 use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
 use crate::types::{BlsScheme, BlsSig, NITrait, NetInfo, NetInfoV1, NetInfoV2, ServiceV1};
@@ -58,7 +60,7 @@ impl_payload!(ProUpServTx);
 
 impl BaseCodec for ProUpServTx {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = u16::decode(data)?;
+    let version = decode_version(data)?;
 
     let mn_type = if version >= 2 {
       MnType::from_base(u16::decode(data)?)

@@ -24,6 +24,7 @@ use crate::prelude::*;
 use crate::types::{NIError, NIPurpose, NITrait, NetInfoV2};
 
 use dash_num::make_hash;
+use dash_types::codec::{BaseCodec, DecodeError};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::{enum_map, impl_num, Checkable};
 
@@ -173,6 +174,106 @@ impl fmt::Display for ProTxInvalid {
   }
 }
 
+/// A ProTx version of 0 or above [`PROTX_VERSION_EXT_ADDR`], after which a
+/// payload holds nothing.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "u16", into = "u16"))]
+pub struct UnknownProTxVersion(u16);
+
+impl UnknownProTxVersion {
+  /// Wraps `version`, or returns `None` for a version from 1 to
+  /// [`PROTX_VERSION_EXT_ADDR`].
+  pub const fn new(version: u16) -> Option<Self> {
+    if version == 0 || version > PROTX_VERSION_EXT_ADDR {
+      Some(Self(version))
+    } else {
+      None
+    }
+  }
+
+  /// The version number.
+  pub const fn version(&self) -> u16 {
+    self.0
+  }
+}
+
+impl TryFrom<u16> for UnknownProTxVersion {
+  type Error = ProTxInvalid;
+
+  fn try_from(version: u16) -> Result<Self, Self::Error> {
+    Self::new(version).ok_or(ProTxInvalid::BadVersion { version })
+  }
+}
+
+impl From<UnknownProTxVersion> for u16 {
+  fn from(version: UnknownProTxVersion) -> Self {
+    version.0
+  }
+}
+
+/// A ProTx payload of types 1 to 4.
+///
+/// A payload of an unknown version carries only that version, so its fields
+/// never hold placeholders.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
+pub enum ProTxPayload<T> {
+  /// A payload of a version from 1 to [`PROTX_VERSION_EXT_ADDR`].
+  Known(T),
+  /// A payload that ends after its version.
+  UnknownVersion(UnknownProTxVersion),
+}
+
+impl<T: BaseCodec + Checkable<Error = ProTxInvalid>> ProTxPayload<T> {
+  /// Reads a payload, stopping after the version when it is unknown.
+  ///
+  /// # Errors
+  ///
+  /// Returns the [`BaseCodec::decode`] error of `T` for a known version.
+  pub fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let mut rest = *data;
+    match UnknownProTxVersion::new(u16::decode(&mut rest)?) {
+      Some(version) => {
+        *data = rest;
+        Ok(Self::UnknownVersion(version))
+      }
+      None => T::decode(data).map(Self::Known),
+    }
+  }
+}
+
+impl<T: Checkable<Error = ProTxInvalid>> Checkable for ProTxPayload<T> {
+  type Error = ProTxInvalid;
+
+  fn check(&self) -> Option<Self::Error> {
+    match self {
+      Self::Known(payload) => payload.check(),
+      Self::UnknownVersion(version) => Some(ProTxInvalid::BadVersion {
+        version: version.version(),
+      }),
+    }
+  }
+}
+
+/// Reads the version of a ProTx payload with fields.
+///
+/// # Errors
+///
+/// Returns [`DecodeError::InvalidValue`] for an unknown version, which only
+/// [`ProTxPayload`] represents.
+pub(crate) fn decode_version(data: &mut &[u8]) -> Result<u16, DecodeError> {
+  let version = u16::decode(data)?;
+  if UnknownProTxVersion::new(version).is_some() {
+    return Err(DecodeError::InvalidValue {
+      expected: (1..=PROTX_VERSION_EXT_ADDR).map(u64::from).collect(),
+      actual: u64::from(version),
+    });
+  }
+  Ok(version)
+}
+
 /// Checks that an extended net info payload is trivially valid.
 pub(crate) fn check_sptx_netinfo(ext: &NetInfoV2, version: u16, mn_type: MnType) -> Option<ProTxInvalid> {
   if let Some(error) = ext.check() {
@@ -205,13 +306,13 @@ pub(crate) fn check_sptx_netinfo(ext: &NetInfoV2, version: u16, mn_type: MnType)
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum SpecialPayload {
   /// Masternode registration (type 1).
-  ProviderRegister(ProRegTx),
+  ProviderRegister(ProTxPayload<ProRegTx>),
   /// Masternode service update (type 2).
-  ProviderUpdateService(ProUpServTx),
+  ProviderUpdateService(ProTxPayload<ProUpServTx>),
   /// Masternode registrar update (type 3).
-  ProviderUpdateRegistrar(ProUpRegTx),
+  ProviderUpdateRegistrar(ProTxPayload<ProUpRegTx>),
   /// Masternode revocation (type 4).
-  ProviderUpdateRevoke(ProUpRevTx),
+  ProviderUpdateRevoke(ProTxPayload<ProUpRevTx>),
   /// Coinbase commitment (type 5).
   CoinbaseCommitment(CoinbaseCommitment),
   /// LLMQ final commitment (type 6).
@@ -313,8 +414,6 @@ impl SpecialPayload {
   ///
   /// Returns `PayloadError` if a recognized type fails to decode.
   pub fn decode(tx_type: TxType, data: &mut &[u8]) -> Result<Self, PayloadError> {
-    use dash_types::codec::{BaseCodec, DecodeError};
-
     let err = |e: DecodeError| PayloadError {
       tx_type,
       message: format!("{e}"),
@@ -324,10 +423,12 @@ impl SpecialPayload {
         tx_type,
         message: String::from("spend transactions have no payload"),
       }),
-      TxType::ProviderRegister => ProRegTx::decode(data).map(Self::ProviderRegister).map_err(err),
-      TxType::ProviderUpdateService => ProUpServTx::decode(data).map(Self::ProviderUpdateService).map_err(err),
-      TxType::ProviderUpdateRegistrar => ProUpRegTx::decode(data).map(Self::ProviderUpdateRegistrar).map_err(err),
-      TxType::ProviderUpdateRevoke => ProUpRevTx::decode(data).map(Self::ProviderUpdateRevoke).map_err(err),
+      TxType::ProviderRegister => ProTxPayload::decode(data).map(Self::ProviderRegister).map_err(err),
+      TxType::ProviderUpdateService => ProTxPayload::decode(data).map(Self::ProviderUpdateService).map_err(err),
+      TxType::ProviderUpdateRegistrar => ProTxPayload::decode(data)
+        .map(Self::ProviderUpdateRegistrar)
+        .map_err(err),
+      TxType::ProviderUpdateRevoke => ProTxPayload::decode(data).map(Self::ProviderUpdateRevoke).map_err(err),
       TxType::CoinbaseCommitment => cbtx::CoinbaseCommitment::decode(data)
         .map(Self::CoinbaseCommitment)
         .map_err(err),
@@ -346,5 +447,92 @@ impl SpecialPayload {
         })
       }
     }
+  }
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "test code")]
+mod tests {
+  use super::{PayloadInvalid, ProRegTx, ProTxInvalid, ProTxPayload, SpecialPayload, TxType, UnknownProTxVersion};
+  use crate::prelude::*;
+  use crate::{OutPoint, Transaction, TxHash, TxIn, TxInvalid, TxOut};
+
+  use bitcoin_primitives::script::{ScriptPubKeyBuf, ScriptSigBuf};
+  use bitcoin_units::Amount;
+  use dash_types::codec::{BaseCodec, DecodeError};
+  use dash_types::{Checkable, Numeric};
+  use rstest::rstest;
+
+  #[rstest]
+  #[case::zero(0, true)]
+  #[case::legacy_bls(1, false)]
+  #[case::ext_addr(3, false)]
+  #[case::past_ext_addr(4, true)]
+  #[case::max(u16::MAX, true)]
+  fn unknown_versions_are_zero_and_past_ext_addr(#[case] version: u16, #[case] unknown: bool) {
+    assert_eq!(UnknownProTxVersion::new(version).is_some(), unknown);
+  }
+
+  #[rstest]
+  #[case::register(TxType::ProviderRegister)]
+  #[case::update_service(TxType::ProviderUpdateService)]
+  #[case::update_registrar(TxType::ProviderUpdateRegistrar)]
+  #[case::update_revoke(TxType::ProviderUpdateRevoke)]
+  fn unknown_version_payload_is_only_its_version(#[case] tx_type: TxType, #[values(0, 4)] version: u16) {
+    let wire = version.to_le_bytes();
+    let mut cursor = wire.as_slice();
+    let payload = SpecialPayload::decode(tx_type, &mut cursor).unwrap();
+    assert!(cursor.is_empty());
+    assert_eq!(
+      payload.check(),
+      Some(PayloadInvalid::ProTx(ProTxInvalid::BadVersion { version }))
+    );
+  }
+
+  #[rstest]
+  fn fields_type_rejects_an_unknown_version() {
+    assert!(matches!(
+      ProRegTx::decode(&mut [0x04, 0x00].as_slice()),
+      Err(DecodeError::InvalidValue { actual: 4, .. })
+    ));
+    assert!(matches!(
+      ProTxPayload::<ProRegTx>::decode(&mut [0x04, 0x00].as_slice()),
+      Ok(ProTxPayload::UnknownVersion(version)) if version.version() == 4
+    ));
+  }
+
+  fn special(tx_type: TxType, extra_payload: Vec<u8>) -> Transaction {
+    Transaction {
+      version: 3,
+      tx_type,
+      inputs: vec![TxIn {
+        prevout: OutPoint {
+          hash: TxHash::from_lendian([0x11; 32]),
+          index: 0,
+        },
+        script_sig: ScriptSigBuf::new(),
+        sequence: u32::MAX,
+      }],
+      outputs: vec![TxOut {
+        value: Amount::ZERO,
+        script_pubkey: ScriptPubKeyBuf::new(),
+      }],
+      lock_time: 0,
+      extra_payload,
+    }
+  }
+
+  #[rstest]
+  fn transaction_check_reports_the_version_and_rejects_trailing_bytes() {
+    let tx = special(TxType::ProviderUpdateRevoke, vec![0x00, 0x00]);
+    assert_eq!(
+      tx.check(),
+      Some(TxInvalid::PayloadCheck(PayloadInvalid::ProTx(
+        ProTxInvalid::BadVersion { version: 0 }
+      )))
+    );
+
+    let tx = special(TxType::ProviderUpdateRevoke, vec![0x00, 0x00, 0x00]);
+    assert!(matches!(tx.check(), Some(TxInvalid::PayloadDecode(_))));
   }
 }

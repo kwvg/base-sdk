@@ -7,7 +7,7 @@
 //! ProRegTx registration payload (type 1).
 
 use super::{
-  check_sptx_netinfo, InputsHash, MnType, ProTxInvalid, MAX_OPERATOR_REWARD, PROTX_VERSION_BASIC_BLS,
+  check_sptx_netinfo, decode_version, InputsHash, MnType, ProTxInvalid, MAX_OPERATOR_REWARD, PROTX_VERSION_BASIC_BLS,
   PROTX_VERSION_EXT_ADDR,
 };
 use crate::codec::impl_payload;
@@ -101,7 +101,7 @@ pub(super) fn check_platform_fields(
 
 impl BaseCodec for ProRegTx {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = u16::decode(data)?;
+    let version = decode_version(data)?;
     let mn_type = MnType::from_base(u16::decode(data)?);
     let mode = u16::decode(data)?;
     let collateral_hash = TxHash::decode(data)?;

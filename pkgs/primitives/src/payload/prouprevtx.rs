@@ -6,7 +6,7 @@
 
 //! ProUpRevTx revocation payload (type 4).
 
-use super::{InputsHash, ProTxInvalid, PROTX_VERSION_EXT_ADDR};
+use super::{decode_version, InputsHash, ProTxInvalid, PROTX_VERSION_EXT_ADDR};
 use crate::codec::impl_payload;
 use crate::support::RevocationReason;
 use crate::types::{BlsScheme, BlsSig};
@@ -44,7 +44,7 @@ impl_payload!(ProUpRevTx);
 
 impl BaseCodec for ProUpRevTx {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let version = u16::decode(data)?;
+    let version = decode_version(data)?;
     Ok(Self {
       version,
       pro_tx_hash: TxHash::decode(data)?,
