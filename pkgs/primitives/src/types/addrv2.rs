@@ -6,7 +6,7 @@
 
 //! BIP155 network address types (ADDRv2).
 
-use super::addrv1::{AddrV1, ServiceV1};
+use super::addrv1::{AddrV1, ServiceV1, INTERNAL_IN_IPV6_PREFIX, IPV4_MAPPED_PREFIX, TORV2_IN_IPV6_PREFIX};
 use super::netaddr::{NetAddr, NetAddrError, NetworkType};
 use super::util::{base16_dec, base16_enc, base32r_dec, base32r_enc};
 use crate::hash_impl;
@@ -115,6 +115,15 @@ impl Checkable for AddrV2 {
         // broadcast address (255.255.255.255)
         if *b == [255; 4] {
           return Some(NetAddrError::BadRange { value: 255 });
+        }
+      }
+      Self::Ipv6(b) => {
+        // Network 2 never embeds another network; IPv4 has network 1.
+        if b.starts_with(&IPV4_MAPPED_PREFIX) {
+          return Some(NetAddrError::BadRange { value: 0xff });
+        }
+        if b.starts_with(&TORV2_IN_IPV6_PREFIX) || b.starts_with(&INTERNAL_IN_IPV6_PREFIX) {
+          return Some(NetAddrError::BadRange { value: b[0] });
         }
       }
       Self::Cjdns(b) => {
@@ -483,6 +492,18 @@ mod tests {
   )]
   #[case::cjdns_valid(AddrV2::Cjdns(hex!("fc000000000000000000000000000001")), None)]
   #[case::ipv6_in_cjdns_range(AddrV2::Ipv6(hex!("fc000000000000000000000000000001")), None)]
+  #[case::ipv4_in_ipv6(
+    AddrV2::Ipv6(hex!("00000000000000000000ffff08080808")),
+    Some(NetAddrError::BadRange { value: 0xff }),
+  )]
+  #[case::torv2_in_ipv6(
+    AddrV2::Ipv6(hex!("fd87d87eeb4300000000000000000001")),
+    Some(NetAddrError::BadRange { value: 0xfd }),
+  )]
+  #[case::internal_in_ipv6(
+    AddrV2::Ipv6(hex!("fd6b88c0872400000000000000000001")),
+    Some(NetAddrError::BadRange { value: 0xfd }),
+  )]
   #[case::unknown_known_id(
     AddrV2::Unknown { network: 1, addr: vec![1, 2, 3, 4] },
     Some(NetAddrError::BadRange { value: 1 }),

@@ -19,7 +19,15 @@ use core::net::{Ipv4Addr, Ipv6Addr};
 use core::str::FromStr;
 
 /// First 12 bytes of an IPv4-mapped IPv6 address.
-const IPV4_MAPPED_PREFIX: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff];
+pub(super) const IPV4_MAPPED_PREFIX: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff];
+
+/// First 6 bytes of an IPv6 address embedding a TORv2 address, which the
+/// network no longer supports.
+pub(super) const TORV2_IN_IPV6_PREFIX: [u8; 6] = [0xfd, 0x87, 0xd8, 0x7e, 0xeb, 0x43];
+
+/// First 6 bytes of an IPv6 address embedding a node-internal name, which is
+/// never valid on the network.
+pub(super) const INTERNAL_IN_IPV6_PREFIX: [u8; 6] = [0xfd, 0x6b, 0x88, 0xc0, 0x87, 0x24];
 
 /// ADDRv1 IPv4-mapped IPv6 address (16 bytes).
 #[derive(Clone, Copy, Default, Eq, Hash, PartialEq, TypeId)]
@@ -49,6 +57,9 @@ impl Checkable for AddrV1 {
     }
     if NetAddr::is_rfc3849(self) {
       return Some(NetAddrError::BadRange { value: 0xb8 });
+    }
+    if self.0.starts_with(&TORV2_IN_IPV6_PREFIX) || self.0.starts_with(&INTERNAL_IN_IPV6_PREFIX) {
+      return Some(NetAddrError::BadRange { value: self.0[0] });
     }
     None
   }
@@ -374,6 +385,15 @@ mod tests {
     Some(NetAddrError::BadRange { value: 0xb8 }),
   )]
   #[case::valid(hex!("00000000000000000000ffff08080808"), None)]
+  #[case::torv2_in_ipv6(
+    hex!("fd87d87eeb4300000000000000000001"),
+    Some(NetAddrError::BadRange { value: 0xfd }),
+  )]
+  #[case::internal_in_ipv6(
+    hex!("fd6b88c0872400000000000000000001"),
+    Some(NetAddrError::BadRange { value: 0xfd }),
+  )]
+  #[case::other_fd_prefix(hex!("fd6b88c0872500000000000000000001"), None)]
   fn check_addr(#[case] raw: [u8; 16], #[case] expected: Option<NetAddrError>) {
     assert_eq!(AddrV1(raw).check(), expected);
   }
