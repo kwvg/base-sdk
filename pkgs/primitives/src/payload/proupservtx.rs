@@ -316,6 +316,7 @@ impl fmt::Display for ProUpServTx {
 mod tests {
   use super::*;
   use crate::prelude::*;
+  use crate::types::AddrV1;
 
   use dash_dev::{assert_serde_rt, check_sptx, json_rejects, to_json, Corpus};
   use rstest::rstest;
@@ -377,6 +378,17 @@ mod tests {
   fn version_one_is_regular_only(#[case] mn_type: MnType, #[case] error: ProTxInvalid) {
     let item = corpus_item(1, MnType::Regular);
     assert_eq!(rebuild(&item, |t| t.mn_type = mn_type), Err(error));
+  }
+
+  #[rstest]
+  fn legacy_service_with_an_invalid_address_is_rejected_as_empty() {
+    let item = corpus_item(2, MnType::Regular);
+    let service = ServiceV1 {
+      addr: AddrV1([0; 16]),
+      port: 9999,
+    };
+    let built = rebuild(&item, |t| t.net_info = NetInfo::Legacy(NetInfoV1(service)));
+    assert_eq!(built.map(|t| t.check()), Ok(Some(ProTxInvalid::NetInfoEmpty)));
   }
 
   #[rstest]

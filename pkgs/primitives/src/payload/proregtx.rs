@@ -407,6 +407,7 @@ impl fmt::Display for ProRegTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
+  use crate::types::AddrV1;
 
   use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
   use hex_conservative::hex;
@@ -512,6 +513,29 @@ mod tests {
     let checked = NetInfoV2::decode(&mut &wire[..])
       .map(|v2| rebuild(&item, |t| t.net_info = NetInfo::Extended(v2)).map(|t| t.check()));
     assert_eq!(checked, Ok(Ok(Some(ProTxInvalid::NetInfoEmpty))));
+  }
+
+  /// The address bytes stay as decoded, so the txid is unaffected.
+  #[rstest]
+  fn legacy_service_with_an_invalid_address_counts_as_empty() {
+    let item = corpus_item(2, MnType::Regular);
+    let service = ServiceV1 {
+      addr: AddrV1([0; 16]),
+      port: 9999,
+    };
+    let built = rebuild(&item, |t| t.net_info = NetInfo::Legacy(NetInfoV1(service)));
+    assert_eq!(built.as_ref().map(|t| t.check()), Ok(None));
+
+    let mut buf = Vec::new();
+    if let Ok(t) = &built {
+      t.encode(&mut buf);
+    }
+    assert_eq!(ProRegTx::decode(&mut buf.as_slice()).ok(), built.ok());
+    // The service follows the version, type, mode and collateral outpoint.
+    assert_eq!(
+      buf[2 + 2 + 2 + 32 + 4..][..18],
+      [&[0; 16][..], &9999u16.to_be_bytes()[..]].concat()
+    );
   }
 
   #[rstest]

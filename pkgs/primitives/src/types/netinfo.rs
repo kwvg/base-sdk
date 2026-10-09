@@ -595,8 +595,9 @@ impl NITrait for NetInfoV1 {
     Some(ServiceV2::from(&self.0))
   }
 
+  /// A service whose address fails validation is empty whatever its port.
   fn is_empty(&self) -> bool {
-    self.0.addr.is_null() && self.0.port == 0
+    self.0.addr.check().is_some()
   }
 
   fn has_entries(&self, purpose: NIPurpose) -> bool {
@@ -969,6 +970,18 @@ mod tests {
     let addr: AddrV1 = addr_str.parse().unwrap();
     let v1 = NetInfoV1(ServiceV1 { addr, port });
     assert_eq!(v1.check(), expected);
+  }
+
+  #[rstest]
+  #[case::null("[::]", 0, true)]
+  #[case::ipv4_any("0.0.0.0", 9999, true)]
+  #[case::ipv4_broadcast("255.255.255.255", 9999, true)]
+  #[case::documentation("[2001:db8::1]", 9999, true)]
+  #[case::zero_port("1.2.3.4", 0, false)]
+  #[case::valid("1.2.3.4", 9999, false)]
+  fn legacy_service_with_an_invalid_address_is_empty(#[case] addr: &str, #[case] port: u16, #[case] empty: bool) {
+    let addr: AddrV1 = addr.parse().unwrap();
+    assert_eq!(NetInfoV1(ServiceV1 { addr, port }).is_empty(), empty);
   }
 
   fn svc(addr: AddrV2, port: u16) -> NIEntry {
