@@ -69,12 +69,7 @@ impl BaseCodec for AddrV2 {
       NetworkType::Ipv6 => {
         let mut buf = [0u8; 16];
         buf.copy_from_slice(raw);
-        // BIP155: fc00::/8 is CJDNS, not generic IPv6.
-        if buf[0] == 0xfc {
-          Ok(Self::Cjdns(buf))
-        } else {
-          Ok(Self::Ipv6(buf))
-        }
+        Ok(Self::Ipv6(buf))
       }
       NetworkType::TorV3 => {
         let mut buf = [0u8; 32];
@@ -120,12 +115,6 @@ impl Checkable for AddrV2 {
         // broadcast address (255.255.255.255)
         if *b == [255; 4] {
           return Some(NetAddrError::BadRange { value: 255 });
-        }
-      }
-      Self::Ipv6(b) => {
-        // fc00::/8 belongs in the Cjdns variant per BIP155.
-        if b[0] == 0xfc {
-          return Some(NetAddrError::BadRange { value: 0xfc });
         }
       }
       Self::Cjdns(b) => {
@@ -493,10 +482,7 @@ mod tests {
     Some(NetAddrError::BadRange { value: 0xfd }),
   )]
   #[case::cjdns_valid(AddrV2::Cjdns(hex!("fc000000000000000000000000000001")), None)]
-  #[case::ipv6_cjdns_range(
-    AddrV2::Ipv6(hex!("fc000000000000000000000000000001")),
-    Some(NetAddrError::BadRange { value: 0xfc }),
-  )]
+  #[case::ipv6_in_cjdns_range(AddrV2::Ipv6(hex!("fc000000000000000000000000000001")), None)]
   #[case::unknown_known_id(
     AddrV2::Unknown { network: 1, addr: vec![1, 2, 3, 4] },
     Some(NetAddrError::BadRange { value: 1 }),
@@ -524,6 +510,24 @@ mod tests {
   #[case::i2p_nonzero_port(AddrV2::I2p([1; 32]), 9999, Some(NetAddrError::BadPort { port: 9999 }))]
   fn check_service(#[case] addr: AddrV2, #[case] port: u16, #[case] expected: Option<NetAddrError>) {
     assert_eq!(ServiceV2 { addr, port }.check(), expected);
+  }
+
+  /// Only network 6 is CJDNS; an `fc00::/8` address on network 2 stays IPv6.
+  #[rstest]
+  #[case::ipv6(
+    &hex!(concat!("02", "10", "fc000000000000000000000000000001")),
+    AddrV2::Ipv6(hex!("fc000000000000000000000000000001")),
+  )]
+  #[case::cjdns(
+    &hex!(concat!("06", "10", "fc000000000000000000000000000001")),
+    AddrV2::Cjdns(hex!("fc000000000000000000000000000001")),
+  )]
+  fn fc_addresses_keep_their_network(#[case] wire: &[u8], #[case] addr: AddrV2) {
+    assert_eq!(AddrV2::decode(&mut &wire[..]), Ok(addr.clone()));
+    let mut buf = Vec::new();
+    addr.encode(&mut buf);
+    assert_eq!(buf, wire);
+    assert_eq!(addr.check(), None);
   }
 
   #[rstest]
