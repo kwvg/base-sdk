@@ -16,6 +16,7 @@ mod block;
 mod codec;
 mod deployment;
 mod gov;
+mod llmq;
 mod merkle;
 mod payload;
 #[allow(unused_imports, reason = "ergonomic shim, exports may be unused")]
