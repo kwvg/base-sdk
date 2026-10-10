@@ -8,6 +8,7 @@
 
 use super::{payload_hash, QuorumHash};
 use crate::codec::impl_payload;
+use crate::deployment::{Activation, Deployments};
 use crate::hash_impl;
 use crate::types::{BlsScheme, BlsSig};
 
@@ -90,6 +91,8 @@ pub enum AssetUnlockInvalid {
   HaveInput,
   /// `bad-assetunlocktx-too-many-outs`
   TooManyOutputs { count: usize },
+  /// `bad-assetunlocktx-version-2`
+  Version2Inactive { version: u8 },
 }
 
 impl core::fmt::Display for AssetUnlockInvalid {
@@ -100,6 +103,7 @@ impl core::fmt::Display for AssetUnlockInvalid {
       Self::BadPayload => write!(f, "bad-assetunlocktx-payload"),
       Self::HaveInput => write!(f, "bad-assetunlocktx-have-input"),
       Self::TooManyOutputs { count } => write!(f, "bad-assetunlocktx-too-many-outs: {count}"),
+      Self::Version2Inactive { version } => write!(f, "bad-assetunlocktx-version-2: {version}"),
     }
   }
 }
@@ -139,6 +143,12 @@ impl AssetUnlock {
       REQUEST_ID_PREFIX.encode(buf);
       self.index.encode(buf);
     })
+  }
+
+  /// Rejects a payload version above 1 while v24 is inactive.
+  pub fn check_deployments(&self, deployments: Deployments) -> Option<AssetUnlockInvalid> {
+    (deployments.v24 == Activation::Inactive && self.version > 1)
+      .then_some(AssetUnlockInvalid::Version2Inactive { version: self.version })
   }
 }
 
@@ -187,6 +197,37 @@ mod tests {
       .unwrap();
     item.version = version;
     assert_eq!(item.check(), expected);
+  }
+
+  fn deployments(v24: Activation) -> Deployments {
+    Deployments {
+      v19: Activation::Active,
+      v20: Activation::Active,
+      v24,
+      evo_shares: Activation::Inactive,
+    }
+  }
+
+  #[rstest]
+  #[case::v1_before_v24(1, Activation::Inactive, None)]
+  #[case::v2_before_v24(2, Activation::Inactive, Some(AssetUnlockInvalid::Version2Inactive { version: 2 }))]
+  #[case::v1_under_v24(1, Activation::Active, None)]
+  #[case::v2_under_v24(2, Activation::Active, None)]
+  fn version_2_waits_for_v24(
+    #[case] version: u8,
+    #[case] v24: Activation,
+    #[case] expected: Option<AssetUnlockInvalid>,
+  ) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
+    let mut item = corpus
+      .entries::<AssetUnlock>("assetunlock", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    item.version = version;
+    assert_eq!(item.check_deployments(deployments(v24)), expected);
+    let reason = AssetUnlockInvalid::Version2Inactive { version: 2 }.to_string();
+    assert_eq!(reason, "bad-assetunlocktx-version-2: 2");
   }
 
   #[rstest]

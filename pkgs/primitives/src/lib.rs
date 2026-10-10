@@ -14,6 +14,7 @@ extern crate std;
 
 mod block;
 mod codec;
+mod deployment;
 mod gov;
 mod merkle;
 mod payload;
@@ -36,6 +37,7 @@ pub use block::{
   Block, BlockHash, BlockHeader, BlockInvalid, MerkleRoot, MAX_DIP0001_BLOCK_SIZE, MAX_LEGACY_BLOCK_SIZE,
 };
 pub use codec::MAX_SPTX_PAYLOAD_SIZE;
+pub use deployment::{Activation, Deployments};
 pub use gov::{
   GovData, GovObject, GovObjectType, GovVote, GovVoteInvalid, Proposal, ProposalInvalid, Trigger, VoteOutcome,
   VoteSignal, MAX_PROPOSAL_DATA_SIZE,
