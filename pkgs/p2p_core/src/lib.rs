@@ -32,7 +32,7 @@ pub mod __private {
 }
 pub use bip324::{decode_v2, decode_v2_with_version, encode_v2, encode_v2_with_version};
 pub use command::CommandString;
-pub use error::P2pDecodeError;
+pub use error::{P2pDecodeError, TooManyEntries};
 pub use magic::Magic;
 pub use msg::*;
 pub use short_id::ShortId;

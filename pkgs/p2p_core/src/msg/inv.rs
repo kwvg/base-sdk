@@ -7,14 +7,18 @@
 //! Inventory messages and types.
 
 use crate::codec::codec_p2p;
+use crate::error::{check_count, TooManyEntries};
 use crate::prelude::*;
 
 use dash_num::Hash256;
 use dash_primitives::hash_impl;
 use dash_types::type_id::TypeId;
-use dash_types::{enum_map, impl_num};
+use dash_types::{enum_map, impl_num, Checkable};
 
 use core::fmt;
+
+/// Largest number of entries in an `inv` or `getdata` message.
+const MAX_INV_SZ: usize = 50_000;
 
 /// Requests specific inventory items from a peer.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
@@ -25,6 +29,14 @@ pub struct GetData {
 }
 
 codec_p2p!(GetData { inventory });
+
+impl Checkable for GetData {
+  type Error = TooManyEntries;
+
+  fn check(&self) -> Option<Self::Error> {
+    check_count(self.inventory.len(), MAX_INV_SZ)
+  }
+}
 
 enum_map! {
   /// Inventory object type.
@@ -104,6 +116,14 @@ pub struct Inv {
 
 codec_p2p!(Inv { inventory });
 
+impl Checkable for Inv {
+  type Error = TooManyEntries;
+
+  fn check(&self) -> Option<Self::Error> {
+    check_count(self.inventory.len(), MAX_INV_SZ)
+  }
+}
+
 /// Indicates requested inventory items were not found.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -149,6 +169,37 @@ mod tests {
   #[case::asset_unlock(34)]
   fn other_inv_codes_are_unknown(#[case] code: u32) {
     assert_eq!(InvType::from_base(code), InvType::Unknown(code));
+  }
+
+  fn inventory(count: usize) -> Vec<Inventory> {
+    vec![
+      Inventory {
+        inv_type: InvType::Tx,
+        hash: Hash256::default(),
+      };
+      count
+    ]
+  }
+
+  #[rstest]
+  #[case::empty(0, None)]
+  #[case::at_limit(MAX_INV_SZ, None)]
+  #[case::past_limit(MAX_INV_SZ + 1, Some(TooManyEntries { count: MAX_INV_SZ + 1, limit: MAX_INV_SZ }))]
+  fn inv_and_getdata_carry_at_most_50000_entries(#[case] count: usize, #[case] expected: Option<TooManyEntries>) {
+    assert_eq!(
+      Inv {
+        inventory: inventory(count)
+      }
+      .check(),
+      expected
+    );
+    assert_eq!(
+      GetData {
+        inventory: inventory(count)
+      }
+      .check(),
+      expected
+    );
   }
 
   #[rstest]

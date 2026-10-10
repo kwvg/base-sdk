@@ -4,7 +4,7 @@
 // See the accompanying file LICENSE or https://opensource.org/license/MIT
 //
 
-//! P2P-layer decoding errors.
+//! P2P-layer decoding and check errors.
 
 use crate::prelude::*;
 
@@ -93,3 +93,23 @@ impl fmt::Display for P2pDecodeError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for P2pDecodeError {}
+
+/// A message carries more entries than its limit allows.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub struct TooManyEntries {
+  /// Number of entries carried.
+  pub count: usize,
+  /// Largest number of entries allowed.
+  pub limit: usize,
+}
+
+impl fmt::Display for TooManyEntries {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{} entries exceed the limit of {}", self.count, self.limit)
+  }
+}
+
+/// Returns an error when `count` exceeds `limit`.
+pub(crate) fn check_count(count: usize, limit: usize) -> Option<TooManyEntries> {
+  (count > limit).then_some(TooManyEntries { count, limit })
+}
