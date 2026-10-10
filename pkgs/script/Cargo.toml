@@ -13,6 +13,7 @@ rust-version.workspace = true
 default = []
 std = [
   "base58ck/std",
+  "bech32/std",
   "bitcoin-consensus-encoding/std",
   "dash-pkc/std",
   "dash-types/std",
@@ -22,6 +23,7 @@ serde = ["dep:serde", "dash-pkc/serde", "dash-types/serde"]
 
 [dependencies]
 base58ck = { workspace = true, features = ["alloc"] }
+bech32 = { workspace = true, features = ["alloc"] }
 bitcoin-consensus-encoding = { workspace = true, features = ["alloc"] }
 dash-num = { version = "0.1.0-beta", path = "../num", default-features = false }
 dash-pkc = { version = "0.1.0-beta", path = "../pkc", default-features = false, features = [

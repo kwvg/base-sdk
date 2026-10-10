@@ -73,6 +73,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bech32"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
+
+[[package]]
 name = "bitcoin-consensus-encoding"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -553,6 +559,7 @@ name = "dash-script"
 version = "0.0.0"
 dependencies = [
  "base58ck",
+ "bech32",
  "bitcoin-consensus-encoding",
  "dash-num",
  "dash-pkc",

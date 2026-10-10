@@ -19,7 +19,7 @@ mod opcode;
 mod prelude;
 mod sigops;
 
-pub use addrs::{AddrParams, Recipient};
+pub use addrs::{AddrParams, PlatformAddrError, Recipient};
 pub use collateral::{is_shared_collateral_script, SHARED_COLLATERAL_SCRIPT};
 pub use dash_pkc::__private::__EcdsaPkHash as PubKeyHash;
 pub use dash_types::__private::__ScriptHash as ScriptHash;

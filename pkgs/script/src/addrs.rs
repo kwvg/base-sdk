@@ -10,10 +10,14 @@ use crate::prelude::*;
 use crate::{opcode::Opcode, PubKeyHash, ScriptHash};
 
 use base58ck::decode_check;
+use bech32::primitives::decode::UncheckedHrpstring;
+use bech32::{Bech32, Bech32m, Hrp};
 use dash_num::Hash160;
 use dash_pkc::ecdsa::EcdsaPkBytes;
 use dash_types::codec::{BaseCodec, EncodeBuf};
 use dash_types::{type_cvrt, type_id::Unencodable, Hashable, Numeric};
+
+use core::fmt;
 
 /// Network address encoding parameters.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
@@ -33,6 +37,51 @@ pub struct AddrParams {
   /// Bech32m human-readable part of DIP-18 Platform addresses.
   pub platform_hrp: &'static str,
 }
+
+/// DIP-18 type byte of a Platform P2PKH address.
+const PLATFORM_P2PKH: u8 = 0xb0;
+
+/// DIP-18 type byte of a Platform P2SH address.
+const PLATFORM_P2SH: u8 = 0x80;
+
+/// Bytes a Platform address carries, the type byte and a HASH160.
+const PLATFORM_PAYLOAD_LEN: usize = 1 + Hash160::LEN;
+
+/// Longest string a bech32 decoder accepts.
+const BECH32_MAX_LEN: usize = 90;
+
+/// DIP-18 Platform address decoding failure.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub enum PlatformAddrError {
+  /// The string is not valid bech32 or bech32m.
+  InvalidEncoding,
+  /// The checksum is bech32 rather than bech32m.
+  NotBech32m,
+  /// The human-readable part belongs to another network.
+  WrongHrp,
+  /// The 5-bit groups leave more than 4 bits, or non-zero padding.
+  BadPadding,
+  /// The payload is not a type byte and a HASH160.
+  BadLength { len: usize },
+  /// The type byte is neither P2PKH nor P2SH.
+  UnknownType { type_byte: u8 },
+}
+
+impl fmt::Display for PlatformAddrError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::InvalidEncoding => write!(f, "invalid bech32m encoding"),
+      Self::NotBech32m => write!(f, "platform addresses require a bech32m checksum"),
+      Self::WrongHrp => write!(f, "invalid platform hrp for the network"),
+      Self::BadPadding => write!(f, "invalid platform address payload encoding"),
+      Self::BadLength { len } => write!(f, "invalid platform address payload length: {len}"),
+      Self::UnknownType { type_byte } => write!(f, "unknown dip-18 type byte: {type_byte:#04x}"),
+    }
+  }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for PlatformAddrError {}
 
 /// Recipient parsed from address.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
@@ -125,6 +174,61 @@ impl Recipient {
     }
   }
 
+  /// Encode as a DIP-18 Platform address.
+  ///
+  /// Returns `None` for `Unspendable`, which has no address form.
+  pub fn to_platform(&self, params: &AddrParams) -> Option<String> {
+    let (type_byte, hash) = match self {
+      Self::PubKeyHash(h) => (PLATFORM_P2PKH, *h.as_bytes()),
+      Self::ScriptHash(h) => (PLATFORM_P2SH, *h.as_bytes()),
+      Self::PubKey(pk) => (PLATFORM_P2PKH, *pk.hash().as_bytes()),
+      Self::Unspendable => return None,
+    };
+    let mut payload = [0; PLATFORM_PAYLOAD_LEN];
+    payload[0] = type_byte;
+    payload[1..].copy_from_slice(&hash);
+    let hrp = Hrp::parse(params.platform_hrp).ok()?;
+    bech32::encode_lower::<Bech32m>(hrp, &payload).ok()
+  }
+
+  /// Decode a DIP-18 Platform address of the network `params` describes.
+  ///
+  /// # Errors
+  ///
+  /// Returns the first [`PlatformAddrError`] the string meets, in the order
+  /// the variants are declared.
+  pub fn from_platform(s: &str, params: &AddrParams) -> Result<Self, PlatformAddrError> {
+    if s.len() > BECH32_MAX_LEN {
+      return Err(PlatformAddrError::InvalidEncoding);
+    }
+    let unchecked = UncheckedHrpstring::new(s).map_err(|_| PlatformAddrError::InvalidEncoding)?;
+    if !unchecked.has_valid_checksum::<Bech32m>() {
+      return Err(if unchecked.has_valid_checksum::<Bech32>() {
+        PlatformAddrError::NotBech32m
+      } else {
+        PlatformAddrError::InvalidEncoding
+      });
+    }
+    if !unchecked.hrp().lowercase_char_iter().eq(params.platform_hrp.chars()) {
+      return Err(PlatformAddrError::WrongHrp);
+    }
+
+    let checked = unchecked.remove_checksum::<Bech32m>();
+    let payload = regroup_5_to_8(checked.fe32_iter::<core::iter::Empty<u8>>().map(bech32::Fe32::to_u8))?;
+    let bad_length = PlatformAddrError::BadLength { len: payload.len() };
+    let Some((&type_byte, rest)) = payload.split_first() else {
+      return Err(bad_length);
+    };
+    let Ok(hash) = <[u8; Hash160::LEN]>::try_from(rest) else {
+      return Err(bad_length);
+    };
+    match type_byte {
+      PLATFORM_P2PKH => Ok(Self::PubKeyHash(PubKeyHash::from(hash))),
+      PLATFORM_P2SH => Ok(Self::ScriptHash(ScriptHash::from(hash))),
+      type_byte => Err(PlatformAddrError::UnknownType { type_byte }),
+    }
+  }
+
   /// Encode as a scriptPubKey.
   pub fn to_script(&self, buf: &mut impl EncodeBuf) {
     match self {
@@ -156,6 +260,25 @@ impl Recipient {
   }
 }
 
+/// Regroups 5-bit values into bytes, refusing more than 4 leftover bits and
+/// non-zero padding.
+fn regroup_5_to_8(values: impl Iterator<Item = u8>) -> Result<Vec<u8>, PlatformAddrError> {
+  let mut bytes = Vec::new();
+  let (mut acc, mut bits) = (0u32, 0u32);
+  for value in values {
+    acc = ((acc << 5) | u32::from(value)) & 0xfff;
+    bits += 5;
+    if bits >= 8 {
+      bits -= 8;
+      bytes.push((acc >> bits) as u8);
+    }
+  }
+  if bits >= 5 || (acc << (8 - bits)) & 0xff != 0 {
+    return Err(PlatformAddrError::BadPadding);
+  }
+  Ok(bytes)
+}
+
 type_cvrt!(
   enum Recipient {
     PubKey(EcdsaPkBytes),
@@ -169,6 +292,7 @@ type_cvrt!(
 mod tests {
   use super::*;
 
+  use bech32::{ByteIterExt, Fe32IterExt};
   use hex_conservative::hex;
   use rstest::rstest;
 
@@ -328,5 +452,126 @@ mod tests {
   #[case::empty("")]
   fn from_base58c_rejects(#[case] addr: &str) {
     assert!(Recipient::from_base58c(addr, &MAINNET).is_none());
+  }
+
+  const TESTNET: AddrParams = AddrParams {
+    pubkey_addr: 140,
+    script_addr: 19,
+    secret_key: 239,
+    ext_pubkey: [0x04, 0x35, 0x87, 0xCF],
+    ext_secret: [0x04, 0x35, 0x83, 0x94],
+    bip44_idx: 1,
+    platform_hrp: "tdash",
+  };
+
+  // DIP-0018 test vectors, as the reference's key_io_tests.cpp lists them.
+  #[rstest]
+  #[case(MAINNET, false, hex!("f7da0a2b5cbd4ff6bb2c4d89b67d2f3ffeec0525"), "dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs")]
+  #[case(MAINNET, false, hex!("a5ff0046217fd1c7d238e3e146cc5bfd90832a7e"), "dash1kzjl7qzxy9lar37j8r37z3kvt07epqe20ckxfezw")]
+  #[case(MAINNET, false, hex!("6d92674fd64472a3dfcfc3ebcfed7382bf699d7b"), "dash1kpkeye606ez89g7lelp7hnldwwpt76va0v3j6x28")]
+  #[case(TESTNET, false, hex!("f7da0a2b5cbd4ff6bb2c4d89b67d2f3ffeec0525"), "tdash1krma5z3ttj75la4m93xcndna9ullamq9y5fzq2j7")]
+  #[case(TESTNET, false, hex!("a5ff0046217fd1c7d238e3e146cc5bfd90832a7e"), "tdash1kzjl7qzxy9lar37j8r37z3kvt07epqe20cxp68nq")]
+  #[case(TESTNET, false, hex!("6d92674fd64472a3dfcfc3ebcfed7382bf699d7b"), "tdash1kpkeye606ez89g7lelp7hnldwwpt76va0vp4fcmf")]
+  #[case(MAINNET, true, hex!("43fa183cf3fb6e9e7dc62b692aeb4fc8d8045636"), "dash1sppl5xpu70aka8nacc4kj2htflydspzkxch4cad6")]
+  #[case(TESTNET, true, hex!("43fa183cf3fb6e9e7dc62b692aeb4fc8d8045636"), "tdash1sppl5xpu70aka8nacc4kj2htflydspzkxc8jtru5")]
+  fn platform_vectors_round_trip(
+    #[case] params: AddrParams,
+    #[case] is_p2sh: bool,
+    #[case] hash: [u8; 20],
+    #[case] addr: &str,
+  ) {
+    let expected = if is_p2sh {
+      Recipient::ScriptHash(ScriptHash::from(hash))
+    } else {
+      Recipient::PubKeyHash(PubKeyHash::from(hash))
+    };
+    assert_eq!(Recipient::from_platform(addr, &params), Ok(expected.clone()));
+    assert_eq!(expected.to_platform(&params).as_deref(), Some(addr));
+    // A single-case string decodes in either case.
+    assert_eq!(Recipient::from_platform(&addr.to_uppercase(), &params), Ok(expected));
+  }
+
+  #[rstest]
+  fn platform_encoding_skips_unspendable() {
+    assert_eq!(Recipient::Unspendable.to_platform(&MAINNET), None);
+  }
+
+  /// Bech32m string of `hrp` over the 5-bit groups of `values`.
+  fn bech32m_of_groups(hrp: &str, values: &[u8]) -> String {
+    let hrp = Hrp::parse(hrp).unwrap();
+    values
+      .iter()
+      .map(|&value| bech32::Fe32::try_from(value).unwrap())
+      .with_checksum::<Bech32m>(&hrp)
+      .chars()
+      .collect()
+  }
+
+  /// 5-bit groups of `bytes`, zero-padded.
+  fn groups_of(bytes: &[u8]) -> Vec<u8> {
+    bytes.iter().copied().bytes_to_fes().map(bech32::Fe32::to_u8).collect()
+  }
+
+  const P2PKH_PAYLOAD: [u8; 21] = hex!("b0f7da0a2b5cbd4ff6bb2c4d89b67d2f3ffeec0525");
+
+  #[rstest]
+  #[case::empty(String::new(), PlatformAddrError::InvalidEncoding)]
+  #[case::garbage(String::from("not-an-address"), PlatformAddrError::InvalidEncoding)]
+  #[case::mixed_case(
+    String::from("Dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs"),
+    PlatformAddrError::InvalidEncoding
+  )]
+  #[case::bad_checksum(
+    String::from("dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rq"),
+    PlatformAddrError::InvalidEncoding
+  )]
+  #[case::bech32_checksum(
+    bech32::encode_lower::<Bech32>(Hrp::parse("dash").unwrap(), &P2PKH_PAYLOAD).unwrap(),
+    PlatformAddrError::NotBech32m
+  )]
+  #[case::other_network(
+    String::from("tdash1krma5z3ttj75la4m93xcndna9ullamq9y5fzq2j7"),
+    PlatformAddrError::WrongHrp
+  )]
+  #[case::non_zero_padding(
+    {
+      let mut groups = groups_of(&P2PKH_PAYLOAD);
+      *groups.last_mut().unwrap() |= 1;
+      bech32m_of_groups("dash", &groups)
+    },
+    PlatformAddrError::BadPadding
+  )]
+  #[case::five_leftover_bits(
+    {
+      let mut groups = groups_of(&P2PKH_PAYLOAD);
+      groups.push(0);
+      bech32m_of_groups("dash", &groups)
+    },
+    PlatformAddrError::BadPadding
+  )]
+  #[case::short_hash(
+    bech32::encode_lower::<Bech32m>(Hrp::parse("dash").unwrap(), &P2PKH_PAYLOAD[..20]).unwrap(),
+    PlatformAddrError::BadLength { len: 20 }
+  )]
+  #[case::ninety_chars(
+    bech32::encode_lower::<Bech32m>(Hrp::parse("dash").unwrap(), &[0xb0; 49]).unwrap(),
+    PlatformAddrError::BadLength { len: 49 }
+  )]
+  #[case::ninety_one_chars(
+    bech32::encode_lower::<Bech32m>(Hrp::parse("dash").unwrap(), &[0xb0; 50]).unwrap(),
+    PlatformAddrError::InvalidEncoding
+  )]
+  #[case::unknown_type(
+    bech32::encode_lower::<Bech32m>(Hrp::parse("dash").unwrap(), &hex!("00f7da0a2b5cbd4ff6bb2c4d89b67d2f3ffeec0525")).unwrap(),
+    PlatformAddrError::UnknownType { type_byte: 0 }
+  )]
+  fn from_platform_rejects(#[case] addr: String, #[case] error: PlatformAddrError) {
+    assert_eq!(Recipient::from_platform(&addr, &MAINNET), Err(error));
+  }
+
+  #[rstest]
+  fn platform_lengths_bracket_the_bech32_limit() {
+    let at_limit = bech32::encode_lower::<Bech32m>(Hrp::parse("dash").unwrap(), &[0xb0; 49]).unwrap();
+    assert_eq!(at_limit.len(), BECH32_MAX_LEN);
   }
 }
