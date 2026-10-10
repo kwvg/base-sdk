@@ -6,9 +6,11 @@
 
 //! ProRegTx registration payload (type 1).
 
+use super::protx::{decode_u8_list, encode_u8_count, encode_u8_list, MAX_U8_LIST_LEN};
 use super::{
-  check_sptx_netinfo, decode_version, encode_net_info, payload_hash, InputsHash, MnType, NetInfoForm, ProTxInvalid,
-  MAX_OPERATOR_REWARD, PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
+  check_sptx_netinfo, decode_version, encode_net_info, payload_hash, CollateralShare, CompactSignature, InputsHash,
+  MasternodePayoutShare, MnType, NetInfoForm, ProTxInvalid, MAX_OPERATOR_REWARD, PROTX_VERSION_BASIC_BLS,
+  PROTX_VERSION_EXT_ADDR,
 };
 use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
@@ -31,7 +33,7 @@ use core::fmt;
 ///
 /// - v1: LegacyBLS
 /// - v2: BasicBLS
-/// - v3: ExtAddr (extended network info)
+/// - v3: ExtAddr (extended network info, payout list and collateral shares)
 ///
 /// The version-coupled fields are private, so [`ProRegTx::new`] keeps them in
 /// step with the version and masternode type.
@@ -55,8 +57,11 @@ pub struct ProRegTx {
   pub key_id_voting: PubKeyHash,
   /// Operator reward in basis points (0-10000).
   pub operator_reward: u16,
-  /// Payout script.
-  pub script_payout: ScriptPubKeyBuf,
+  script_payout: ScriptPubKeyBuf,
+  payouts: Vec<MasternodePayoutShare>,
+  shares: Vec<(CollateralShare, CompactSignature)>,
+  early_period_blocks: u32,
+  early_penalty: i64,
   /// Hash of all inputs.
   pub inputs_hash: InputsHash,
   platform_node_id: Option<PlatformNodeId>,
@@ -136,7 +141,23 @@ impl BaseCodec for ProRegTx {
     let pub_key_operator = BlsPubKey::decode(data, BlsScheme::from_protx_version(version))?;
     let key_id_voting = PubKeyHash::decode(data)?;
     let operator_reward = u16::decode(data)?;
-    let script_payout = ScriptPubKeyBuf::decode(data)?;
+    let (script_payout, payouts, shares, early_period_blocks, early_penalty) = if version >= PROTX_VERSION_EXT_ADDR {
+      let payouts = decode_u8_list(data)?;
+      let shares: Vec<CollateralShare> = decode_u8_list(data)?;
+      let join_sigs = (0..shares.len())
+        .map(|_| CompactSignature::decode(data))
+        .collect::<Result<Vec<_>, _>>()?;
+      let shares = shares.into_iter().zip(join_sigs).collect();
+      (
+        ScriptPubKeyBuf::new(),
+        payouts,
+        shares,
+        u32::decode(data)?,
+        i64::decode(data)?,
+      )
+    } else {
+      (ScriptPubKeyBuf::decode(data)?, Vec::new(), Vec::new(), 0, 0)
+    };
     let inputs_hash = InputsHash::decode(data)?;
     let (platform_node_id, platform_p2p_port, platform_http_port) = if mn_type == MnType::Evo {
       let node_id = PlatformNodeId::decode(data)?;
@@ -161,6 +182,10 @@ impl BaseCodec for ProRegTx {
       key_id_voting,
       operator_reward,
       script_payout,
+      payouts,
+      shares,
+      early_period_blocks,
+      early_penalty,
       inputs_hash,
       platform_node_id,
       platform_p2p_port,
@@ -201,11 +226,12 @@ impl Checkable for ProRegTx {
       return Some(ProTxInvalid::NullKey);
     }
 
-    let payout = self.script_payout.as_bytes();
-    let recipient = Recipient::from_script(payout);
-    match &recipient {
-      Some(Recipient::PubKeyHash(_) | Recipient::ScriptHash(_)) => {}
-      _ => return Some(ProTxInvalid::BadPayoutScript),
+    let recipient =
+      (self.version < PROTX_VERSION_EXT_ADDR).then(|| Recipient::from_script(self.script_payout.as_bytes()));
+    if let Some(recipient) = &recipient {
+      if !matches!(recipient, Some(Recipient::PubKeyHash(_) | Recipient::ScriptHash(_))) {
+        return Some(ProTxInvalid::BadPayoutScript);
+      }
     }
 
     if let Some(e) = self.check_fields() {
@@ -227,7 +253,7 @@ impl Checkable for ProRegTx {
       }
     }
 
-    if let Some(Recipient::PubKeyHash(hash)) = &recipient {
+    if let Some(Some(Recipient::PubKeyHash(hash))) = &recipient {
       if *hash == self.key_id_owner || *hash == self.key_id_voting {
         return Some(ProTxInvalid::PayoutKeyReuse);
       }
@@ -269,7 +295,20 @@ impl ProRegTx {
     self.pub_key_operator.encode(buf);
     self.key_id_voting.encode(buf);
     self.operator_reward.encode(buf);
-    self.script_payout.encode(buf);
+    if self.version >= PROTX_VERSION_EXT_ADDR {
+      encode_u8_list(&self.payouts, buf);
+      encode_u8_count(self.shares.len(), buf);
+      for (share, _) in &self.shares {
+        share.encode(buf);
+      }
+      for (_, join_sig) in &self.shares {
+        join_sig.encode(buf);
+      }
+      self.early_period_blocks.encode(buf);
+      self.early_penalty.encode(buf);
+    } else {
+      self.script_payout.encode(buf);
+    }
     self.inputs_hash.encode(buf);
     if let Some(node_id) = self.platform_node_id {
       node_id.encode(buf);
@@ -282,14 +321,15 @@ impl ProRegTx {
     }
   }
 
-  /// Builds a registration whose net info and platform fields match the
-  /// version and masternode type. The version selects the scheme of
+  /// Builds a registration whose net info, payout and platform fields match
+  /// the version and masternode type. The version selects the scheme of
   /// `pub_key_operator`.
   ///
   /// # Errors
   ///
-  /// Returns [`ProTxInvalid::NetInfoVersionMismatch`] or
-  /// [`ProTxInvalid::BadPlatformFields`] for a field that does not match.
+  /// Returns [`ProTxInvalid::NetInfoVersionMismatch`],
+  /// [`ProTxInvalid::BadPayoutFields`] or [`ProTxInvalid::BadPlatformFields`]
+  /// for a field that does not match.
   #[expect(clippy::too_many_arguments, reason = "one argument per wire field")]
   pub fn new(
     version: u16,
@@ -303,6 +343,10 @@ impl ProRegTx {
     key_id_voting: PubKeyHash,
     operator_reward: u16,
     script_payout: ScriptPubKeyBuf,
+    payouts: Vec<MasternodePayoutShare>,
+    shares: Vec<(CollateralShare, CompactSignature)>,
+    early_period_blocks: u32,
+    early_penalty: i64,
     inputs_hash: InputsHash,
     platform_node_id: Option<PlatformNodeId>,
     platform_p2p_port: Option<u16>,
@@ -321,6 +365,10 @@ impl ProRegTx {
       key_id_voting,
       operator_reward,
       script_payout,
+      payouts,
+      shares,
+      early_period_blocks,
+      early_penalty,
       inputs_hash,
       platform_node_id,
       platform_p2p_port,
@@ -351,6 +399,33 @@ impl ProRegTx {
   /// Operator BLS public key, in the scheme the version selects.
   pub const fn pub_key_operator(&self) -> &BlsPubKey {
     &self.pub_key_operator
+  }
+
+  /// Payout script, empty from version 3.
+  pub const fn script_payout(&self) -> &ScriptPubKeyBuf {
+    &self.script_payout
+  }
+
+  /// Owner payout list, empty before version 3.
+  pub fn payouts(&self) -> &[MasternodePayoutShare] {
+    &self.payouts
+  }
+
+  /// Collateral shares, each with the join signature of its owner, empty
+  /// before version 3.
+  pub fn shares(&self) -> &[(CollateralShare, CompactSignature)] {
+    &self.shares
+  }
+
+  /// Length in blocks of the early period after registration, 0 before
+  /// version 3.
+  pub const fn early_period_blocks(&self) -> u32 {
+    self.early_period_blocks
+  }
+
+  /// Early dissolution penalty in duffs, 0 before version 3.
+  pub const fn early_penalty(&self) -> i64 {
+    self.early_penalty
   }
 
   /// Platform node id, carried by evo masternodes.
@@ -385,6 +460,14 @@ impl ProRegTx {
     if is_extended != (self.version >= PROTX_VERSION_EXT_ADDR) {
       return Some(ProTxInvalid::NetInfoVersionMismatch);
     }
+    let fits_layout = if self.version >= PROTX_VERSION_EXT_ADDR {
+      self.script_payout.is_empty() && self.payouts.len() <= MAX_U8_LIST_LEN && self.shares.len() <= MAX_U8_LIST_LEN
+    } else {
+      self.payouts.is_empty() && self.shares.is_empty() && self.early_period_blocks == 0 && self.early_penalty == 0
+    };
+    if !fits_layout {
+      return Some(ProTxInvalid::BadPayoutFields);
+    }
     check_platform_fields(
       self.mn_type,
       self.version,
@@ -412,7 +495,16 @@ struct __ProRegFields {
   pub_key_operator: [u8; BLS_PK_LEN],
   key_id_voting: PubKeyHash,
   operator_reward: u16,
+  #[serde(default)]
   script_payout: ScriptPubKeyBuf,
+  #[serde(default)]
+  payouts: Vec<MasternodePayoutShare>,
+  #[serde(default)]
+  shares: Vec<(CollateralShare, CompactSignature)>,
+  #[serde(default)]
+  early_period_blocks: u32,
+  #[serde(default)]
+  early_penalty: i64,
   inputs_hash: InputsHash,
   platform_node_id: Option<PlatformNodeId>,
   #[serde(rename = "platformP2PPort")]
@@ -440,6 +532,10 @@ impl TryFrom<__ProRegFields> for ProRegTx {
       fields.key_id_voting,
       fields.operator_reward,
       fields.script_payout,
+      fields.payouts,
+      fields.shares,
+      fields.early_period_blocks,
+      fields.early_penalty,
       fields.inputs_hash,
       fields.platform_node_id,
       fields.platform_p2p_port,
@@ -480,6 +576,107 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
     let items = corpus.entries::<ProRegTx>("proregtx", check_sptx);
     assert_serde_rt("proregtx", &items);
+  }
+
+  /// Shared registrations carry a null owner key, so the layout alone is
+  /// compared here.
+  #[rstest]
+  fn corpus_shared_registrations_round_trip() {
+    use crate::Transaction;
+
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    let items = corpus.entries::<ProRegTx>("proregtx_shared", |raw, item, label| {
+      let tx = Transaction::decode(&mut &raw[..]);
+      assert_eq!(tx.as_ref().map(|tx| tx.hash().to_string()), Ok(label.to_string()));
+      let payload = tx.map(|tx| tx.extra_payload).unwrap_or_default();
+      assert_eq!(ProRegTx::decode(&mut payload.as_slice()).as_ref(), Ok(item), "{label}");
+      let mut buf = Vec::new();
+      item.encode(&mut buf);
+      assert_eq!(buf, payload, "{label}");
+    });
+    assert_serde_rt("proregtx_shared", &items);
+    let counts: BTreeSet<usize> = items.values().map(|item| item.shares().len()).collect();
+    assert_eq!(counts, BTreeSet::from([2, 8]));
+  }
+
+  /// A version 3 regular corpus payload changed by `edit`.
+  fn v3_with(edit: impl FnOnce(&mut ProRegTx)) -> ProRegTx {
+    let mut item = corpus_item(3, MnType::Regular);
+    edit(&mut item);
+    item
+  }
+
+  fn share(byte: u8) -> (CollateralShare, CompactSignature) {
+    let share = CollateralShare {
+      amount: 500 * 100_000_000,
+      script_refund: ScriptPubKeyBuf::from_bytes(vec![byte; 3]),
+      script_reward: ScriptPubKeyBuf::new(),
+      key_id_owner: PubKeyHash::from_lendian([byte; 20]),
+    };
+    (share, CompactSignature::from_bytes([byte; 65]))
+  }
+
+  #[rstest]
+  #[case::payouts(|t: &mut ProRegTx| t.payouts.clear())]
+  #[case::shares(|t: &mut ProRegTx| t.shares = vec![share(1), share(2)])]
+  #[case::early_terms(|t: &mut ProRegTx| (t.early_period_blocks, t.early_penalty) = (7, -1))]
+  fn v3_terms_round_trip(#[case] edit: fn(&mut ProRegTx)) {
+    let item = v3_with(edit);
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    assert_eq!(ProRegTx::decode(&mut buf.as_slice()), Ok(item.clone()));
+    assert_eq!(rebuild(&item, |_| {}), Ok(item));
+  }
+
+  /// The hash covers the join signatures and leaves out the owner signature.
+  #[rstest]
+  fn hash_covers_join_signatures() {
+    let item = v3_with(|t| t.shares = vec![share(1), share(2)]);
+    let resigned = v3_with(|t| t.shares = vec![share(1), (share(2).0, CompactSignature::from_bytes([3; 65]))]);
+    assert_ne!(item.hash(), resigned.hash());
+    let owner_signed = v3_with(|t| {
+      t.shares = vec![share(1), share(2)];
+      t.vch_sig = vec![1; 65];
+    });
+    assert_eq!(item.hash(), owner_signed.hash());
+  }
+
+  #[rstest]
+  fn join_signatures_follow_the_share_count() {
+    let item = v3_with(|t| t.shares = vec![share(1), share(2)]);
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    let sigs_end = buf.len() - (4 + 8 + 32 + 1 + item.vch_sig.len());
+    let truncated = &buf[..sigs_end - 1];
+    assert!(matches!(
+      ProRegTx::decode(&mut &truncated[..]),
+      Err(DecodeError::Eof { .. })
+    ));
+  }
+
+  #[rstest]
+  #[case::v2_payouts(2, |t: &mut ProRegTx| t.payouts = vec![MasternodePayoutShare { script_payout: ScriptPubKeyBuf::new(), reward: 1 }])]
+  #[case::v2_shares(2, |t: &mut ProRegTx| t.shares = vec![share(1)])]
+  #[case::v2_early_period(2, |t: &mut ProRegTx| t.early_period_blocks = 1)]
+  #[case::v2_early_penalty(2, |t: &mut ProRegTx| t.early_penalty = 1)]
+  #[case::v3_script_payout(3, |t: &mut ProRegTx| t.script_payout = ScriptPubKeyBuf::from_bytes(vec![0x51]))]
+  #[case::v3_256_payouts(3, |t: &mut ProRegTx| t.payouts = vec![t.payouts[0].clone(); 256])]
+  #[case::v3_256_shares(3, |t: &mut ProRegTx| t.shares = vec![share(1); 256])]
+  fn payout_fields_must_fit_the_layout(#[case] version: u16, #[case] edit: fn(&mut ProRegTx)) {
+    let item = corpus_item(version, MnType::Regular);
+    assert_eq!(rebuild(&item, edit), Err(ProTxInvalid::BadPayoutFields));
+    assert_eq!(ProTxInvalid::BadPayoutFields.to_string(), "bad-protx-payout-fields");
+  }
+
+  #[rstest]
+  fn v3_payout_lists_hold_255_entries() {
+    let item = corpus_item(3, MnType::Regular);
+    let built = rebuild(&item, |t| t.payouts = vec![t.payouts[0].clone(); 255]);
+    let mut buf = Vec::new();
+    if let Ok(t) = &built {
+      t.encode(&mut buf);
+    }
+    assert_eq!(ProRegTx::decode(&mut buf.as_slice()).ok(), built.ok());
   }
 
   #[rstest]
@@ -525,6 +722,10 @@ mod tests {
       t.key_id_voting,
       t.operator_reward,
       t.script_payout,
+      t.payouts,
+      t.shares,
+      t.early_period_blocks,
+      t.early_penalty,
       t.inputs_hash,
       t.platform_node_id,
       t.platform_p2p_port,

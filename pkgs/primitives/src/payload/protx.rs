@@ -6,10 +6,12 @@
 
 //! Building blocks shared by the ProTx payloads.
 
+use crate::prelude::*;
 use crate::{codec_type, hash_impl};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
 use dash_script::PubKeyHash;
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::{derive_bytes, impl_bytes};
 
@@ -80,6 +82,30 @@ codec_type!(CollateralShare {
   script_reward,
   key_id_owner
 });
+
+/// Most entries a list with a single-byte count holds.
+pub(crate) const MAX_U8_LIST_LEN: usize = u8::MAX as usize;
+
+/// Reads a list whose count is a single byte.
+pub(crate) fn decode_u8_list<T: BaseCodec>(data: &mut &[u8]) -> Result<Vec<T>, DecodeError> {
+  let count = u8::decode(data)?;
+  (0..count).map(|_| T::decode(data)).collect()
+}
+
+/// Writes the single-byte count of a list.
+///
+/// The payload constructors cap every such list at 255 entries.
+pub(crate) fn encode_u8_count(len: usize, buf: &mut impl EncodeBuf) {
+  u8::try_from(len).unwrap_or(u8::MAX).encode(buf);
+}
+
+/// Writes a list whose count is a single byte.
+pub(crate) fn encode_u8_list<T: BaseCodec>(items: &[T], buf: &mut impl EncodeBuf) {
+  encode_u8_count(items.len(), buf);
+  for item in items {
+    item.encode(buf);
+  }
+}
 
 #[cfg(test)]
 mod tests {

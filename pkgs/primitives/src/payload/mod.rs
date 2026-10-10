@@ -176,6 +176,8 @@ pub enum ProTxInvalid {
   BadReason { reason: crate::support::RevocationReason },
   /// `bad-protx-platform-fields`
   BadPlatformFields,
+  /// `bad-protx-payout-fields`
+  BadPayoutFields,
   /// `bad-protx-payload`
   BadPayload,
   /// `bad-protx-operator-payee`
@@ -223,6 +225,7 @@ impl fmt::Display for ProTxInvalid {
       Self::OperatorRewardTooHigh { reward } => write!(f, "bad-protx-operator-reward: {reward}"),
       Self::BadReason { reason } => write!(f, "bad-protx-reason: {reason}"),
       Self::BadPlatformFields => write!(f, "bad-protx-platform-fields"),
+      Self::BadPayoutFields => write!(f, "bad-protx-payout-fields"),
       Self::BadPayload => write!(f, "bad-protx-payload"),
       Self::BadOperatorPayoutScript => write!(f, "bad-protx-operator-payee"),
       Self::NullPlatformNodeId => write!(f, "bad-protx-platform-nodeid"),
