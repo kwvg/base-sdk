@@ -19,6 +19,7 @@ use crate::TxHash;
 use bitcoin_primitives::script::ScriptPubKeyBuf;
 use dash_num::Hash256;
 use dash_pkc::bls::BLS_SIG_LEN;
+use dash_script::Recipient;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::Hashable;
 use dash_types::{type_id::TypeId, Checkable, Numeric};
@@ -144,6 +145,17 @@ impl Checkable for ProUpServTx {
           return Some(e);
         }
       }
+    }
+
+    // An empty operator payout leaves the payout to the owner.
+    let payout = self.script_operator_payout.as_bytes();
+    if !payout.is_empty()
+      && !matches!(
+        Recipient::from_script(payout),
+        Some(Recipient::PubKeyHash(_) | Recipient::ScriptHash(_))
+      )
+    {
+      return Some(ProTxInvalid::BadOperatorPayoutScript);
     }
 
     None
@@ -339,6 +351,7 @@ mod tests {
   use crate::types::{AddrV1, NIError};
 
   use dash_dev::{assert_serde_rt, check_sptx, json_rejects, to_json, Corpus};
+  use hex_conservative::hex;
   use rstest::rstest;
 
   fn corpus_item(version: u16, mn_type: MnType) -> ProUpServTx {
@@ -425,6 +438,21 @@ mod tests {
       Ok(Some(ProTxInvalid::NetInfoInvalid {
         error: NIError::NotRoutable
       }))
+    );
+  }
+
+  #[rstest]
+  #[case::empty(vec![], None)]
+  #[case::p2pkh(hex!("76a914000102030405060708090a0b0c0d0e0f1011121388ac").to_vec(), None)]
+  #[case::p2sh(hex!("a914000102030405060708090a0b0c0d0e0f1011121387").to_vec(), None)]
+  #[case::op_return(hex!("6a").to_vec(), Some(ProTxInvalid::BadOperatorPayoutScript))]
+  fn operator_payout_must_be_empty_p2pkh_or_p2sh(#[case] script: Vec<u8>, #[case] expected: Option<ProTxInvalid>) {
+    let mut item = corpus_item(2, MnType::Regular);
+    item.script_operator_payout = ScriptPubKeyBuf::from_bytes(script);
+    assert_eq!(item.check(), expected);
+    assert_eq!(
+      ProTxInvalid::BadOperatorPayoutScript.to_string(),
+      "bad-protx-operator-payee"
     );
   }
 
