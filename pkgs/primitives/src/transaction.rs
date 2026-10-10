@@ -19,7 +19,8 @@ use crate::{codec_type, hash_impl};
 use bitcoin_hashes::sha256d;
 use bitcoin_primitives::script::{ScriptPubKeyBuf, ScriptSigBuf};
 use bitcoin_units::Amount;
-use dash_num::make_hash;
+use dash_num::{make_hash, Hash256};
+use dash_pkc::bls::BLS_SIG_LEN;
 use dash_types::codec::{self, BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::{impl_type, Checkable, CompactSize, Hashable, Numeric};
@@ -430,6 +431,22 @@ impl Transaction {
     OutputsHash::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
   }
 
+  /// Hash an asset unlock's quorum signature signs, over the full
+  /// serialization with only the signature zeroed. It commits to the quorum
+  /// fields that the stable txid leaves out.
+  ///
+  /// Returns `None` unless
+  /// [`is_asset_unlock_payload`](Self::is_asset_unlock_payload) holds.
+  pub fn asset_unlock_sign_hash(&self) -> Option<Hash256> {
+    if !self.is_asset_unlock_payload() {
+      return None;
+    }
+    let mut buf = Vec::new();
+    self.encode(&mut buf);
+    buf.iter_mut().rev().take(BLS_SIG_LEN).for_each(|byte| *byte = 0);
+    Some(Hash256::from_lendian(sha256d::Hash::hash(&buf).to_byte_array()))
+  }
+
   /// Tells whether the transaction is an asset unlock with a payload of the
   /// asset unlock size. The payload bytes are judged undecoded, since the
   /// txid must not depend on payload validity.
@@ -720,6 +737,35 @@ mod tests {
     let mut tx = bare(1, 0);
     tx.outputs = vec![output; count];
     assert_eq!(tx.outputs_hash(), OutputsHash::from_lendian(expected));
+  }
+
+  #[rstest]
+  #[case::v1(
+    "65fc488b35abd172726238a16cc71ef11eecb034ce05991e9a3e5ba4fd85094f",
+    hex!("241b46ea7f6285c73ce8ab4a964ea11d7bef1e208f6fda26194c0010963c0c9b")
+  )]
+  #[case::v2(
+    "2b3ff94b9041aff5b77c42631894290a6f9993c645c935e2ebe27a62b17bc20b",
+    hex!("ffb3246cd75448f590eab956e1cfb5288dd19b733635bf0d62f322fd9adb5eb5")
+  )]
+  fn asset_unlock_sign_hash_zeroes_only_the_signature(#[case] txid: &str, #[case] expected: [u8; 32]) {
+    // Python hashlib gives the expected hashes over the raw bytes with the
+    // last 96 bytes zeroed.
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "stabletxid");
+    let mut raws = BTreeMap::new();
+    corpus.entries::<TxHash>("stabletxid", |raw, _, label| {
+      raws.insert(String::from(label), raw.to_vec());
+    });
+    let tx = Transaction::decode(&mut raws[txid].as_slice()).unwrap();
+    assert_eq!(tx.asset_unlock_sign_hash(), Some(Hash256::from_lendian(expected)));
+  }
+
+  #[rstest]
+  fn sign_hash_needs_an_asset_unlock_payload() {
+    assert_eq!(bare(3, 0).asset_unlock_sign_hash(), None);
+    let mut tx = asset_unlock_of_version(2);
+    tx.extra_payload.pop();
+    assert_eq!(tx.asset_unlock_sign_hash(), None);
   }
 
   fn asset_unlock_of_version(version: u8) -> Transaction {
