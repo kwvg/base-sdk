@@ -19,6 +19,7 @@ mod protx;
 mod proupregtx;
 mod prouprevtx;
 mod proupservtx;
+mod proupsharetx;
 mod quorum;
 
 use crate::hash_impl;
@@ -47,6 +48,7 @@ pub use self::protx::{CollateralShare, CompactSignature, MasternodePayoutShare};
 pub use self::proupregtx::ProUpRegTx;
 pub use self::prouprevtx::ProUpRevTx;
 pub use self::proupservtx::ProUpServTx;
+pub use self::proupsharetx::ProUpShareTx;
 pub use self::quorum::{Commitment, CommitmentFault, CommitmentInvalid, FinalCommitment, QuorumVvecHash};
 
 pub use dash_pkc::__private::__EddsaPkHash as PlatformNodeId;

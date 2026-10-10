@@ -71,6 +71,8 @@ predicate isSecretType(TypeItem t) {
       // A masternode's payout list and collateral share table are published in
       // its registration; neither holds key material.
       "MasternodePayoutShare", "CollateralShare",
+      // A share reward update carries a script and a signature, no key.
+      "ProUpShareTx",
       // Serde artifact to deserialize a tagged enum.
       "__Seed"
     ]
