@@ -150,8 +150,13 @@ impl Checkable for CoinbaseCommitment {
       return Some(error);
     }
 
+    // The payload height stands in for the block height, which it equals in
+    // any block that passes `bad-cbtx-height`.
     match (self.best_cl_signature, self.best_cl_height_diff) {
       (Some(sig), Some(diff)) if sig.is_null() && diff != 0 => Some(CbTxInvalid::BadClHeightDiff { diff }),
+      (Some(sig), Some(diff)) if !sig.is_null() && diff >= self.height.to_u32() => {
+        Some(CbTxInvalid::BadClHeightDiff { diff })
+      }
       _ => None,
     }
   }
@@ -499,6 +504,18 @@ mod tests {
       CbTxInvalid::BadClHeightDiff { diff: 1 }.to_string(),
       "bad-cbtx-cldiff: 1"
     );
+  }
+
+  #[rstest]
+  #[case::below_the_height(6, None)]
+  #[case::at_the_height(7, Some(CbTxInvalid::BadClHeightDiff { diff: 7 }))]
+  #[case::above_the_height(8, Some(CbTxInvalid::BadClHeightDiff { diff: 8 }))]
+  fn chainlock_height_diff_stays_below_the_height(#[case] diff: u32, #[case] expected: Option<CbTxInvalid>) {
+    let mut item = v3_item();
+    assert!(item.best_cl_signature.is_some_and(|sig| !sig.is_null()));
+    item.height = BlockHeight::from_u32(7);
+    item.best_cl_height_diff = Some(diff);
+    assert_eq!(item.check(), expected);
   }
 
   #[rstest]
