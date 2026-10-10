@@ -1,0 +1,181 @@
+//
+// Copyright (c) 2026-present, The Dash Core developers
+// SPDX-License-Identifier: MIT
+// See the accompanying file LICENSE or https://opensource.org/license/MIT
+//
+
+//! ProDisTx shared masternode dissolution payload (type 10).
+
+use super::protx::{decode_u8_list, encode_u8_list, MAX_U8_LIST_LEN};
+use super::{CompactSignature, ProTxInvalid};
+use crate::codec::impl_payload;
+use crate::prelude::*;
+use crate::{hash_impl, TxHash};
+
+use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
+use dash_types::type_id::TypeId;
+
+use core::fmt;
+
+/// ProDisTx -- dissolve a shared masternode (type 10).
+///
+/// One signature, by the acting share's owner, dissolves unilaterally; one
+/// per share, in share order, dissolves unanimously. Every version shares
+/// one layout.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", try_from = "__ProDisFields"))]
+pub struct ProDisTx {
+  /// Payload version.
+  pub version: u16,
+  /// ProTx hash identifying the masternode.
+  pub pro_tx_hash: TxHash,
+  /// Index of the share whose owner acts.
+  pub actor_index: u16,
+  sigs: Vec<CompactSignature>,
+}
+
+impl_payload!(ProDisTx);
+
+impl BaseCodec for ProDisTx {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    Ok(Self {
+      version: u16::decode(data)?,
+      pro_tx_hash: TxHash::decode(data)?,
+      actor_index: u16::decode(data)?,
+      sigs: decode_u8_list(data)?,
+    })
+  }
+
+  fn encode(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    self.pro_tx_hash.encode(buf);
+    self.actor_index.encode(buf);
+    encode_u8_list(&self.sigs, buf);
+  }
+}
+
+hash_impl!(ProDisTx);
+
+impl ProDisTx {
+  /// Builds a dissolution.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`ProTxInvalid::BadDissolveSigCount`] for more than 255
+  /// signatures, which the single-byte count cannot carry.
+  pub fn new(
+    version: u16,
+    pro_tx_hash: TxHash,
+    actor_index: u16,
+    sigs: Vec<CompactSignature>,
+  ) -> Result<Self, ProTxInvalid> {
+    if sigs.len() > MAX_U8_LIST_LEN {
+      return Err(ProTxInvalid::BadDissolveSigCount { count: sigs.len() });
+    }
+    Ok(Self {
+      version,
+      pro_tx_hash,
+      actor_index,
+      sigs,
+    })
+  }
+
+  /// Signatures of the share owners.
+  pub fn sigs(&self) -> &[CompactSignature] {
+    &self.sigs
+  }
+}
+
+/// Field set that builds a deserialized dissolution through
+/// [`ProDisTx::new`].
+#[cfg(feature = "serde")]
+#[derive(::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct __ProDisFields {
+  version: u16,
+  pro_tx_hash: TxHash,
+  actor_index: u16,
+  sigs: Vec<CompactSignature>,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<__ProDisFields> for ProDisTx {
+  type Error = ProTxInvalid;
+
+  fn try_from(fields: __ProDisFields) -> Result<Self, Self::Error> {
+    Self::new(fields.version, fields.pro_tx_hash, fields.actor_index, fields.sigs)
+  }
+}
+
+impl fmt::Display for ProDisTx {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      "ProDisTx {{ v{}, actor: {}, sigs: {} }}",
+      self.version,
+      self.actor_index,
+      self.sigs.len()
+    )
+  }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod tests {
+  use super::*;
+  use crate::Transaction;
+
+  use dash_dev::{assert_serde_rt, Corpus};
+  use dash_types::Hashable;
+  use rstest::rstest;
+
+  fn corpus_items() -> BTreeMap<String, ProDisTx> {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "prodistx");
+    corpus.entries::<ProDisTx>("prodistx", |raw, item, label| {
+      let tx = Transaction::decode(&mut &raw[..]);
+      assert_eq!(tx.as_ref().map(|tx| tx.hash().to_string()), Ok(label.to_string()));
+      let payload = tx.map(|tx| tx.extra_payload).unwrap_or_default();
+      assert_eq!(ProDisTx::decode(&mut payload.as_slice()).as_ref(), Ok(item), "{label}");
+      let mut buf = Vec::new();
+      item.encode(&mut buf);
+      assert_eq!(buf, payload, "{label}");
+    })
+  }
+
+  #[rstest]
+  fn corpus_prodistx() {
+    let items = corpus_items();
+    assert_serde_rt("prodistx", &items);
+    let counts: BTreeSet<usize> = items.values().map(|item| item.sigs().len()).collect();
+    assert_eq!(counts, BTreeSet::from([1, 2, 8]));
+  }
+
+  #[rstest]
+  #[case::zero(0)]
+  #[case::past_current(2)]
+  #[case::max(u16::MAX)]
+  fn every_version_decodes_one_layout(#[case] version: u16) {
+    for (label, mut item) in corpus_items() {
+      item.version = version;
+      let mut buf = Vec::new();
+      item.encode(&mut buf);
+      assert_eq!(buf.len(), 37 + 65 * item.sigs().len(), "{label}");
+      assert_eq!(ProDisTx::decode(&mut buf.as_slice()), Ok(item), "{label}");
+    }
+  }
+
+  #[rstest]
+  fn signatures_fit_a_single_byte_count() {
+    let pro_tx_hash = TxHash::default();
+    let sig = CompactSignature::from_bytes([1; 65]);
+    assert!(ProDisTx::new(1, pro_tx_hash, 0, vec![sig; 255]).is_ok());
+    assert_eq!(
+      ProDisTx::new(1, pro_tx_hash, 0, vec![sig; 256]),
+      Err(ProTxInvalid::BadDissolveSigCount { count: 256 })
+    );
+    assert_eq!(
+      ProTxInvalid::BadDissolveSigCount { count: 256 }.to_string(),
+      "bad-prodis-sig-count: 256"
+    );
+  }
+}

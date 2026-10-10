@@ -13,6 +13,7 @@ mod assetlock;
 mod assetunlock;
 mod cbtx;
 mod mnhftx;
+mod prodistx;
 mod proregtx;
 mod protx;
 mod proupregtx;
@@ -40,6 +41,7 @@ pub use self::assetunlock::{
 };
 pub use self::cbtx::{CbTxInvalid, CoinbaseCommitment};
 pub use self::mnhftx::{MnHardFork, MnHardForkInvalid, VERSIONBITS_NUM_BITS};
+pub use self::prodistx::ProDisTx;
 pub use self::proregtx::ProRegTx;
 pub use self::protx::{CollateralShare, CompactSignature, MasternodePayoutShare};
 pub use self::proupregtx::ProUpRegTx;
@@ -192,6 +194,8 @@ pub enum ProTxInvalid {
   DuplicatePlatformPorts,
   /// `bad-protx-inputs-hash`
   BadInputsHash,
+  /// `bad-prodis-sig-count`
+  BadDissolveSigCount { count: usize },
 }
 
 impl fmt::Display for ProTxInvalid {
@@ -233,6 +237,7 @@ impl fmt::Display for ProTxInvalid {
       Self::BadPlatformHttpPort { port } => write!(f, "bad-protx-platform-http-port: {port}"),
       Self::DuplicatePlatformPorts => write!(f, "bad-protx-platform-dup-ports"),
       Self::BadInputsHash => write!(f, "bad-protx-inputs-hash"),
+      Self::BadDissolveSigCount { count } => write!(f, "bad-prodis-sig-count: {count}"),
     }
   }
 }
