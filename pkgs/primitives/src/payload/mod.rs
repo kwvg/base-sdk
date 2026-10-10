@@ -19,6 +19,7 @@ mod protx;
 mod proupregtx;
 mod prouprevtx;
 mod proupservtx;
+mod proupsharedregtx;
 mod proupsharetx;
 mod quorum;
 
@@ -48,6 +49,7 @@ pub use self::protx::{CollateralShare, CompactSignature, MasternodePayoutShare};
 pub use self::proupregtx::ProUpRegTx;
 pub use self::prouprevtx::ProUpRevTx;
 pub use self::proupservtx::ProUpServTx;
+pub use self::proupsharedregtx::ProUpSharedRegTx;
 pub use self::proupsharetx::ProUpShareTx;
 pub use self::quorum::{Commitment, CommitmentFault, CommitmentInvalid, FinalCommitment, QuorumVvecHash};
 
@@ -198,6 +200,8 @@ pub enum ProTxInvalid {
   BadInputsHash,
   /// `bad-prodis-sig-count`
   BadDissolveSigCount { count: usize },
+  /// `bad-proupsharedreg-sig-count`
+  BadSharedRegSigCount { count: usize },
 }
 
 impl fmt::Display for ProTxInvalid {
@@ -240,6 +244,7 @@ impl fmt::Display for ProTxInvalid {
       Self::DuplicatePlatformPorts => write!(f, "bad-protx-platform-dup-ports"),
       Self::BadInputsHash => write!(f, "bad-protx-inputs-hash"),
       Self::BadDissolveSigCount { count } => write!(f, "bad-prodis-sig-count: {count}"),
+      Self::BadSharedRegSigCount { count } => write!(f, "bad-proupsharedreg-sig-count: {count}"),
     }
   }
 }
