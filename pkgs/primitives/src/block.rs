@@ -6,7 +6,8 @@
 
 //! Dash block (header + transactions).
 
-use crate::merkle::merkle_root_mutated;
+use crate::merkle::{merkle_root, merkle_root_mutated};
+use crate::payload::{SpecialPayload, TxType};
 use crate::prelude::*;
 use crate::transaction::{Transaction, TxInvalid};
 use crate::{codec_base, codec_type, hash_impl};
@@ -106,6 +107,8 @@ pub enum BlockInvalid {
   TooManySigops { count: usize, limit: usize },
   /// A contained transaction failed validation.
   Transaction { index: usize, error: TxInvalid },
+  /// `bad-cbtx-assetunlockmerkleroot`
+  AssetUnlockMerkleRoot,
 }
 
 impl fmt::Display for BlockInvalid {
@@ -119,6 +122,7 @@ impl fmt::Display for BlockInvalid {
       Self::MultipleCoinbases { index } => write!(f, "bad-cb-multiple: tx {index}"),
       Self::TooManySigops { count, limit } => write!(f, "bad-blk-sigops: {count} > {limit}"),
       Self::Transaction { index, error } => write!(f, "tx {index}: {error}"),
+      Self::AssetUnlockMerkleRoot => write!(f, "bad-cbtx-assetunlockmerkleroot"),
     }
   }
 }
@@ -151,6 +155,12 @@ impl Checkable for Block {
     }
     if mutated {
       return Some(BlockInvalid::DuplicateTransaction);
+    }
+    if self
+      .committed_asset_unlock_root()
+      .is_some_and(|root| root != self.asset_unlock_merkle_root())
+    {
+      return Some(BlockInvalid::AssetUnlockMerkleRoot);
     }
 
     let mut encoded = Vec::new();
@@ -211,6 +221,33 @@ impl Block {
     let (root, mutated) = merkle_root_mutated(&leaves);
     (MerkleRoot::from_lendian(*root.as_bytes()), mutated)
   }
+
+  /// Computes the merkle root of the instance hashes of the asset unlocks
+  /// with a stable txid, in block order. Without such unlocks the root is
+  /// null.
+  pub fn asset_unlock_merkle_root(&self) -> MerkleRoot {
+    let leaves: Vec<Hash256> = self
+      .transactions
+      .iter()
+      .filter(|tx| tx.has_stable_txid())
+      .map(|tx| Hash256::from_lendian(*tx.instance_hash().as_bytes()))
+      .collect();
+    MerkleRoot::from_lendian(*merkle_root(&leaves).as_bytes())
+  }
+
+  /// Returns the asset unlock root of a first transaction that carries a
+  /// coinbase commitment of version 4 or later. A payload that does not
+  /// decode commits to nothing.
+  fn committed_asset_unlock_root(&self) -> Option<MerkleRoot> {
+    let first = self
+      .transactions
+      .first()
+      .filter(|tx| tx.tx_type == TxType::CoinbaseCommitment)?;
+    match first.decode_payload()? {
+      Ok(SpecialPayload::CoinbaseCommitment(cbtx)) => cbtx.merkle_root_asset_unlocks(),
+      _ => None,
+    }
+  }
 }
 
 impl fmt::Display for Block {
@@ -248,6 +285,7 @@ mod tests {
   #[case::proof_of_work(BlockInvalid::BadProofOfWork, "high-hash")]
   #[case::merkle_root(BlockInvalid::BadMerkleRoot, "bad-txnmrklroot")]
   #[case::duplicate(BlockInvalid::DuplicateTransaction, "bad-txns-duplicate")]
+  #[case::asset_unlock_root(BlockInvalid::AssetUnlockMerkleRoot, "bad-cbtx-assetunlockmerkleroot")]
   fn reasons_use_the_reference_strings(#[case] error: BlockInvalid, #[case] reason: &str) {
     assert_eq!(error.to_string(), reason);
   }
@@ -349,5 +387,90 @@ mod tests {
     block.transactions.push(last);
     assert_eq!(block.merkle(), (block.header.merkle_root, true));
     assert_eq!(block.check(), Some(BlockInvalid::DuplicateTransaction));
+  }
+
+  /// Returns the stable-txid corpus unlock of payload version 2, or of
+  /// version 1 for any other `version`.
+  fn asset_unlock(version: u8) -> Transaction {
+    let label = match version {
+      2 => "2b3ff94b9041aff5b77c42631894290a6f9993c645c935e2ebe27a62b17bc20b",
+      _ => "65fc488b35abd172726238a16cc71ef11eecb034ce05991e9a3e5ba4fd85094f",
+    };
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "stabletxid");
+    let mut raws = BTreeMap::new();
+    corpus.entries::<crate::TxHash>("stabletxid", |raw, _, label| {
+      raws.insert(String::from(label), raw.to_vec());
+    });
+    Transaction::decode(&mut raws[label].as_slice()).unwrap()
+  }
+
+  /// A mainnet block of one coinbase, its commitment raised to `version`
+  /// with `unlocks` as the asset unlock root, sealed after `txs` join it.
+  /// Version 3 fields the commitment lacks start empty.
+  fn block_committing(version: u16, unlocks: Option<MerkleRoot>, txs: Vec<Transaction>) -> Block {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "blocks");
+    let mut block = corpus
+      .entries::<Block>("blocks", |_, _, _| {})
+      .remove("0000000000000006547ad092244695ef3c1b815aebb31b7ab196d2aaa10891cb")
+      .unwrap();
+    let Some(Ok(SpecialPayload::CoinbaseCommitment(cbtx))) = block.transactions[0].decode_payload() else {
+      panic!("the corpus block carries a coinbase commitment");
+    };
+    let raised = crate::CoinbaseCommitment::new(
+      version,
+      cbtx.height,
+      cbtx.merkle_root_mn_list,
+      cbtx.merkle_root_quorums(),
+      cbtx.best_cl_height_diff().or(Some(0)),
+      cbtx
+        .best_cl_signature()
+        .map_or(Some([0; 96]), |sig| Some(*sig.as_bytes())),
+      cbtx.credit_pool_balance().or(Some(0)),
+      unlocks,
+    )
+    .unwrap();
+    block.transactions[0].extra_payload.clear();
+    raised.encode(&mut block.transactions[0].extra_payload);
+    block.transactions.extend(txs);
+    seal(&mut block);
+    block
+  }
+
+  fn instance_root(tx: &Transaction) -> Option<MerkleRoot> {
+    Some(MerkleRoot::from_lendian(*tx.instance_hash().as_bytes()))
+  }
+
+  #[rstest]
+  fn asset_unlock_root_covers_only_stable_txids() {
+    let (v1, v2) = (asset_unlock(1), asset_unlock(2));
+    let block = block_committing(4, Some(MerkleRoot::default()), vec![v1.clone(), v2.clone(), v1]);
+    // One leaf is its own root.
+    assert_eq!(Some(block.asset_unlock_merkle_root()), instance_root(&v2));
+  }
+
+  #[rstest]
+  #[case::matching_root(4, instance_root(&asset_unlock(2)), None)]
+  #[case::null_root(4, Some(MerkleRoot::default()), Some(BlockInvalid::AssetUnlockMerkleRoot))]
+  #[case::stable_txid_root(
+    4,
+    Some(MerkleRoot::from_lendian(*asset_unlock(2).hash().as_bytes())),
+    Some(BlockInvalid::AssetUnlockMerkleRoot)
+  )]
+  #[case::v3_commits_nothing(3, None, None)]
+  fn coinbase_commits_to_asset_unlock_instances(
+    #[case] version: u16,
+    #[case] unlocks: Option<MerkleRoot>,
+    #[case] expected: Option<BlockInvalid>,
+  ) {
+    let block = block_committing(version, unlocks, vec![asset_unlock(2)]);
+    assert_eq!(block.check(), expected);
+  }
+
+  #[rstest]
+  fn block_without_unlocks_commits_to_the_null_root() {
+    let block = block_committing(4, Some(MerkleRoot::default()), Vec::new());
+    assert_eq!(block.check(), None);
+    let block = block_committing(4, Some(MerkleRoot::from_lendian([0x44; 32])), Vec::new());
+    assert_eq!(block.check(), Some(BlockInvalid::AssetUnlockMerkleRoot));
   }
 }
