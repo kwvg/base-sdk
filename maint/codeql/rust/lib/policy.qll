@@ -68,6 +68,9 @@ predicate isSecretType(TypeItem t) {
       // The identifier a share is issued against is the participant's, known to every member of the
       // quorum; only the scalar the share carries is secret.
       "BlsShareId",
+      // A masternode's payout list and collateral share table are published in
+      // its registration; neither holds key material.
+      "MasternodePayoutShare", "CollateralShare",
       // Serde artifact to deserialize a tagged enum.
       "__Seed"
     ]

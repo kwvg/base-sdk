@@ -41,7 +41,7 @@ pub use self::assetunlock::{
 pub use self::cbtx::{CbTxInvalid, CoinbaseCommitment};
 pub use self::mnhftx::{MnHardFork, MnHardForkInvalid, VERSIONBITS_NUM_BITS};
 pub use self::proregtx::ProRegTx;
-pub use self::protx::CompactSignature;
+pub use self::protx::{CollateralShare, CompactSignature, MasternodePayoutShare};
 pub use self::proupregtx::ProUpRegTx;
 pub use self::prouprevtx::ProUpRevTx;
 pub use self::proupservtx::ProUpServTx;
