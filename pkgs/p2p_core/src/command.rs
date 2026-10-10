@@ -50,11 +50,10 @@ impl CommandString {
     &self.0
   }
 
-  /// Returns the command as a `&str` (trimmed of null padding).
+  /// Returns the bytes before the first null, or an empty string when those
+  /// bytes are not UTF-8.
   pub fn as_str(&self) -> &str {
     let end = self.0.iter().position(|&b| b == 0).unwrap_or(12);
-    // The bytes are always valid ASCII written by from_static or
-    // validated on decode, so this conversion is sound.
     core::str::from_utf8(&self.0[..end]).unwrap_or("")
   }
 }
@@ -70,5 +69,20 @@ impl fmt::Debug for CommandString {
 impl fmt::Display for CommandString {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str(self.as_str())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::CommandString;
+
+  use rstest::rstest;
+
+  #[rstest]
+  #[case::padded(*b"ping\0\0\0\0\0\0\0\0", "ping")]
+  #[case::full(*b"sendheaders2", "sendheaders2")]
+  #[case::not_utf8([0xff, b'a', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "")]
+  fn as_str_stops_at_the_first_null(#[case] bytes: [u8; 12], #[case] expected: &str) {
+    assert_eq!(CommandString::from_bytes(bytes).as_str(), expected);
   }
 }
