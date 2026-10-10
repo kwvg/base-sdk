@@ -6,14 +6,15 @@
 
 //! AssetUnlock (type 9): Platform to L1.
 
-use super::QuorumHash;
+use super::{payload_hash, QuorumHash};
 use crate::codec::impl_payload;
 use crate::hash_impl;
 use crate::types::{BlsScheme, BlsSig};
 
+use dash_num::Hash256;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
-use dash_types::Checkable;
+use dash_types::{Checkable, CompactSize};
 
 use core::fmt;
 
@@ -126,6 +127,21 @@ impl Checkable for AssetUnlock {
 
 hash_impl!(AssetUnlock);
 
+/// Prefix of the asset unlock signing request id.
+const REQUEST_ID_PREFIX: [u8; 6] = *b"plwdtx";
+
+impl AssetUnlock {
+  /// Quorum signing request id, shared by every instance and payload version
+  /// of one withdrawal.
+  pub fn request_id(&self) -> Hash256 {
+    payload_hash(|buf| {
+      CompactSize::from(REQUEST_ID_PREFIX.len()).encode(buf);
+      REQUEST_ID_PREFIX.encode(buf);
+      self.index.encode(buf);
+    })
+  }
+}
+
 impl fmt::Display for AssetUnlock {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "AssetUnlock {{ v{}, index: {} }}", self.version, self.index,)
@@ -139,6 +155,8 @@ mod tests {
   use crate::prelude::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
+  use dash_types::Numeric;
+  use hex_conservative::hex;
   use rstest::rstest;
 
   #[rstest]
@@ -169,6 +187,24 @@ mod tests {
       .unwrap();
     item.version = version;
     assert_eq!(item.check(), expected);
+  }
+
+  #[rstest]
+  fn request_id_hashes_the_prefix_and_the_index() {
+    // Python hashlib gives the expected id over `06 "plwdtx"` and the index
+    // 10464 as a little-endian `u64`.
+    let expected = Hash256::from_lendian(hex!("2551d75f2d9f876334291340dddd62a73c12964b38caa014c5d5e94c955a7202"));
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
+    let items = corpus.entries::<AssetUnlock>("assetunlock", |_, _, _| {});
+    let mut item = items["65fc488b35abd172726238a16cc71ef11eecb034ce05991e9a3e5ba4fd85094f"].clone();
+    assert_eq!(item.request_id(), expected);
+
+    item.version = 2;
+    item.requested_height += 1;
+    item.quorum_hash = QuorumHash::from_lendian([0x11; 32]);
+    assert_eq!(item.request_id(), expected);
+    item.index += 1;
+    assert_ne!(item.request_id(), expected);
   }
 
   #[rstest]
