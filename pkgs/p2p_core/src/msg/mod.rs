@@ -55,7 +55,6 @@ unversioned_payload!(
   Headers,
   Headers2,
   Inv,
-  NotFound,
   Ping,
   Pong,
   QSendRecSigs,

@@ -53,4 +53,6 @@ impl ProtocolVersion {
   pub const QFCOMMIT_STALE_REPROP_BAN: Self = Self(70239);
   /// Platform ban BIP324 short ID boundary.
   pub const PLATFORMBAN_V2_SHORT_ID: Self = Self(70240);
+  /// Asset unlock inventory type boundary.
+  pub const ASSET_UNLOCK_INV: Self = Self(70242);
 }

@@ -8,10 +8,13 @@
 
 use crate::codec::codec_p2p;
 use crate::error::{check_count, TooManyEntries};
+use crate::macros::VersionedPayload;
 use crate::prelude::*;
+use crate::{P2pDecodeError, ProtocolVersion};
 
 use dash_num::Hash256;
 use dash_primitives::hash_impl;
+use dash_types::codec::{self, BaseCodec, DecodeError};
 use dash_types::type_id::TypeId;
 use dash_types::{enum_map, impl_num, Checkable};
 
@@ -19,6 +22,9 @@ use core::fmt;
 
 /// Largest number of entries in an `inv` or `getdata` message.
 const MAX_INV_SZ: usize = 50_000;
+
+/// Largest number of entries in a `notfound` message below protocol 70242.
+const MAX_NOTFOUND_SZ_LEGACY: usize = 116;
 
 /// Requests specific inventory items from a peer.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
@@ -128,15 +134,43 @@ impl Checkable for Inv {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct NotFound {
-  /// Missing inventory items.
+  /// Missing inventory items. A peer below protocol 70242 rejects more than
+  /// 116 entries, and a peer at 70242 or above more than 50000.
   pub inventory: Vec<Inventory>,
 }
 
 codec_p2p!(NotFound { inventory });
 
+/// Largest number of entries in a `notfound` message at `version`.
+fn max_notfound(version: ProtocolVersion) -> usize {
+  // No protocol version marks the change of the cap, so 70242, which only
+  // v24 nodes advertise, stands in for it.
+  if version >= ProtocolVersion::ASSET_UNLOCK_INV {
+    MAX_INV_SZ
+  } else {
+    MAX_NOTFOUND_SZ_LEGACY
+  }
+}
+
+impl VersionedPayload for NotFound {
+  fn decode_versioned(payload: &[u8], version: ProtocolVersion) -> Result<Self, P2pDecodeError> {
+    let mut data = payload;
+    let inventory = codec::decode_vec_limited(&mut data, max_notfound(version))?;
+    if !data.is_empty() {
+      return Err(DecodeError::TrailingBytes { remaining: data.len() }.into());
+    }
+    Ok(Self { inventory })
+  }
+
+  fn encode_versioned(&self, buf: &mut Vec<u8>, _version: ProtocolVersion) {
+    self.encode(buf);
+  }
+}
+
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
+  use crate::{CommandString, P2pMsg};
 
   use dash_dev::{assert_serde_rt, check_wire, Corpus};
   use dash_types::Numeric;
@@ -200,6 +234,48 @@ mod tests {
       .check(),
       expected
     );
+  }
+
+  fn notfound_payload(count: usize) -> Vec<u8> {
+    let mut buf = Vec::new();
+    NotFound {
+      inventory: inventory(count),
+    }
+    .encode(&mut buf);
+    buf
+  }
+
+  #[rstest]
+  #[case::legacy_at_limit(ProtocolVersion::CURRENT, MAX_NOTFOUND_SZ_LEGACY, true)]
+  #[case::legacy_past_limit(ProtocolVersion::CURRENT, MAX_NOTFOUND_SZ_LEGACY + 1, false)]
+  #[case::below_switch(ProtocolVersion(70241), MAX_NOTFOUND_SZ_LEGACY + 1, false)]
+  #[case::at_switch(ProtocolVersion::ASSET_UNLOCK_INV, MAX_NOTFOUND_SZ_LEGACY + 1, true)]
+  #[case::at_limit(ProtocolVersion::ASSET_UNLOCK_INV, MAX_INV_SZ, true)]
+  #[case::past_limit(ProtocolVersion::ASSET_UNLOCK_INV, MAX_INV_SZ + 1, false)]
+  fn notfound_cap_follows_the_peer_version(
+    #[case] version: ProtocolVersion,
+    #[case] count: usize,
+    #[case] accepted: bool,
+  ) {
+    let decoded = P2pMsg::decode_payload_with_version(&CommandString::NOTFOUND, &notfound_payload(count), version);
+    if accepted {
+      let expected = NotFound {
+        inventory: inventory(count),
+      };
+      assert_eq!(decoded, Ok(P2pMsg::NotFound(expected)));
+    } else {
+      assert!(matches!(decoded, Err(P2pDecodeError::Consensus(_))));
+    }
+  }
+
+  #[rstest]
+  fn notfound_rejects_trailing_bytes() {
+    let mut payload = notfound_payload(1);
+    payload.push(0);
+    assert!(matches!(
+      P2pMsg::decode_payload(&CommandString::NOTFOUND, &payload),
+      Err(P2pDecodeError::Consensus(_))
+    ));
   }
 
   #[rstest]
