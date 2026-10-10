@@ -9,7 +9,7 @@
 
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
 use crate::payload::{
-  AssetLockInvalid, AssetUnlockInvalid, InputsHash, PayloadError, PayloadInvalid, SpecialPayload, TxType,
+  AssetLockInvalid, AssetUnlockInvalid, InputsHash, PayloadError, PayloadInvalid, ProTxInvalid, SpecialPayload, TxType,
   ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE, ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS,
 };
 use crate::prelude::*;
@@ -350,6 +350,14 @@ impl Checkable for Transaction {
           if let Some(e) = payload.check() {
             return Some(TxInvalid::PayloadCheck(e));
           }
+          if payload
+            .inputs_hash()
+            .is_some_and(|committed| committed != self.inputs_hash())
+          {
+            return Some(TxInvalid::PayloadCheck(PayloadInvalid::ProTx(
+              ProTxInvalid::BadInputsHash,
+            )));
+          }
           if let (SpecialPayload::AssetLock(lock), Some(returned)) = (&payload, locked) {
             let credited = lock.credit_outputs.iter().map(|out| out.value.to_sat()).sum();
             if credited != returned {
@@ -658,6 +666,26 @@ mod tests {
     assert_inputs_hash::<crate::ProUpServTx>("proupservtx", |payload| payload.inputs_hash);
     assert_inputs_hash::<crate::ProUpRegTx>("proupregtx", |payload| payload.inputs_hash);
     assert_inputs_hash::<crate::ProUpRevTx>("prouprevtx", |payload| payload.inputs_hash);
+  }
+
+  fn corpus_first<T: ::serde::de::DeserializeOwned>(section: &str) -> Transaction {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), section);
+    let mut raws = Vec::new();
+    corpus.entries::<T>(section, |raw, _, _| raws.push(raw.to_vec()));
+    Transaction::decode(&mut raws[0].as_slice()).unwrap()
+  }
+
+  #[rstest]
+  #[case::proregtx(corpus_first::<crate::ProRegTx>("proregtx"))]
+  #[case::proupservtx(corpus_first::<crate::ProUpServTx>("proupservtx"))]
+  #[case::proupregtx(corpus_first::<crate::ProUpRegTx>("proupregtx"))]
+  #[case::prouprevtx(corpus_first::<crate::ProUpRevTx>("prouprevtx"))]
+  fn protx_inputs_hash_must_match_the_inputs(#[case] mut tx: Transaction) {
+    assert_eq!(tx.check(), None);
+    tx.inputs[0].prevout.index ^= 1;
+    let error = TxInvalid::PayloadCheck(PayloadInvalid::ProTx(ProTxInvalid::BadInputsHash));
+    assert_eq!(tx.check(), Some(error));
+    assert_eq!(ProTxInvalid::BadInputsHash.to_string(), "bad-protx-inputs-hash");
   }
 
   #[rstest]

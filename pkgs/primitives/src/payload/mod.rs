@@ -166,6 +166,8 @@ pub enum ProTxInvalid {
   BadPlatformHttpPort { port: u16 },
   /// `bad-protx-platform-dup-ports`
   DuplicatePlatformPorts,
+  /// `bad-protx-inputs-hash`
+  BadInputsHash,
 }
 
 impl fmt::Display for ProTxInvalid {
@@ -205,6 +207,7 @@ impl fmt::Display for ProTxInvalid {
       Self::BadPlatformP2pPort { port } => write!(f, "bad-protx-platform-p2p-port: {port}"),
       Self::BadPlatformHttpPort { port } => write!(f, "bad-protx-platform-http-port: {port}"),
       Self::DuplicatePlatformPorts => write!(f, "bad-protx-platform-dup-ports"),
+      Self::BadInputsHash => write!(f, "bad-protx-inputs-hash"),
     }
   }
 }
@@ -461,6 +464,17 @@ impl SpecialPayload {
   /// Returns `true` for unrecognized transaction types.
   pub fn is_unknown(&self) -> bool {
     matches!(self, Self::Unknown { .. })
+  }
+
+  /// Returns the inputs hash a ProTx payload of a known version commits to.
+  pub(crate) fn inputs_hash(&self) -> Option<InputsHash> {
+    match self {
+      Self::ProviderRegister(ProTxPayload::Known(payload)) => Some(payload.inputs_hash),
+      Self::ProviderUpdateService(ProTxPayload::Known(payload)) => Some(payload.inputs_hash),
+      Self::ProviderUpdateRegistrar(ProTxPayload::Known(payload)) => Some(payload.inputs_hash),
+      Self::ProviderUpdateRevoke(ProTxPayload::Known(payload)) => Some(payload.inputs_hash),
+      _ => None,
+    }
   }
 
   /// Decodes a payload from its transaction type and raw bytes.
