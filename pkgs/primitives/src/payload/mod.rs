@@ -171,6 +171,34 @@ pub enum ProTxInvalid {
   DuplicatePayoutScript,
   /// `bad-protx-payout-reward-sum`
   BadPayoutRewardSum { total: u32 },
+  /// `bad-protx-shares-external`
+  SharesExternal,
+  /// `bad-protx-shares-owner-key`
+  SharesOwnerKey,
+  /// `bad-protx-shares-payouts`
+  SharesPayouts,
+  /// `bad-protx-shares-empty-fields`
+  SharesEmptyFields,
+  /// `bad-protx-shares-count`
+  BadShareCount { count: usize },
+  /// `bad-protx-shares-early-period`
+  BadEarlyPeriod { blocks: u32 },
+  /// `bad-protx-shares-amount`
+  BadShareAmount { amount: i64 },
+  /// `bad-protx-shares-key-null`
+  NullShareKey,
+  /// `bad-protx-shares-dup-key`
+  DuplicateShareKey,
+  /// `bad-protx-shares-dup-refund`
+  DuplicateShareRefund,
+  /// `bad-protx-shares-payee`
+  BadSharePayee,
+  /// `bad-protx-shares-payee-reuse`
+  SharePayeeReuse,
+  /// `bad-protx-shares-amount-sum`
+  BadShareAmountSum { total: i64 },
+  /// `bad-protx-shares-penalty`
+  BadSharePenalty { penalty: i64 },
   /// `bad-protx-netinfo-version`
   NetInfoVersionMismatch,
   /// `bad-protx-netinfo-empty`
@@ -226,6 +254,20 @@ impl fmt::Display for ProTxInvalid {
       Self::BadPayoutReward { reward } => write!(f, "bad-protx-payout-reward: {reward}"),
       Self::DuplicatePayoutScript => write!(f, "bad-protx-payee-dup"),
       Self::BadPayoutRewardSum { total } => write!(f, "bad-protx-payout-reward-sum: {total}"),
+      Self::SharesExternal => write!(f, "bad-protx-shares-external"),
+      Self::SharesOwnerKey => write!(f, "bad-protx-shares-owner-key"),
+      Self::SharesPayouts => write!(f, "bad-protx-shares-payouts"),
+      Self::SharesEmptyFields => write!(f, "bad-protx-shares-empty-fields"),
+      Self::BadShareCount { count } => write!(f, "bad-protx-shares-count: {count}"),
+      Self::BadEarlyPeriod { blocks } => write!(f, "bad-protx-shares-early-period: {blocks}"),
+      Self::BadShareAmount { amount } => write!(f, "bad-protx-shares-amount: {amount}"),
+      Self::NullShareKey => write!(f, "bad-protx-shares-key-null"),
+      Self::DuplicateShareKey => write!(f, "bad-protx-shares-dup-key"),
+      Self::DuplicateShareRefund => write!(f, "bad-protx-shares-dup-refund"),
+      Self::BadSharePayee => write!(f, "bad-protx-shares-payee"),
+      Self::SharePayeeReuse => write!(f, "bad-protx-shares-payee-reuse"),
+      Self::BadShareAmountSum { total } => write!(f, "bad-protx-shares-amount-sum: {total}"),
+      Self::BadSharePenalty { penalty } => write!(f, "bad-protx-shares-penalty: {penalty}"),
       Self::NetInfoVersionMismatch => write!(f, "bad-protx-netinfo-version"),
       Self::NetInfoEmpty => write!(f, "bad-protx-netinfo-empty"),
       Self::NetInfoInvalid { error } => {

@@ -21,9 +21,10 @@ use crate::types::{BlsPubKey, BlsScheme, NITrait, NetInfo, NetInfoV1, NetInfoV2,
 use crate::TxHash;
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
+use bitcoin_units::Amount;
 use dash_num::Hash256;
 use dash_pkc::bls::BLS_PK_LEN;
-use dash_script::PubKeyHash;
+use dash_script::{PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Hashable;
@@ -77,6 +78,75 @@ pub struct ProRegTx {
 }
 
 impl_payload!(ProRegTx);
+
+/// Checks the collateral shares of a shared registration and its early terms.
+/// No refund or reward script may pay the voting key or any share's owner.
+fn check_share_list<'a>(
+  shares: impl Iterator<Item = &'a CollateralShare> + Clone,
+  early_period_blocks: u32,
+  early_penalty: i64,
+  required: Amount,
+  voting: &PubKeyHash,
+) -> Option<ProTxInvalid> {
+  let count = shares.clone().count();
+  if !(ProRegTx::MIN_SHARES..=ProRegTx::MAX_SHARES).contains(&count) {
+    return Some(ProTxInvalid::BadShareCount { count });
+  }
+  if early_period_blocks > ProRegTx::MAX_EARLY_PERIOD_BLOCKS {
+    return Some(ProTxInvalid::BadEarlyPeriod {
+      blocks: early_period_blocks,
+    });
+  }
+
+  let required = i64::try_from(required.to_sat()).unwrap_or(i64::MAX);
+  let mut total = 0i64;
+  let mut min_amount = i64::MAX;
+  let mut owners = BTreeSet::new();
+  let mut refunds = BTreeSet::new();
+  for share in shares.clone() {
+    // Each amount is at most `required`, so the total of at most eight
+    // shares cannot overflow.
+    if !(CollateralShare::MIN_AMOUNT..=required).contains(&share.amount) {
+      return Some(ProTxInvalid::BadShareAmount { amount: share.amount });
+    }
+    total += share.amount;
+    min_amount = min_amount.min(share.amount);
+
+    if share.key_id_owner.is_null() {
+      return Some(ProTxInvalid::NullShareKey);
+    }
+    if !owners.insert(share.key_id_owner) {
+      return Some(ProTxInvalid::DuplicateShareKey);
+    }
+    if !refunds.insert(share.script_refund.as_bytes()) {
+      return Some(ProTxInvalid::DuplicateShareRefund);
+    }
+
+    // An empty reward script pays the refund script.
+    let reward = Some(&share.script_reward).filter(|script| !script.is_empty());
+    for script in core::iter::once(&share.script_refund).chain(reward) {
+      let recipient = Recipient::from_script(script.as_bytes());
+      if !matches!(recipient, Some(Recipient::PubKeyHash(_) | Recipient::ScriptHash(_))) {
+        return Some(ProTxInvalid::BadSharePayee);
+      }
+      if let Some(Recipient::PubKeyHash(hash)) = &recipient {
+        if hash == voting || shares.clone().any(|other| other.key_id_owner == *hash) {
+          return Some(ProTxInvalid::SharePayeeReuse);
+        }
+      }
+    }
+  }
+
+  if total != required {
+    return Some(ProTxInvalid::BadShareAmountSum { total });
+  }
+  // Without an early period the penalty still caps the unilateral bonus, so
+  // it must be zero.
+  if early_penalty < 0 || early_penalty >= min_amount || (early_period_blocks == 0 && early_penalty != 0) {
+    return Some(ProTxInvalid::BadSharePenalty { penalty: early_penalty });
+  }
+  None
+}
 
 /// Core P2P port of mainnet, which platform ports may not take on any network.
 const MAINNET_CORE_PORT: u16 = 9999;
@@ -220,11 +290,26 @@ impl Checkable for ProRegTx {
       return Some(ProTxInvalid::BadMode { mode: self.mode });
     }
 
-    if self.key_id_owner.is_null() || self.key_id_voting.is_null() {
-      return Some(ProTxInvalid::NullKey);
+    if self.is_shared() {
+      if !self.collateral_hash.is_null() {
+        return Some(ProTxInvalid::SharesExternal);
+      }
+      if !self.key_id_owner.is_null() {
+        return Some(ProTxInvalid::SharesOwnerKey);
+      }
+      if !self.payouts.is_empty() {
+        return Some(ProTxInvalid::SharesPayouts);
+      }
+    } else {
+      if self.early_period_blocks != 0 || self.early_penalty != 0 {
+        return Some(ProTxInvalid::SharesEmptyFields);
+      }
+      if self.key_id_owner.is_null() {
+        return Some(ProTxInvalid::NullKey);
+      }
     }
     // A non-canonical operator key is an invalid key, reported as null.
-    if self.pub_key_operator.is_null() || !self.pub_key_operator.is_canonical() {
+    if self.pub_key_operator.is_null() || !self.pub_key_operator.is_canonical() || self.key_id_voting.is_null() {
       return Some(ProTxInvalid::NullKey);
     }
 
@@ -276,6 +361,15 @@ impl Hashable for ProRegTx {
 }
 
 impl ProRegTx {
+  /// Fewest collateral shares a shared registration holds.
+  pub const MIN_SHARES: usize = 2;
+
+  /// Most collateral shares a shared registration holds.
+  pub const MAX_SHARES: usize = 8;
+
+  /// Longest early period in blocks, about two years of blocks.
+  pub const MAX_EARLY_PERIOD_BLOCKS: u32 = 420_480;
+
   fn encode_unsigned(&self, form: NetInfoForm, buf: &mut impl EncodeBuf) {
     self.version.encode(buf);
     self.mn_type.to_base().encode(buf);
@@ -393,6 +487,11 @@ impl ProRegTx {
     &self.pub_key_operator
   }
 
+  /// Whether collateral shares fund the registration.
+  pub fn is_shared(&self) -> bool {
+    !self.shares.is_empty()
+  }
+
   /// Payout script, empty from version 3.
   pub const fn script_payout(&self) -> &ScriptPubKeyBuf {
     &self.script_payout
@@ -448,6 +547,18 @@ impl ProRegTx {
   }
 
   fn check_owner_payouts(&self) -> Option<ProTxInvalid> {
+    if self.is_shared() {
+      let Some(required) = self.mn_type.collateral_amount() else {
+        return Some(ProTxInvalid::BadMnType { mn_type: self.mn_type });
+      };
+      return check_share_list(
+        self.shares.iter().map(|(share, _)| share),
+        self.early_period_blocks,
+        self.early_penalty,
+        required,
+        &self.key_id_voting,
+      );
+    }
     let owner = Some(&self.key_id_owner);
     if self.version >= PROTX_VERSION_EXT_ADDR {
       check_payout_list(&self.payouts, owner, &self.key_id_voting)
@@ -579,25 +690,107 @@ mod tests {
     assert_serde_rt("proregtx", &items);
   }
 
-  /// Shared registrations carry a null owner key, so the layout alone is
-  /// compared here.
   #[rstest]
-  fn corpus_shared_registrations_round_trip() {
-    use crate::Transaction;
-
+  fn corpus_shared_registrations() {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
-    let items = corpus.entries::<ProRegTx>("proregtx_shared", |raw, item, label| {
-      let tx = Transaction::decode(&mut &raw[..]);
-      assert_eq!(tx.as_ref().map(|tx| tx.hash().to_string()), Ok(label.to_string()));
-      let payload = tx.map(|tx| tx.extra_payload).unwrap_or_default();
-      assert_eq!(ProRegTx::decode(&mut payload.as_slice()).as_ref(), Ok(item), "{label}");
-      let mut buf = Vec::new();
-      item.encode(&mut buf);
-      assert_eq!(buf, payload, "{label}");
-    });
+    let items = corpus.entries::<ProRegTx>("proregtx_shared", check_sptx);
     assert_serde_rt("proregtx_shared", &items);
     let counts: BTreeSet<usize> = items.values().map(|item| item.shares().len()).collect();
     assert_eq!(counts, BTreeSet::from([2, 8]));
+    assert!(items.values().all(ProRegTx::is_shared));
+  }
+
+  /// The first two-share regular registration of the corpus.
+  fn shared_item() -> ProRegTx {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    let items = corpus.entries::<ProRegTx>("proregtx_shared", |_, _, _| {});
+    let mut items = items
+      .into_values()
+      .filter(|item| item.mn_type == MnType::Regular && item.shares.len() == 2);
+    let item = items.next();
+    assert!(item.is_some());
+    item.unwrap_or_else(|| corpus_item(3, MnType::Regular))
+  }
+
+  fn p2pkh(hash: &PubKeyHash) -> ScriptPubKeyBuf {
+    let mut script = hex!("76a914").to_vec();
+    script.extend(hash.to_lendian());
+    script.extend(hex!("88ac"));
+    ScriptPubKeyBuf::from_bytes(script)
+  }
+
+  const DASH: i64 = 100_000_000;
+
+  #[rstest]
+  #[case::external(|t: &mut ProRegTx| t.collateral_hash = TxHash::from_lendian([1; 32]), ProTxInvalid::SharesExternal)]
+  #[case::owner_key(|t: &mut ProRegTx| t.key_id_owner = PubKeyHash::from_lendian([1; 20]), ProTxInvalid::SharesOwnerKey)]
+  #[case::payouts(|t: &mut ProRegTx| t.payouts = vec![MasternodePayoutShare { script_payout: ScriptPubKeyBuf::new(), reward: 1 }], ProTxInvalid::SharesPayouts)]
+  #[case::null_voting(|t: &mut ProRegTx| t.key_id_voting = PubKeyHash::default(), ProTxInvalid::NullKey)]
+  #[case::one_share(|t: &mut ProRegTx| { t.shares.truncate(1); }, ProTxInvalid::BadShareCount { count: 1 })]
+  #[case::nine_shares(|t: &mut ProRegTx| t.shares = vec![t.shares[0].clone(); 9], ProTxInvalid::BadShareCount { count: 9 })]
+  #[case::early_period(|t: &mut ProRegTx| t.early_period_blocks = 420_481, ProTxInvalid::BadEarlyPeriod { blocks: 420_481 })]
+  #[case::amount_low(|t: &mut ProRegTx| t.shares[0].0.amount = 100 * DASH - 1, ProTxInvalid::BadShareAmount { amount: 100 * DASH - 1 })]
+  #[case::amount_high(|t: &mut ProRegTx| t.shares[1].0.amount = 1000 * DASH + 1, ProTxInvalid::BadShareAmount { amount: 1000 * DASH + 1 })]
+  #[case::null_share_key(|t: &mut ProRegTx| t.shares[1].0.key_id_owner = PubKeyHash::default(), ProTxInvalid::NullShareKey)]
+  #[case::dup_key(|t: &mut ProRegTx| t.shares[1].0.key_id_owner = t.shares[0].0.key_id_owner, ProTxInvalid::DuplicateShareKey)]
+  #[case::dup_refund(|t: &mut ProRegTx| t.shares[1].0.script_refund = t.shares[0].0.script_refund.clone(), ProTxInvalid::DuplicateShareRefund)]
+  #[case::bad_refund(|t: &mut ProRegTx| t.shares[0].0.script_refund = ScriptPubKeyBuf::from_bytes(vec![0x51]), ProTxInvalid::BadSharePayee)]
+  #[case::bad_reward(|t: &mut ProRegTx| t.shares[0].0.script_reward = ScriptPubKeyBuf::from_bytes(vec![0x51]), ProTxInvalid::BadSharePayee)]
+  #[case::refund_pays_voting(|t: &mut ProRegTx| t.shares[0].0.script_refund = p2pkh(&t.key_id_voting), ProTxInvalid::SharePayeeReuse)]
+  #[case::reward_pays_other_owner(|t: &mut ProRegTx| t.shares[0].0.script_reward = p2pkh(&t.shares[1].0.key_id_owner), ProTxInvalid::SharePayeeReuse)]
+  #[case::sum(|t: &mut ProRegTx| t.shares[0].0.amount -= 1, ProTxInvalid::BadShareAmountSum { total: 1000 * DASH - 1 })]
+  #[case::negative_penalty(|t: &mut ProRegTx| t.early_penalty = -1, ProTxInvalid::BadSharePenalty { penalty: -1 })]
+  #[case::penalty_at_min(|t: &mut ProRegTx| t.early_penalty = 400 * DASH, ProTxInvalid::BadSharePenalty { penalty: 400 * DASH })]
+  #[case::penalty_without_period(|t: &mut ProRegTx| t.early_period_blocks = 0, ProTxInvalid::BadSharePenalty { penalty: 50 * DASH })]
+  fn shared_registration_rules(#[case] edit: fn(&mut ProRegTx), #[case] error: ProTxInvalid) {
+    let mut item = shared_item();
+    assert_eq!(item.check(), None);
+    assert_eq!(
+      item.shares.iter().map(|(share, _)| share.amount).collect::<Vec<_>>(),
+      [600 * DASH, 400 * DASH]
+    );
+    assert_eq!((item.early_period_blocks, item.early_penalty), (30, 50 * DASH));
+    edit(&mut item);
+    assert_eq!(item.check(), Some(error));
+  }
+
+  #[rstest]
+  #[case::penalty_below_min(|t: &mut ProRegTx| t.early_penalty = 400 * DASH - 1)]
+  #[case::no_terms(|t: &mut ProRegTx| (t.early_period_blocks, t.early_penalty) = (0, 0))]
+  #[case::longest_period(|t: &mut ProRegTx| t.early_period_blocks = 420_480)]
+  #[case::reward_script(|t: &mut ProRegTx| t.shares[0].0.script_reward = p2pkh(&PubKeyHash::from_lendian([7; 20])))]
+  fn shared_registration_bounds(#[case] edit: fn(&mut ProRegTx)) {
+    let mut item = shared_item();
+    edit(&mut item);
+    assert_eq!(item.check(), None);
+  }
+
+  #[rstest]
+  #[case::early_period(|t: &mut ProRegTx| t.early_period_blocks = 1)]
+  #[case::early_penalty(|t: &mut ProRegTx| t.early_penalty = 1)]
+  fn single_owner_registration_has_no_early_terms(#[case] edit: fn(&mut ProRegTx)) {
+    let mut item = corpus_item(3, MnType::Regular);
+    edit(&mut item);
+    assert_eq!(item.check(), Some(ProTxInvalid::SharesEmptyFields));
+  }
+
+  #[rstest]
+  #[case::external(ProTxInvalid::SharesExternal, "bad-protx-shares-external")]
+  #[case::owner_key(ProTxInvalid::SharesOwnerKey, "bad-protx-shares-owner-key")]
+  #[case::payouts(ProTxInvalid::SharesPayouts, "bad-protx-shares-payouts")]
+  #[case::empty_fields(ProTxInvalid::SharesEmptyFields, "bad-protx-shares-empty-fields")]
+  #[case::count(ProTxInvalid::BadShareCount { count: 1 }, "bad-protx-shares-count: 1")]
+  #[case::early_period(ProTxInvalid::BadEarlyPeriod { blocks: 1 }, "bad-protx-shares-early-period: 1")]
+  #[case::amount(ProTxInvalid::BadShareAmount { amount: 1 }, "bad-protx-shares-amount: 1")]
+  #[case::key_null(ProTxInvalid::NullShareKey, "bad-protx-shares-key-null")]
+  #[case::dup_key(ProTxInvalid::DuplicateShareKey, "bad-protx-shares-dup-key")]
+  #[case::dup_refund(ProTxInvalid::DuplicateShareRefund, "bad-protx-shares-dup-refund")]
+  #[case::payee(ProTxInvalid::BadSharePayee, "bad-protx-shares-payee")]
+  #[case::payee_reuse(ProTxInvalid::SharePayeeReuse, "bad-protx-shares-payee-reuse")]
+  #[case::amount_sum(ProTxInvalid::BadShareAmountSum { total: 1 }, "bad-protx-shares-amount-sum: 1")]
+  #[case::penalty(ProTxInvalid::BadSharePenalty { penalty: 1 }, "bad-protx-shares-penalty: 1")]
+  fn share_reasons(#[case] error: ProTxInvalid, #[case] reason: &str) {
+    assert_eq!(error.to_string(), reason);
   }
 
   /// A version 3 regular corpus payload changed by `edit`.

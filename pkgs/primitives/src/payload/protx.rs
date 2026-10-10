@@ -92,6 +92,11 @@ codec_type!(CollateralShare {
   key_id_owner
 });
 
+impl CollateralShare {
+  /// Smallest contribution in duffs, 100 DASH.
+  pub const MIN_AMOUNT: i64 = 100 * 100_000_000;
+}
+
 /// Most entries an owner payout list holds.
 const MAX_PAYOUTS: usize = 8;
 
