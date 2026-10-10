@@ -9,7 +9,7 @@
 
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
 use crate::payload::{
-  AssetLockInvalid, AssetUnlockInvalid, PayloadError, PayloadInvalid, SpecialPayload, TxType,
+  AssetLockInvalid, AssetUnlockInvalid, InputsHash, PayloadError, PayloadInvalid, SpecialPayload, TxType,
   ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE, ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS,
 };
 use crate::prelude::*;
@@ -401,6 +401,16 @@ impl Transaction {
     TxHash::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
   }
 
+  /// SHA256d of the spent outpoints, which a ProTx commits to so that its
+  /// signatures cannot be replayed in another transaction.
+  pub fn inputs_hash(&self) -> InputsHash {
+    let mut buf = Vec::new();
+    for input in &self.inputs {
+      input.prevout.encode(&mut buf);
+    }
+    InputsHash::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
+  }
+
   /// Tells whether the transaction is an asset unlock with a payload of the
   /// asset unlock size. The payload bytes are judged undecoded, since the
   /// txid must not depend on payload validity.
@@ -513,6 +523,7 @@ mod tests {
   use super::*;
 
   use dash_dev::{assert_serde_rt, check_tx, Corpus};
+  use hex_conservative::hex;
   use rstest::rstest;
 
   #[rstest]
@@ -631,6 +642,29 @@ mod tests {
       assert_eq!(tx.hash(), TxHash::from_hex(label).unwrap(), "{label}");
       assert_eq!(tx.instance_hash(), *instance, "{label}");
     });
+  }
+
+  fn assert_inputs_hash<T: ::serde::de::DeserializeOwned>(section: &str, inputs_hash: impl Fn(&T) -> InputsHash) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), section);
+    corpus.entries::<T>(section, |raw, item, label| {
+      let tx = Transaction::decode(&mut &raw[..]).unwrap();
+      assert_eq!(tx.inputs_hash(), inputs_hash(item), "{label}");
+    });
+  }
+
+  #[rstest]
+  fn inputs_hash_matches_the_corpus_protx_payloads() {
+    assert_inputs_hash::<crate::ProRegTx>("proregtx", |payload| payload.inputs_hash);
+    assert_inputs_hash::<crate::ProUpServTx>("proupservtx", |payload| payload.inputs_hash);
+    assert_inputs_hash::<crate::ProUpRegTx>("proupregtx", |payload| payload.inputs_hash);
+    assert_inputs_hash::<crate::ProUpRevTx>("prouprevtx", |payload| payload.inputs_hash);
+  }
+
+  #[rstest]
+  fn inputs_hash_of_no_inputs_hashes_nothing() {
+    // No count prefix is hashed, so no inputs give SHA256d of the empty string.
+    let empty = InputsHash::from_lendian(hex!("5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456"));
+    assert_eq!(bare(1, 0).inputs_hash(), empty);
   }
 
   fn asset_unlock_of_version(version: u8) -> Transaction {
