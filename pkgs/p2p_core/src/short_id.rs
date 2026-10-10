@@ -7,6 +7,7 @@
 //! V2 short ID mapping for BIP324 message framing.
 
 use crate::command::CommandString;
+use crate::ProtocolVersion;
 
 use dash_types::type_id::Unencodable;
 
@@ -22,6 +23,15 @@ impl ShortId {
   /// Returns `true` if this ID maps to a known command.
   pub const fn is_valid(self) -> bool {
     self.to_command_str().is_some()
+  }
+
+  /// Lowest peer version the short ID is sent to. Peers below it receive the
+  /// long format.
+  pub fn min_version(self) -> ProtocolVersion {
+    match self.to_command() {
+      Some(CommandString::PLATFORMBAN) => ProtocolVersion::PLATFORMBAN_V2_SHORT_ID,
+      _ => ProtocolVersion::BIP324_BASELINE,
+    }
   }
 
   /// Resolves the short ID to a `CommandString`, if known.

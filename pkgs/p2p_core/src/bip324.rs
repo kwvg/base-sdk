@@ -21,7 +21,7 @@ pub fn encode_v2(msg: &P2pMsg, buf: &mut Vec<u8>) {
 /// Encodes a `P2pMsg` into V2 framed bytes for a peer at `version`, the
 /// version negotiated with the peer.
 pub fn encode_v2_with_version(msg: &P2pMsg, buf: &mut Vec<u8>, version: ProtocolVersion) {
-  match msg.short_id() {
+  match msg.short_id().filter(|id| version >= id.min_version()) {
     Some(id) => {
       buf.push(id.0);
     }
@@ -89,7 +89,7 @@ pub fn decode_v2_with_version(payload: &[u8], version: ProtocolVersion) -> Resul
 mod tests {
   use super::{decode_v2, decode_v2_with_version, encode_v2, encode_v2_with_version};
   use crate::prelude::*;
-  use crate::{P2pMsg, Ping, ProtocolVersion};
+  use crate::{CommandString, P2pMsg, Ping, ProtocolVersion};
 
   use rstest::rstest;
 
@@ -114,5 +114,51 @@ mod tests {
     let mut buf = Vec::new();
     encode_v2_with_version(&msg, &mut buf, version);
     assert_eq!(decode_v2_with_version(&buf, version), Ok(msg));
+  }
+
+  fn long_form(cmd: &CommandString, payload: &[u8]) -> Vec<u8> {
+    [&[0][..], cmd.as_bytes(), payload].concat()
+  }
+
+  #[rstest]
+  #[case::below_short_id(ProtocolVersion(70239), false)]
+  #[case::at_short_id(ProtocolVersion::PLATFORMBAN_V2_SHORT_ID, true)]
+  fn platformban_uses_its_short_id_from_70240(#[case] version: ProtocolVersion, #[case] short: bool) {
+    let msg = P2pMsg::PlatformBan(vec![0xab]);
+    let mut buf = Vec::new();
+    encode_v2_with_version(&msg, &mut buf, version);
+    let want = if short {
+      vec![168, 0xab]
+    } else {
+      long_form(&CommandString::PLATFORMBAN, &[0xab])
+    };
+    assert_eq!(buf, want);
+  }
+
+  #[rstest]
+  #[case::below_baseline(ProtocolVersion(70234), false)]
+  #[case::at_baseline(ProtocolVersion::BIP324_BASELINE, true)]
+  fn short_ids_start_at_the_baseline(#[case] version: ProtocolVersion, #[case] short: bool) {
+    let msg = P2pMsg::Ping(Ping { nonce: 0 });
+    let mut buf = Vec::new();
+    encode_v2_with_version(&msg, &mut buf, version);
+    let want = if short {
+      [&[18][..], &[0; 8]].concat()
+    } else {
+      long_form(&CommandString::PING, &[0; 8])
+    };
+    assert_eq!(buf, want);
+  }
+
+  #[rstest]
+  #[case::old_peer(ProtocolVersion(70239))]
+  #[case::current(ProtocolVersion::CURRENT)]
+  fn platformban_decodes_in_either_form(#[case] version: ProtocolVersion) {
+    let msg = P2pMsg::PlatformBan(vec![0xab]);
+    assert_eq!(decode_v2_with_version(&[168, 0xab], version), Ok(msg.clone()));
+    assert_eq!(
+      decode_v2_with_version(&long_form(&CommandString::PLATFORMBAN, &[0xab]), version),
+      Ok(msg)
+    );
   }
 }
