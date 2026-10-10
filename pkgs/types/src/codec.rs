@@ -158,6 +158,43 @@ pub fn read_bytes<'a>(data: &mut &'a [u8], n: usize) -> Result<&'a [u8], DecodeE
   Ok(head)
 }
 
+/// Reads a CompactSize-prefixed byte string of at most `limit` bytes as a
+/// sub-slice (zero-copy).
+///
+/// # Errors
+///
+/// Returns [`DecodeError::CompactSizeExceedsLimit`] when the length exceeds
+/// [`MAX_SIZE`](crate::MAX_SIZE) or `limit`, [`DecodeError::Eof`] when it
+/// exceeds the bytes left after the prefix, and any error of
+/// [`BaseCodec::decode`].
+pub fn read_bytes_limited<'a>(data: &mut &'a [u8], limit: usize) -> Result<&'a [u8], DecodeError> {
+  let len = decode_count(data, limit)?;
+  read_bytes(data, len)
+}
+
+/// Reads a CompactSize-prefixed vector of at most `limit` elements. The count
+/// is checked before any element is decoded or allocated.
+///
+/// # Errors
+///
+/// Returns [`DecodeError::CompactSizeExceedsLimit`] when the count exceeds
+/// [`MAX_SIZE`](crate::MAX_SIZE) or `limit`, [`DecodeError::Eof`] when it
+/// exceeds the bytes left after the prefix, and any error of
+/// [`BaseCodec::decode`] for `T`.
+pub fn decode_vec_limited<T: BaseCodec>(data: &mut &[u8], limit: usize) -> Result<Vec<T>, DecodeError> {
+  let count = decode_count(data, limit)?;
+  decode_elements(data, count)
+}
+
+/// Reads a count prefix bounded by `limit`, by `MAX_SIZE` and by the input.
+fn decode_count(data: &mut &[u8], limit: usize) -> Result<usize, DecodeError> {
+  let count = CompactSize::decode_checked(data)?.into_len(limit)?;
+  ensure(data, count)?;
+  Ok(count)
+}
+
+/// Decodes `count` elements, allocating in batches so that a count the input
+/// cannot back costs at most one batch.
 fn decode_elements<T: BaseCodec>(data: &mut &[u8], count: usize) -> Result<Vec<T>, DecodeError> {
   let batch = MAX_VECTOR_ALLOCATE / core::mem::size_of::<T>().max(1);
   let mut items = Vec::new();
@@ -374,9 +411,9 @@ impl<T: Codec> __CodecMarker for T {}
 
 #[cfg(test)]
 mod tests {
-  use super::{BaseCodec, DecodeError};
+  use super::{decode_vec_limited, read_bytes_limited, BaseCodec, DecodeError};
   use crate::prelude::*;
-  use crate::{VecDecoder, VecEncoder};
+  use crate::{VecDecoder, VecEncoder, MAX_SIZE};
 
   use rstest::*;
 
@@ -459,6 +496,53 @@ mod tests {
         remaining: 2
       })
     );
+  }
+
+  fn exceeds(limit: usize, value: u64) -> DecodeError {
+    DecodeError::CompactSizeExceedsLimit { limit, value }
+  }
+
+  #[rstest]
+  #[case::empty(&[0x00], 2, Ok(vec![]))]
+  #[case::below(&[0x01, 0x0A, 0x00], 2, Ok(vec![10]))]
+  #[case::at_limit(&[0x02, 0x0A, 0x00, 0x0B, 0x00], 2, Ok(vec![10, 11]))]
+  #[case::past_limit(&[0x03, 0x0A, 0x00, 0x0B, 0x00, 0x0C, 0x00], 2, Err(exceeds(2, 3)))]
+  #[case::past_limit_and_input(&[0xFD, 0xFF, 0xFF], 2, Err(exceeds(2, 0xFFFF)))]
+  #[case::past_max_size(&[0xFE, 0x01, 0x00, 0x00, 0x02], usize::MAX, Err(exceeds(MAX_SIZE as usize, MAX_SIZE + 1)))]
+  #[case::past_input(&[0x03, 0x0A, 0x00], 3, Err(DecodeError::Eof { needed: 3, remaining: 2 }))]
+  #[case::short_element(&[0x02, 0x0A, 0x00, 0x0B], 2, Err(DecodeError::Eof { needed: 2, remaining: 1 }))]
+  fn decode_vec_limited_bounds_the_count(
+    #[case] wire: &[u8],
+    #[case] limit: usize,
+    #[case] expected: Result<Vec<u16>, DecodeError>,
+  ) {
+    assert_eq!(decode_vec_limited::<u16>(&mut &*wire, limit), expected);
+  }
+
+  #[rstest]
+  #[case::empty(&[0x00], 2, Ok(&[][..]))]
+  #[case::at_limit(&[0x02, 0xAA, 0xBB], 2, Ok(&[0xAA, 0xBB][..]))]
+  #[case::past_limit(&[0x03, 0xAA, 0xBB, 0xCC], 2, Err(exceeds(2, 3)))]
+  #[case::past_limit_and_input(&[0xFD, 0xFF, 0xFF], 2, Err(exceeds(2, 0xFFFF)))]
+  #[case::past_max_size(&[0xFE, 0x01, 0x00, 0x00, 0x02], usize::MAX, Err(exceeds(MAX_SIZE as usize, MAX_SIZE + 1)))]
+  #[case::past_input(&[0x02, 0xAA], 2, Err(DecodeError::Eof { needed: 2, remaining: 1 }))]
+  fn read_bytes_limited_bounds_the_length(
+    #[case] wire: &[u8],
+    #[case] limit: usize,
+    #[case] expected: Result<&[u8], DecodeError>,
+  ) {
+    assert_eq!(read_bytes_limited(&mut &*wire, limit), expected);
+  }
+
+  #[rstest]
+  fn limited_reads_stop_after_the_value() {
+    let wire: &[u8] = &[0x01, 0xAA, 0xFF];
+    let mut cursor = wire;
+    assert_eq!(read_bytes_limited(&mut cursor, 1), Ok(&[0xAA][..]));
+    assert_eq!(cursor, [0xFF]);
+    let mut cursor = wire;
+    assert_eq!(decode_vec_limited::<u8>(&mut cursor, 1), Ok(vec![0xAA]));
+    assert_eq!(cursor, [0xFF]);
   }
 
   #[rstest]
