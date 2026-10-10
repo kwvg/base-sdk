@@ -27,6 +27,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   that need no chain.
 - `MAXIMUM_WITHDRAWALS`, `MAX_PROPOSAL_DATA_SIZE`, `GovObject::check_proposal_data`,
   `Proposal::check_payment_address`, and `GovVoteInvalid` with a `Checkable` implementation for `GovVote`.
+- `Transaction::instance_hash`, `Transaction::is_asset_unlock_payload` and `Transaction::has_stable_txid`, with
+  `ASSET_UNLOCK_QUORUM_INFO_SIZE`, `ASSET_UNLOCK_PAYLOAD_SIZE` and `ASSET_UNLOCK_STABLE_TXID_VERSION`.
+- `Transaction::inputs_hash`, `Transaction::outputs_hash` and `OutputsHash`, the hashes over the spent outpoints and
+  the outputs that ProTx and shared masternode signatures commit to.
+- `Transaction::asset_unlock_sign_hash` and `AssetUnlock::request_id`, the message hash and the request id of an asset
+  unlock's quorum signature.
+- `Block::asset_unlock_merkle_root`, the root over the instance hashes of asset unlocks with a stable txid.
+- `Activation` and `Deployments`, the deployment states a gated check takes. `AssetUnlock::check_deployments` and
+  `AssetLock::check_deployments` reject version 2 while v24 is inactive, and `CoinbaseCommitment::check_deployments`
+  requires version 4 exactly when v20 and v24 are both active.
 
 ### Changed
 
@@ -54,6 +64,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `AssetLockInvalid`, `AssetUnlockInvalid`, `ProposalInvalid` and `NIError` gain variants. Callers that match them
   exhaustively must handle the new variants.
 - `dash-pkc` is built with its `bls` feature, which compiles `blst` and needs a C compiler for the target.
+- An asset unlock of payload version 2 or above hashes with its last 132 bytes zeroed, so its txid and the block merkle
+  root leave out the requested height, quorum hash and quorum signature. Callers that need those fields covered use
+  `Transaction::instance_hash`, which the coinbase commitment of version 4 commits to.
+- Asset unlock and asset lock payloads accept version 2, and the credit outputs of a version 2 asset lock may pay
+  P2SH.
+- `CoinbaseCommitment` accepts version 4, which adds `merkle_root_asset_unlocks`. `CoinbaseCommitment::new` takes the
+  root as its last argument, so callers pass `None` below version 4. JSON carries the `merkleRootAssetUnlocks` key,
+  null below version 4.
+- `ProTxInvalid::BadInputsHash`, `AssetLockInvalid::CreditBadScript`, `AssetLockInvalid::Version2Inactive`,
+  `AssetUnlockInvalid::Version2Inactive`, `CbTxInvalid::BadClHeightDiff` and `BlockInvalid::AssetUnlockMerkleRoot`
+  are new variants. Callers that match these enums exhaustively must handle them.
 
 ### Fixed
 
@@ -78,3 +99,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and outcome ranges.
 - `GovVote` decoding rejects a signature that is neither 65 nor 96 bytes, and a length above 96 before reading it.
 - Decoding an extended net info domain entry rejects a name above 253 bytes.
+- ProTx payloads whose inputs hash does not match the transaction's inputs are rejected.
+- Blocks whose coinbase commitment of version 4 commits to another asset unlock root are rejected.
+- Coinbase commitments with a null chainlock and a non-zero height diff, or with a height diff at or above their
+  height, are rejected.
