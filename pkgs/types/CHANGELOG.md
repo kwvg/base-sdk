@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `MAX_SIZE`, `CompactSize::decode_checked`, `CompactSize::decode_as` and `CompactSize::decode_checked_as`, with the
   sealed `CompactUint` trait, for CompactSize-encoded integer fields that are range-checked, bounded by their type, or
   both.
+- `codec::decode_vec_limited` and `codec::read_bytes_limited`, which read a CompactSize-prefixed vector or byte string
+  and reject a count above `MAX_SIZE` or a caller limit before any element is decoded or allocated.
 
 ### Changed
 

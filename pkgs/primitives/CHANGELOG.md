@@ -76,3 +76,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   node id and platform ports that are `9999` or reuse a port.
 - Proposals are checked for type, data size, address whitespace, URL whitespace and URL brackets, and votes for signal
   and outcome ranges.
+- `GovVote` decoding rejects a signature that is neither 65 nor 96 bytes, and a length above 96 before reading it.
+- Decoding an extended net info domain entry rejects a name above 253 bytes.
