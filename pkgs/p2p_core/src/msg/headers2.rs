@@ -165,17 +165,14 @@ impl CompressionState {
       flags |= FLAG_PREV_HASH;
     }
 
-    let time_delta = match &self.prev_header {
-      Some(prev) => {
-        let d = header.time as i64 - prev.time as i64;
-        if (i16::MIN as i64..=i16::MAX as i64).contains(&d) {
-          Some(d as i16)
-        } else {
-          None
-        }
-      }
-      None => None,
-    };
+    // The offset is taken modulo 2^32, so a header older than its predecessor
+    // is sent in full while a forward wrap past `u32::MAX` is compressed.
+    let time_delta = self
+      .prev_header
+      .as_ref()
+      .map(|prev| header.time.wrapping_sub(prev.time))
+      .filter(|d| *d <= i16::MAX as u32)
+      .map(|d| d as i16);
     if time_delta.is_none() {
       flags |= FLAG_TIMESTAMP_FULL;
     }
@@ -287,6 +284,40 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "headers2");
     let items = corpus.entries::<GetHeaders2>("getheaders2", check_wire);
     assert_serde_rt("getheaders2", &items);
+  }
+
+  fn header_at(prev_hash: BlockHash, time: u32) -> BlockHeader {
+    BlockHeader {
+      version: 0x2000_0000,
+      prev_hash,
+      merkle_root: MerkleRoot::default(),
+      time,
+      bits: 0x1e0f_fff0,
+      nonce: 0,
+    }
+  }
+
+  #[rstest]
+  #[case::zero(1_000, 1_000, true)]
+  #[case::max_offset(1_000, 33_767, true)]
+  #[case::past_max_offset(1_000, 33_768, false)]
+  #[case::negative(1_000, 999, false)]
+  #[case::forward_wrap(u32::MAX - 10, 5, true)]
+  fn compresses_time_offsets_modulo_2_32(#[case] prev_time: u32, #[case] time: u32, #[case] compressed: bool) {
+    let first = header_at(BlockHash::default(), prev_time);
+    let second = header_at(first.hash(), time);
+    let mut state = CompressionState::new();
+    state.encode_header(&first, &mut Vec::new());
+    let mut buf = Vec::new();
+    state.encode_header(&second, &mut buf);
+    assert_eq!(buf[0] & FLAG_TIMESTAMP_FULL == 0, compressed);
+
+    let msg = Headers2 {
+      headers: vec![first, second],
+    };
+    let mut wire = Vec::new();
+    msg.encode(&mut wire);
+    assert_eq!(Headers2::decode(&mut wire.as_slice()), Ok(msg));
   }
 
   #[rstest]
