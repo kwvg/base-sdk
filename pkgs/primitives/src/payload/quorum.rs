@@ -301,6 +301,8 @@ pub enum CommitmentInvalid {
   BadPayload,
   /// `bad-qc-commitment-type`
   UnknownType { llmq_type: LlmqType },
+  /// `bad-qc-version`
+  BadVersion { version: u16 },
   /// `bad-qc-invalid-null`
   InvalidNull(CommitmentFault),
   /// `bad-qc-invalid`
@@ -313,6 +315,7 @@ impl fmt::Display for CommitmentInvalid {
       Self::BadQuorumIndex => write!(f, "bad-qc-quorum-index"),
       Self::BadPayload => write!(f, "bad-qc-payload"),
       Self::UnknownType { llmq_type } => write!(f, "bad-qc-commitment-type: {llmq_type}"),
+      Self::BadVersion { version } => write!(f, "bad-qc-version: {version}"),
       Self::InvalidNull(fault) => write!(f, "bad-qc-invalid-null: {fault}"),
       Self::Invalid(fault) => write!(f, "bad-qc-invalid: {fault}"),
     }
@@ -362,11 +365,22 @@ impl Checkable for FinalCommitment {
   type Error = CommitmentInvalid;
 
   fn check(&self) -> Option<Self::Error> {
-    self.commitment.check()
+    let qc = &self.commitment;
+    qc.check_encoding()
+      .or_else(|| qc.check_type())
+      .or_else(|| {
+        (self.version != Self::CURRENT_VERSION).then_some(CommitmentInvalid::BadVersion { version: self.version })
+      })
+      .or_else(|| qc.verify())
   }
 }
 
 hash_impl!(FinalCommitment);
+
+impl FinalCommitment {
+  /// The only payload version.
+  pub const CURRENT_VERSION: u16 = 1;
+}
 
 impl fmt::Display for FinalCommitment {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -562,6 +576,28 @@ mod tests {
 
   fn min_size(qc: &Commitment) -> u64 {
     u64::from(qc.llmq_type.params().unwrap().min_size)
+  }
+
+  #[rstest]
+  #[case::zero(0)]
+  #[case::two(2)]
+  fn payload_version_other_than_one_is_rejected(#[case] version: u16) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "qctx");
+    let mut item = corpus
+      .entries::<FinalCommitment>("qctx", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    assert_eq!(item.version, FinalCommitment::CURRENT_VERSION);
+    item.version = version;
+    assert_eq!(item.check(), Some(CommitmentInvalid::BadVersion { version }));
+    assert_eq!(item.check().unwrap().to_string(), format!("bad-qc-version: {version}"));
+
+    // The payload version is checked after the encoding and the type.
+    item.commitment.llmq_type = LlmqType::LlmqNone;
+    assert!(matches!(item.check(), Some(CommitmentInvalid::UnknownType { .. })));
+    item.commitment.quorum_sig = item.commitment.quorum_sig.corrupted();
+    assert_eq!(item.check(), Some(CommitmentInvalid::BadPayload));
   }
 
   /// The counts compare with the minimum size, not the threshold.
