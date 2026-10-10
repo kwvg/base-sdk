@@ -30,7 +30,7 @@ pub mod __private {
   pub use dash_primitives;
   pub use dash_types;
 }
-pub use bip324::{decode_v2, encode_v2};
+pub use bip324::{decode_v2, decode_v2_with_version, encode_v2, encode_v2_with_version};
 pub use command::CommandString;
 pub use error::P2pDecodeError;
 pub use magic::Magic;

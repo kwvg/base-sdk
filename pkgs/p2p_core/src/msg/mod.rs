@@ -23,7 +23,6 @@ use crate::command::CommandString;
 use crate::prelude::*;
 use crate::short_id::ShortId;
 
-use bitcoin_consensus_encoding as encoding;
 use dash_primitives::{GovObject, GovVote};
 use dash_types::type_id::Unencodable;
 
@@ -39,6 +38,29 @@ pub use mn_list::{DeletedQuorum, GetMnListDiff, MnListDiff, MnListDiffPayload, Q
 pub use ping::{Ping, Pong};
 pub use sync::{SyncItemId, SyncStatusCount};
 pub use version::{ServiceFlags, UserAgent, UserAgentTooLong, Version, VersionAddr};
+
+unversioned_payload!(
+  Addr,
+  AddrV2Msg,
+  GetData,
+  GetHeaders,
+  GetHeaders2,
+  GetMnListDiff,
+  GovObject,
+  GovSync,
+  GovVote,
+  Headers,
+  Headers2,
+  Inv,
+  MnListDiff,
+  NotFound,
+  Ping,
+  Pong,
+  QSendRecSigs,
+  SendDsq,
+  SyncStatusCount,
+  Version,
+);
 
 define_p2p! {
   parsed {

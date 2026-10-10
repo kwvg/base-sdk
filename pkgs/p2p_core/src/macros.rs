@@ -8,7 +8,7 @@
 
 use crate::codec::MAX_P2P_PAYLOAD_SIZE;
 use crate::prelude::*;
-use crate::P2pDecodeError;
+use crate::{P2pDecodeError, ProtocolVersion};
 
 use bitcoin_consensus_encoding::{decode_from_slice, Decode, Decoder};
 
@@ -18,6 +18,41 @@ where
   <T::Decoder as Decoder>::Error: core::fmt::Display,
 {
   decode_from_slice(payload).map_err(|e| P2pDecodeError::Consensus(format!("{e}")))
+}
+
+/// Message payload whose wire layout or limits may depend on the protocol
+/// version negotiated with the peer.
+pub(crate) trait VersionedPayload: Sized {
+  /// Decodes the whole payload as sent at `version`.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`P2pDecodeError`] on malformed input or trailing bytes.
+  fn decode_versioned(payload: &[u8], version: ProtocolVersion) -> Result<Self, P2pDecodeError>;
+
+  /// Appends the payload as sent at `version`.
+  fn encode_versioned(&self, buf: &mut Vec<u8>, version: ProtocolVersion);
+}
+
+/// Implements [`VersionedPayload`] for payloads with one layout at every
+/// version.
+macro_rules! unversioned_payload {
+  ($($ty:ty),+ $(,)?) => {
+    $(
+      impl crate::macros::VersionedPayload for $ty {
+        fn decode_versioned(
+          payload: &[u8],
+          _version: crate::ProtocolVersion,
+        ) -> Result<Self, crate::P2pDecodeError> {
+          crate::macros::decode_msg(payload)
+        }
+
+        fn encode_versioned(&self, buf: &mut Vec<u8>, _version: crate::ProtocolVersion) {
+          buf.extend_from_slice(&bitcoin_consensus_encoding::encode_to_vec(self));
+        }
+      }
+    )+
+  };
 }
 
 /// Reject payloads that exceed the protocol limit.
@@ -157,17 +192,40 @@ macro_rules! define_p2p {
         }
       }
 
-      /// Decodes a message from its command string and raw payload.
+      /// Decodes a message from its command string and raw payload, as sent
+      /// at [`ProtocolVersion::CURRENT`](crate::ProtocolVersion::CURRENT).
+      ///
+      /// # Errors
+      ///
+      /// Returns [`P2pDecodeError`](crate::P2pDecodeError) on an unknown
+      /// command or a malformed payload.
       pub fn decode_payload(
         cmd: &CommandString,
         payload: &[u8],
+      ) -> Result<Self, crate::P2pDecodeError> {
+        Self::decode_payload_with_version(cmd, payload, crate::ProtocolVersion::CURRENT)
+      }
+
+      /// Decodes a message from its command string and raw payload, as sent
+      /// at `version`, the version negotiated with the peer.
+      ///
+      /// # Errors
+      ///
+      /// Returns [`P2pDecodeError`](crate::P2pDecodeError) on an unknown
+      /// command or a malformed payload.
+      pub fn decode_payload_with_version(
+        cmd: &CommandString,
+        payload: &[u8],
+        version: crate::ProtocolVersion,
       ) -> Result<Self, crate::P2pDecodeError> {
         let raw = || Vec::from(payload);
         let msg = match *cmd {
           $(
             CommandString::$p_cmd => {
               crate::macros::check_payload($p_wire, payload)?;
-              Self::$p_variant(crate::macros::decode_msg(payload)?)
+              Self::$p_variant(
+                <$p_type as crate::macros::VersionedPayload>::decode_versioned(payload, version)?,
+              )
             }
           )*
           $(
@@ -193,12 +251,19 @@ macro_rules! define_p2p {
         Ok(msg)
       }
 
-      /// Encodes this message's payload (without command/short-ID framing).
+      /// Encodes this message's payload (without command/short-ID framing),
+      /// as sent at [`ProtocolVersion::CURRENT`](crate::ProtocolVersion::CURRENT).
       pub fn encode_payload(&self, buf: &mut Vec<u8>) {
+        self.encode_payload_with_version(buf, crate::ProtocolVersion::CURRENT);
+      }
+
+      /// Encodes this message's payload (without command/short-ID framing),
+      /// as sent at `version`, the version negotiated with the peer.
+      pub fn encode_payload_with_version(&self, buf: &mut Vec<u8>, version: crate::ProtocolVersion) {
         match self {
           $(
             Self::$p_variant(m) => {
-              buf.extend_from_slice(&encoding::encode_to_vec(m));
+              crate::macros::VersionedPayload::encode_versioned(m, buf, version);
             }
           )*
           $( Self::$pe_variant => {} )*
