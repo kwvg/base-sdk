@@ -25,3 +25,20 @@ fn v24_signals_on_bit_13(#[case] network: Network) {
 fn v24_start_time(#[case] network: Network, #[case] expected: i64) {
   assert_eq!(network.consensus().deployments.v24.start_time, expected);
 }
+
+#[rstest]
+#[case::mainnet(Network::Main)]
+#[case::testnet(Network::Testnet3)]
+#[case::regtest(Network::Regtest)]
+fn evo_shares_follows_v24_on_bit_14(#[case] network: Network) {
+  // `evo_shares` must keep every `v24` parameter except the bit.
+  let deployments = network.consensus().deployments;
+  assert_eq!(deployments.evo_shares.bit, 14);
+  assert_eq!(
+    Bip9Deployment {
+      bit: 13,
+      ..deployments.evo_shares
+    },
+    deployments.v24
+  );
+}
