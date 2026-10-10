@@ -286,6 +286,37 @@ codec_base!(GovVote {
   sig,
 });
 
+/// Governance vote validation failure.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
+pub enum GovVoteInvalid {
+  /// The signal is not one of the known signals.
+  BadSignal { signal: VoteSignal },
+  /// The outcome is not one of the known outcomes.
+  BadOutcome { outcome: VoteOutcome },
+}
+
+impl fmt::Display for GovVoteInvalid {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::BadSignal { signal } => write!(f, "invalid signal {signal}"),
+      Self::BadOutcome { outcome } => write!(f, "invalid outcome {outcome}"),
+    }
+  }
+}
+
+/// Checks the signal and outcome ranges. The time bound needs a clock and
+/// is the caller's.
+impl Checkable for GovVote {
+  type Error = GovVoteInvalid;
+
+  fn check(&self) -> Option<Self::Error> {
+    if matches!(self.signal, VoteSignal::Unknown(_)) {
+      return Some(GovVoteInvalid::BadSignal { signal: self.signal });
+    }
+    matches!(self.outcome, VoteOutcome::Unknown(_)).then_some(GovVoteInvalid::BadOutcome { outcome: self.outcome })
+  }
+}
+
 impl Hashable for GovVote {
   type Hash = Hash256;
 
@@ -599,6 +630,28 @@ mod tests {
   fn zero_payment_amount_fails_the_check() {
     let proposal: Proposal = from_json(&proposal_json("0"));
     assert_eq!(proposal.check(), Some(ProposalInvalid::BadPaymentAmount));
+  }
+
+  #[rstest]
+  #[case::endorsed(4, 3, None)]
+  #[case::signal_unknown(5, 1, Some(GovVoteInvalid::BadSignal { signal: VoteSignal::Unknown(5) }))]
+  #[case::outcome_unknown(1, 4, Some(GovVoteInvalid::BadOutcome { outcome: VoteOutcome::Unknown(4) }))]
+  #[case::both_unknown(9, 9, Some(GovVoteInvalid::BadSignal { signal: VoteSignal::Unknown(9) }))]
+  fn vote_signal_and_outcome_are_in_range(
+    #[case] signal: u32,
+    #[case] outcome: u32,
+    #[case] expected: Option<GovVoteInvalid>,
+  ) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "govobjvote");
+    let mut vote = corpus
+      .entries::<GovVote>("govobjvote", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    assert_eq!(vote.check(), None);
+    vote.signal = VoteSignal::from_base(signal);
+    vote.outcome = VoteOutcome::from_base(outcome);
+    assert_eq!(vote.check(), expected);
   }
 
   #[rstest]
