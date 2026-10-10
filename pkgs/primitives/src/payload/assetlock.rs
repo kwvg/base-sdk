@@ -7,6 +7,7 @@
 //! AssetLock (type 8): L1 to Platform.
 
 use crate::codec::codec_payload;
+use crate::deployment::{Activation, Deployments};
 use crate::prelude::*;
 use crate::transaction::TxOut;
 
@@ -58,6 +59,8 @@ pub enum AssetLockInvalid {
   CreditAmountMismatch { credited: u64, returned: u64 },
   /// `bad-assetlocktx-script-pubkey`
   CreditBadScript { index: usize },
+  /// `bad-assetlocktx-version-2`
+  Version2Inactive { version: u8 },
 }
 
 impl core::fmt::Display for AssetLockInvalid {
@@ -78,6 +81,7 @@ impl core::fmt::Display for AssetLockInvalid {
         )
       }
       Self::CreditBadScript { index } => write!(f, "bad-assetlocktx-script-pubkey: output {index}"),
+      Self::Version2Inactive { version } => write!(f, "bad-assetlocktx-version-2: {version}"),
     }
   }
 }
@@ -113,6 +117,14 @@ impl Checkable for AssetLock {
     }
 
     None
+  }
+}
+
+impl AssetLock {
+  /// Rejects a payload version above 1 while v24 is inactive.
+  pub fn check_deployments(&self, deployments: Deployments) -> Option<AssetLockInvalid> {
+    (deployments.v24 == Activation::Inactive && self.version > 1)
+      .then_some(AssetLockInvalid::Version2Inactive { version: self.version })
   }
 }
 
@@ -185,6 +197,27 @@ mod tests {
     #[case] expected: Option<AssetLockInvalid>,
   ) {
     assert_eq!(lock_paying(version, script).check(), expected);
+  }
+
+  fn deployments(v24: Activation) -> Deployments {
+    Deployments {
+      v19: Activation::Active,
+      v20: Activation::Active,
+      v24,
+      evo_shares: Activation::Inactive,
+    }
+  }
+
+  #[rstest]
+  #[case::v1_before_v24(1, Activation::Inactive, None)]
+  #[case::v2_before_v24(2, Activation::Inactive, Some(AssetLockInvalid::Version2Inactive { version: 2 }))]
+  #[case::v1_under_v24(1, Activation::Active, None)]
+  #[case::v2_under_v24(2, Activation::Active, None)]
+  fn version_2_waits_for_v24(#[case] version: u8, #[case] v24: Activation, #[case] expected: Option<AssetLockInvalid>) {
+    let lock = lock_paying(version, &P2PKH);
+    assert_eq!(lock.check_deployments(deployments(v24)), expected);
+    let reason = AssetLockInvalid::Version2Inactive { version: 2 }.to_string();
+    assert_eq!(reason, "bad-assetlocktx-version-2: 2");
   }
 
   #[rstest]
