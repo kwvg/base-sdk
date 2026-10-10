@@ -52,7 +52,7 @@ hash_impl!(GovObjectType);
 ///   "name": "proposal-name",
 ///   "url": "https://example.com/proposal",
 ///   "payment_address": "XaddressHere",
-///   "payment_amount": "10.5",
+///   "payment_amount": 10.5,
 ///   "start_epoch": 1700000000,
 ///   "end_epoch": 1703000000
 /// }
@@ -66,8 +66,8 @@ pub struct Proposal {
   pub url: String,
   /// Dash address receiving payment.
   pub payment_address: String,
-  /// Payment amount.
-  #[cfg_attr(feature = "serde", serde(with = "crate::serialize::amount"))]
+  /// Payment amount, a number of coins in JSON.
+  #[cfg_attr(feature = "serde", serde(with = "crate::serialize::coins"))]
   pub payment_amount: Amount,
   /// Unix timestamp when payments begin.
   pub start_epoch: i64,
@@ -366,9 +366,54 @@ impl Checkable for Proposal {
 mod tests {
   use super::*;
 
-  use dash_dev::{assert_serde_rt, check_wire, from_json_slice, Corpus, Value};
+  use dash_dev::{assert_serde_rt, check_wire, from_json, from_json_slice, json_rejects, to_json, Corpus, Value};
   use rstest::rstest;
   use serde::{Deserialize, Serialize};
+
+  fn to_value<T: Serialize>(value: &T) -> Value {
+    from_json(&to_json(value))
+  }
+
+  fn proposal_json(amount: &str) -> String {
+    format!(
+      r#"{{"name":"p","url":"https://x.org","payment_address":"X","payment_amount":{amount},"start_epoch":1,"end_epoch":2}}"#
+    )
+  }
+
+  #[rstest]
+  #[case::whole("200", 200 * 100_000_000)]
+  #[case::fraction("10.5", 1_050_000_000)]
+  #[case::one_duff("0.00000001", 1)]
+  #[case::float_whole("2.0", 200_000_000)]
+  fn payment_amount_is_in_coins(#[case] json: &str, #[case] sat: u64) {
+    let proposal: Proposal = from_json(&proposal_json(json));
+    assert_eq!(proposal.payment_amount.to_sat(), sat);
+    let back: Proposal = from_json(&to_json(&proposal));
+    assert_eq!(back, proposal);
+  }
+
+  #[rstest]
+  #[case::whole(200 * 100_000_000, "200")]
+  #[case::fraction(1_050_000_000, "10.5")]
+  fn payment_amount_serializes_as_coins(#[case] sat: u64, #[case] json: &str) {
+    let mut proposal: Proposal = from_json(&proposal_json("1"));
+    proposal.payment_amount = Amount::from_sat(sat).unwrap();
+    assert_eq!(to_value(&proposal)["payment_amount"], from_json::<Value>(json));
+  }
+
+  #[rstest]
+  #[case::negative("-1")]
+  #[case::negative_float("-0.5")]
+  #[case::string("\"10.5\"")]
+  fn payment_amount_rejects_non_coin_numbers(#[case] json: &str) {
+    assert!(json_rejects::<Proposal>(&proposal_json(json)));
+  }
+
+  #[rstest]
+  fn zero_payment_amount_fails_the_check() {
+    let proposal: Proposal = from_json(&proposal_json("0"));
+    assert_eq!(proposal.check(), Some(ProposalInvalid::BadPaymentAmount));
+  }
 
   #[rstest]
   fn corpus_govobjvote() {
@@ -438,6 +483,20 @@ mod tests {
         if let Some(e) = proposal.check() {
           panic!("{label}: proposal check: {e}");
         }
+        let Value::Object(fields) = &details.data else {
+          panic!("{label}: proposal data is not an object");
+        };
+        let amount = &fields["payment_amount"];
+        assert_eq!(
+          to_value(&proposal)["payment_amount"],
+          *amount,
+          "{label}: payment_amount"
+        );
+        assert_eq!(
+          proposal.payment_amount.to_sat(),
+          amount.as_u64().unwrap() * 100_000_000,
+          "{label}"
+        );
       }
 
       let mut encoded = Vec::new();

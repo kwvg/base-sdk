@@ -56,6 +56,63 @@ pub mod amount {
   }
 }
 
+/// Serializes [`Amount`](bitcoin_units::Amount) as a JSON number of whole
+/// coins, written as an integer when the amount has no fraction.
+pub mod coins {
+  use crate::prelude::*;
+
+  use bitcoin_units::Amount;
+
+  const COIN: u64 = 100_000_000;
+
+  /// Serializes as a number of coins.
+  pub fn serialize<S: serde::Serializer>(val: &Amount, serializer: S) -> Result<S::Ok, S::Error> {
+    let sat = val.to_sat();
+    if sat % COIN == 0 {
+      serializer.serialize_u64(sat / COIN)
+    } else {
+      serializer.serialize_f64(sat as f64 / COIN as f64)
+    }
+  }
+
+  /// Deserializes from a number of coins, integer or float. A float rounds to
+  /// the nearest satoshi.
+  pub fn deserialize<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Amount, D::Error> {
+    struct Visitor;
+
+    impl serde::de::Visitor<'_> for Visitor {
+      type Value = Amount;
+
+      fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("a non-negative number of coins")
+      }
+
+      fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Amount, E> {
+        let sat = v.checked_mul(COIN).ok_or_else(|| E::custom("amount overflow"))?;
+        Amount::from_sat(sat).map_err(E::custom)
+      }
+
+      fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Amount, E> {
+        let v: u64 = v.try_into().map_err(|_| E::custom("negative amount"))?;
+        self.visit_u64(v)
+      }
+
+      fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Amount, E> {
+        if !v.is_finite() || v < 0.0 {
+          return Err(E::custom("invalid amount"));
+        }
+        let sat = round(v * COIN as f64);
+        if sat > u64::MAX as f64 {
+          return Err(E::custom("amount overflow"));
+        }
+        Amount::from_sat(sat as u64).map_err(E::custom)
+      }
+    }
+
+    deserializer.deserialize_any(Visitor)
+  }
+}
+
 /// Deserializers for the bytes of a BLS field, which serializes as bare hex.
 ///
 /// The JSON image carries no scheme, so the container tags the bytes from its
