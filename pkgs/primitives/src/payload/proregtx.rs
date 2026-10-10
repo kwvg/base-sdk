@@ -71,6 +71,14 @@ pub struct ProRegTx {
 
 impl_payload!(ProRegTx);
 
+/// Checks the values of the platform fields that the masternode type and the
+/// version require.
+pub(super) fn check_platform_values(platform_node_id: Option<PlatformNodeId>) -> Option<ProTxInvalid> {
+  platform_node_id
+    .is_some_and(|node_id| node_id.is_null())
+    .then_some(ProTxInvalid::NullPlatformNodeId)
+}
+
 /// Checks that platform fields are consistent with mn_type and version.
 pub(super) fn check_platform_fields(
   mn_type: MnType,
@@ -215,7 +223,7 @@ impl Checkable for ProRegTx {
       });
     }
 
-    None
+    check_platform_values(self.platform_node_id)
   }
 }
 
@@ -606,6 +614,20 @@ mod tests {
       item.net_info.encode_canonical(&mut canonical);
       assert_eq!(canonical, wire, "{label}");
     }
+  }
+
+  #[rstest]
+  #[case::v2(2)]
+  #[case::v3(3)]
+  fn evo_platform_node_id_must_not_be_null(#[case] version: u16) {
+    let item = corpus_item(version, MnType::Evo);
+    assert_eq!(item.check(), None);
+    let built = rebuild(&item, |t| t.platform_node_id = Some(PlatformNodeId::default()));
+    assert_eq!(built.map(|t| t.check()), Ok(Some(ProTxInvalid::NullPlatformNodeId)));
+    assert_eq!(
+      ProTxInvalid::NullPlatformNodeId.to_string(),
+      "bad-protx-platform-nodeid"
+    );
   }
 
   #[rstest]

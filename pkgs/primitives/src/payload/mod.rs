@@ -155,6 +155,8 @@ pub enum ProTxInvalid {
   BadPayload,
   /// `bad-protx-operator-payee`
   BadOperatorPayoutScript,
+  /// `bad-protx-platform-nodeid`
+  NullPlatformNodeId,
 }
 
 impl fmt::Display for ProTxInvalid {
@@ -190,6 +192,7 @@ impl fmt::Display for ProTxInvalid {
       Self::BadPlatformFields => write!(f, "bad-protx-platform-fields"),
       Self::BadPayload => write!(f, "bad-protx-payload"),
       Self::BadOperatorPayoutScript => write!(f, "bad-protx-operator-payee"),
+      Self::NullPlatformNodeId => write!(f, "bad-protx-platform-nodeid"),
     }
   }
 }

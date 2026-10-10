@@ -6,7 +6,7 @@
 
 //! ProUpServTx service-update payload (type 2).
 
-use super::proregtx::check_platform_fields;
+use super::proregtx::{check_platform_fields, check_platform_values};
 use super::{
   check_sptx_netinfo, decode_version, encode_net_info, payload_hash, InputsHash, MnType, NetInfoForm, ProTxInvalid,
   PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
@@ -145,6 +145,10 @@ impl Checkable for ProUpServTx {
           return Some(e);
         }
       }
+    }
+
+    if let Some(e) = check_platform_values(self.platform_node_id) {
+      return Some(e);
     }
 
     // An empty operator payout leaves the payout to the owner.
@@ -454,6 +458,16 @@ mod tests {
       ProTxInvalid::BadOperatorPayoutScript.to_string(),
       "bad-protx-operator-payee"
     );
+  }
+
+  #[rstest]
+  #[case::v2(2)]
+  #[case::v3(3)]
+  fn evo_platform_node_id_must_not_be_null(#[case] version: u16) {
+    let item = corpus_item(version, MnType::Evo);
+    assert_eq!(item.check(), None);
+    let built = rebuild(&item, |t| t.platform_node_id = Some(PlatformNodeId::default()));
+    assert_eq!(built.map(|t| t.check()), Ok(Some(ProTxInvalid::NullPlatformNodeId)));
   }
 
   #[rstest]
