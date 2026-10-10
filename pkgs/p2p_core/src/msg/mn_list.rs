@@ -11,9 +11,12 @@ use crate::macros::VersionedPayload;
 use crate::prelude::*;
 use crate::{P2pDecodeError, ProtocolVersion};
 
-use dash_pkc::bls::{BlsPkBytes, BlsScIetf, BlsSigBytes};
+#[cfg(feature = "serde")]
+use dash_pkc::bls::BLS_PK_LEN;
+use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
 use dash_primitives::{
-  hash_impl, BlockHash, Commitment, LlmqType, MnType, PlatformNodeId, ServiceV1, Transaction, TxHash,
+  hash_impl, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MnType, PlatformNodeId, ServiceV1, Transaction,
+  TxHash,
 };
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
@@ -230,7 +233,7 @@ codec_p2p!(QuorumClSig { sig, index_set });
 /// A single entry in the simplified masternode list.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", from = "__SmlEntryFields"))]
 pub struct SimplifiedMnListEntry {
   /// Entry serialisation version.
   pub version: u16,
@@ -240,8 +243,8 @@ pub struct SimplifiedMnListEntry {
   pub confirmed_hash: BlockHash,
   /// Network service address.
   pub service: ServiceV1,
-  /// BLS operator public key.
-  pub operator_key: BlsPkBytes<BlsScIetf>,
+  /// BLS operator public key, in the scheme of the entry version.
+  pub operator_key: BlsPubKey,
   /// Voting key hash (HASH160).
   pub voting_key_id: PubKeyHash,
   /// Whether this masternode is currently valid.
@@ -285,7 +288,7 @@ impl SimplifiedMnListEntry {
     let pro_reg_tx_hash = TxHash::decode(data)?;
     let confirmed_hash = BlockHash::decode(data)?;
     let service = ServiceV1::decode(data)?;
-    let operator_key = BlsPkBytes::<BlsScIetf>::decode(data)?;
+    let operator_key = BlsPubKey::decode(data, BlsScheme::from_protx_version(entry_version))?;
     let voting_key_id = PubKeyHash::decode(data)?;
     let is_valid = bool::decode(data)?;
 
@@ -337,6 +340,43 @@ impl SimplifiedMnListEntry {
   }
 }
 
+/// Field set that tags the operator key from the entry version.
+#[cfg(feature = "serde")]
+#[derive(::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct __SmlEntryFields {
+  version: u16,
+  pro_reg_tx_hash: TxHash,
+  confirmed_hash: BlockHash,
+  service: ServiceV1,
+  #[serde(deserialize_with = "dash_primitives::serialize::bls::pk_bytes")]
+  operator_key: [u8; BLS_PK_LEN],
+  voting_key_id: PubKeyHash,
+  is_valid: bool,
+  mn_type: MnType,
+  #[serde(rename = "platformHTTPPort")]
+  platform_http_port: Option<u16>,
+  platform_node_id: Option<PlatformNodeId>,
+}
+
+#[cfg(feature = "serde")]
+impl From<__SmlEntryFields> for SimplifiedMnListEntry {
+  fn from(fields: __SmlEntryFields) -> Self {
+    Self {
+      version: fields.version,
+      pro_reg_tx_hash: fields.pro_reg_tx_hash,
+      confirmed_hash: fields.confirmed_hash,
+      service: fields.service,
+      operator_key: BlsPubKey::from_bytes(fields.operator_key, BlsScheme::from_protx_version(fields.version)),
+      voting_key_id: fields.voting_key_id,
+      is_valid: fields.is_valid,
+      mn_type: fields.mn_type,
+      platform_http_port: fields.platform_http_port,
+      platform_node_id: fields.platform_node_id,
+    }
+  }
+}
+
 impl fmt::Display for SimplifiedMnListEntry {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.pro_reg_tx_hash)
@@ -365,6 +405,7 @@ mod tests {
     let mut diff = corpus_diff();
     for entry in &mut diff.mn_list {
       entry.version = 1;
+      entry.operator_key = BlsPubKey::from_bytes(*entry.operator_key.as_bytes(), BlsScheme::Legacy);
       entry.mn_type = MnType::Regular;
       entry.platform_http_port = None;
       entry.platform_node_id = None;
@@ -417,7 +458,7 @@ mod tests {
       out.extend(enc(&entry.pro_reg_tx_hash));
       out.extend(enc(&entry.confirmed_hash));
       out.extend(enc(&entry.service));
-      out.extend(enc(&entry.operator_key));
+      entry.operator_key.encode(&mut out);
       out.extend(enc(&entry.voting_key_id));
       out.extend(enc(&entry.is_valid));
     }
@@ -496,5 +537,34 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "mnlistdiff");
     let items = corpus.entries::<MnListDiffPayload>("mnlistdiff", check_wire);
     assert_serde_rt("mnlistdiff", &items);
+  }
+
+  #[rstest]
+  #[case::legacy_bls(70240, 1, BlsScheme::Legacy)]
+  #[case::basic_bls(70240, 2, BlsScheme::Basic)]
+  #[case::unversioned(70227, 2, BlsScheme::Legacy)]
+  fn operator_key_is_tagged_from_the_entry_version(
+    #[case] version: u32,
+    #[case] entry_version: u16,
+    #[case] scheme: BlsScheme,
+  ) {
+    let mut entry = corpus_diff().mn_list[0].clone();
+    entry.version = entry_version;
+    entry.mn_type = MnType::Regular;
+    let mut buf = Vec::new();
+    entry.encode_versioned(&mut buf, ProtocolVersion(version));
+    let back = SimplifiedMnListEntry::decode_versioned(&mut buf.as_slice(), ProtocolVersion(version)).unwrap();
+    assert_eq!(back.operator_key.scheme(), scheme);
+    assert_eq!(back.operator_key.as_bytes(), entry.operator_key.as_bytes());
+  }
+
+  #[rstest]
+  #[case::legacy_bls(1, BlsScheme::Legacy)]
+  #[case::basic_bls(2, BlsScheme::Basic)]
+  fn json_operator_key_is_tagged_from_the_entry_version(#[case] entry_version: u16, #[case] scheme: BlsScheme) {
+    let mut entry = corpus_diff().mn_list[0].clone();
+    entry.version = entry_version;
+    let back: SimplifiedMnListEntry = dash_dev::from_json(&dash_dev::to_json(&entry));
+    assert_eq!(back.operator_key.scheme(), scheme);
   }
 }
