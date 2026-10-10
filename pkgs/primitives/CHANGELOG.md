@@ -50,6 +50,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ProRegTx::verify_join_sigs`, which verifies each join signature of a shared registration against its share owner.
 - `Transaction::check_deployments`, which rejects an output paying the shared collateral script outside a shared
   ProRegTx once v24 is active.
+- `LlmqType::sign_hash` and `LlmqType::select_signing_quorum`, the hash a quorum signs for a request and the pick of
+  the quorum that signs it among the active quorums the caller supplies.
+- `ChainLockSig` and `InstantSendLock`, with their signing request ids, `InstantSendLockInvalid` and
+  `MAX_ISLOCK_INPUTS`. Both hold their signature as basic BLS.
+- `CoinbaseCommitment::best_chainlock`, the height and signature of the chainlock a coinbase commitment carries.
+- `Transaction::lock_inputs`, the outpoints an InstantSend lock pins. An asset unlock pins index 0 of its withdrawal
+  request id.
+- `Trigger::payments`, `SuperblockPayment` and `TriggerInvalid`, which parse the payment lists of a trigger into a
+  superblock schedule.
 
 ### Changed
 
@@ -101,6 +110,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ProTxInvalid` gains variants for payout lists, shared registrations and types 10 to 12, and `TxInvalid` gains
   `SharedCollateralCreate`. Callers that match these enums exhaustively must handle them.
 - `dash-pkc` is built with its `ecdsa` feature, which compiles `secp256k1` and needs a C compiler for the target.
+- `LlmqParams` carries the DKG and signing parameters of each quorum type, from `use_rotation` to `recovery_members`.
+  Callers that build `LlmqParams` must set the new fields.
+- `Trigger` JSON requires a `type` of `2` and writes it.
 
 ### Fixed
 
