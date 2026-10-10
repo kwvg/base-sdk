@@ -13,6 +13,7 @@ use crate::{codec_base, hash_impl, TxHash};
 use bitcoin_hashes::sha256d;
 use bitcoin_units::Amount;
 use dash_num::Hash256;
+use dash_script::{AddrParams, Recipient};
 use dash_types::codec::BaseCodec;
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::{enum_map, impl_num, ArrayBuf, Checkable, Hashable, Numeric};
@@ -25,6 +26,12 @@ const MAX_PROPOSAL_NAME_LEN: usize = 40;
 
 /// Minimum URL length for governance proposals.
 const MIN_URL_LEN: usize = 4;
+
+/// Largest data a proposal object may carry, in bytes.
+pub const MAX_PROPOSAL_DATA_SIZE: usize = 512;
+
+/// Object type a proposal declares in its data.
+const PROPOSAL_TYPE: i64 = 1;
 
 /// Allowed characters in governance proposal names.
 const PROPOSAL_NAME_CHARS: &[u8] = b"-_abcdefghijklmnopqrstuvwxyz0123456789";
@@ -60,6 +67,9 @@ hash_impl!(GovObjectType);
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Proposal {
+  /// Declared object type, which must be 1.
+  #[cfg_attr(feature = "serde", serde(rename = "type"))]
+  pub object_type: i64,
   /// Short name (max 40 chars, lowercase alphanum + `-_`).
   pub name: String,
   /// Proposal URL.
@@ -183,6 +193,13 @@ impl Hashable for GovObject {
 }
 
 impl GovObject {
+  /// Rejects proposal data longer than [`MAX_PROPOSAL_DATA_SIZE`], which the
+  /// data must meet before it parses as a proposal.
+  pub fn check_proposal_data(&self) -> Option<ProposalInvalid> {
+    (self.object_type == GovObjectType::Proposal && self.data.len() > MAX_PROPOSAL_DATA_SIZE)
+      .then_some(ProposalInvalid::DataTooLarge { len: self.data.len() })
+  }
+
   /// Returns the data as a UTF-8 string, if valid.
   pub fn data_as_string(&self) -> Option<&str> {
     core::str::from_utf8(&self.data).ok()
@@ -293,6 +310,10 @@ impl Hashable for GovVote {
 /// Governance proposal validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
 pub enum ProposalInvalid {
+  /// Data exceeds [`MAX_PROPOSAL_DATA_SIZE`].
+  DataTooLarge { len: usize },
+  /// Declared type is not a proposal.
+  BadType { object_type: i64 },
   /// Name is empty.
   NameEmpty,
   /// Name exceeds maximum length.
@@ -307,11 +328,19 @@ pub enum ProposalInvalid {
   UrlTooShort { len: usize },
   /// URL contains whitespace.
   UrlWhitespace,
+  /// URL has an unbalanced bracket in its network location.
+  UrlInvalid,
+  /// Payment address contains whitespace.
+  AddressWhitespace,
+  /// Payment address is not a P2PKH or P2SH address of the network.
+  AddressInvalid,
 }
 
 impl fmt::Display for ProposalInvalid {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
+      Self::DataTooLarge { len } => write!(f, "data exceeds {MAX_PROPOSAL_DATA_SIZE} characters: {len}"),
+      Self::BadType { object_type } => write!(f, "type is not {PROPOSAL_TYPE}: {object_type}"),
       Self::NameEmpty => write!(f, "invalid name: empty"),
       Self::NameTooLong { len } => write!(f, "invalid name: {len} chars exceeds {MAX_PROPOSAL_NAME_LEN}"),
       Self::NameInvalidChars => write!(f, "invalid name: disallowed characters"),
@@ -319,6 +348,9 @@ impl fmt::Display for ProposalInvalid {
       Self::BadPaymentAmount => write!(f, "invalid payment amount"),
       Self::UrlTooShort { len } => write!(f, "url too short: {len} chars"),
       Self::UrlWhitespace => write!(f, "url has whitespace"),
+      Self::UrlInvalid => write!(f, "url invalid"),
+      Self::AddressWhitespace => write!(f, "payment_address can't have whitespaces"),
+      Self::AddressInvalid => write!(f, "payment_address is invalid"),
     }
   }
 }
@@ -326,7 +358,14 @@ impl fmt::Display for ProposalInvalid {
 impl Checkable for Proposal {
   type Error = ProposalInvalid;
 
+  /// Checks everything but the payment address, which needs the network and
+  /// is checked by [`Proposal::check_payment_address`].
   fn check(&self) -> Option<Self::Error> {
+    if self.object_type != PROPOSAL_TYPE {
+      return Some(ProposalInvalid::BadType {
+        object_type: self.object_type,
+      });
+    }
     if self.name.is_empty() {
       return Some(ProposalInvalid::NameEmpty);
     }
@@ -349,15 +388,52 @@ impl Checkable for Proposal {
       return Some(ProposalInvalid::BadPaymentAmount);
     }
 
+    if self.url.bytes().any(is_space) {
+      return Some(ProposalInvalid::UrlWhitespace);
+    }
     if self.url.len() < MIN_URL_LEN {
       return Some(ProposalInvalid::UrlTooShort { len: self.url.len() });
     }
-    if self.url.bytes().any(|b| b.is_ascii_whitespace()) {
-      return Some(ProposalInvalid::UrlWhitespace);
+    if !url_brackets_balance(self.url.as_bytes()) {
+      return Some(ProposalInvalid::UrlInvalid);
     }
 
     None
   }
+}
+
+impl Proposal {
+  /// Rejects a payment address that is not a P2PKH or P2SH address of the
+  /// network `params` describes.
+  pub fn check_payment_address(&self, params: &AddrParams) -> Option<ProposalInvalid> {
+    if self.payment_address.bytes().any(is_space) {
+      return Some(ProposalInvalid::AddressWhitespace);
+    }
+    Recipient::from_base58c(&self.payment_address, params)
+      .is_none()
+      .then_some(ProposalInvalid::AddressInvalid)
+  }
+}
+
+/// Tells whether `b` is a space, tab, line feed, vertical tab, form feed or
+/// carriage return.
+fn is_space(b: u8) -> bool {
+  matches!(b, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
+/// Tells whether the network location of `url`, the part after `//` up to the
+/// path, query or fragment, holds both brackets or neither.
+fn url_brackets_balance(url: &[u8]) -> bool {
+  let rest = match url.iter().position(|&b| b == b':') {
+    Some(pos) => &url[pos + 1..],
+    None => url,
+  };
+  let Some(after) = rest.strip_prefix(b"//").filter(|_| rest.len() > 2) else {
+    return true;
+  };
+  let end = after.iter().position(|b| b"/?#".contains(b)).unwrap_or(after.len());
+  let netloc = &after[..end];
+  netloc.contains(&b'[') == netloc.contains(&b']')
 }
 
 #[cfg(all(test, feature = "serde"))]
@@ -375,7 +451,7 @@ mod tests {
 
   fn proposal_json(amount: &str) -> String {
     format!(
-      r#"{{"name":"p","url":"https://x.org","payment_address":"X","payment_amount":{amount},"start_epoch":1,"end_epoch":2}}"#
+      r#"{{"type":1,"name":"p","url":"https://x.org","payment_address":"X","payment_amount":{amount},"start_epoch":1,"end_epoch":2}}"#
     )
   }
 
@@ -406,6 +482,117 @@ mod tests {
   #[case::string("\"10.5\"")]
   fn payment_amount_rejects_non_coin_numbers(#[case] json: &str) {
     assert!(json_rejects::<Proposal>(&proposal_json(json)));
+  }
+
+  /// Address prefixes of mainnet and testnet, for the address checks.
+  const MAINNET: AddrParams = AddrParams {
+    pubkey_addr: 76,
+    script_addr: 16,
+    secret_key: 204,
+    ext_pubkey: [0x04, 0x88, 0xb2, 0x1e],
+    ext_secret: [0x04, 0x88, 0xad, 0xe4],
+    bip44_idx: 5,
+  };
+  const TESTNET: AddrParams = AddrParams {
+    pubkey_addr: 140,
+    script_addr: 19,
+    secret_key: 239,
+    ext_pubkey: [0x04, 0x35, 0x87, 0xcf],
+    ext_secret: [0x04, 0x35, 0x83, 0x94],
+    bip44_idx: 1,
+  };
+
+  fn proposal_with(edit: impl FnOnce(&mut Proposal)) -> Proposal {
+    let mut proposal: Proposal = from_json(&proposal_json("1"));
+    proposal.payment_address = String::from("XgNfgrEB9n6uCY9Pi1hb2foimxPdtiZ4Z2");
+    edit(&mut proposal);
+    proposal
+  }
+
+  #[rstest]
+  #[case::two(2)]
+  #[case::zero(0)]
+  fn type_is_not_1(#[case] object_type: i64) {
+    let proposal = proposal_with(|p| p.object_type = object_type);
+    assert_eq!(proposal.check(), Some(ProposalInvalid::BadType { object_type }));
+  }
+
+  #[rstest]
+  #[case::string(r#""1""#)]
+  #[case::float("1.0")]
+  #[case::missing("")]
+  fn type_must_be_a_json_integer(#[case] value: &str) {
+    let json = proposal_json("1");
+    let json = if value.is_empty() {
+      json.replace(r#""type":1,"#, "")
+    } else {
+      json.replace(r#""type":1"#, &format!(r#""type":{value}"#))
+    };
+    assert!(json_rejects::<Proposal>(&json));
+  }
+
+  #[rstest]
+  #[case::at_the_limit(MAX_PROPOSAL_DATA_SIZE, None)]
+  #[case::past_the_limit(MAX_PROPOSAL_DATA_SIZE + 1, Some(ProposalInvalid::DataTooLarge { len: MAX_PROPOSAL_DATA_SIZE + 1 }))]
+  fn data_exceeds_512_characters(#[case] len: usize, #[case] expected: Option<ProposalInvalid>) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proposals");
+    let mut raws = Vec::new();
+    corpus.entries::<Value>("proposals", |raw, _, _| raws.push(raw.to_vec()));
+    let mut obj = GovObject::decode(&mut raws[0].as_slice()).unwrap();
+    obj.data = vec![b' '; len];
+    assert_eq!(obj.check_proposal_data(), expected);
+    obj.object_type = GovObjectType::Trigger;
+    assert_eq!(obj.check_proposal_data(), None);
+  }
+
+  #[rstest]
+  #[case::space("Xg Nf")]
+  #[case::vertical_tab("XgNf\u{0b}")]
+  fn payment_address_cant_have_whitespaces(#[case] address: &str) {
+    let proposal = proposal_with(|p| p.payment_address = String::from(address));
+    assert_eq!(
+      proposal.check_payment_address(&MAINNET),
+      Some(ProposalInvalid::AddressWhitespace)
+    );
+  }
+
+  #[rstest]
+  #[case::p2pkh("XgNfgrEB9n6uCY9Pi1hb2foimxPdtiZ4Z2", &MAINNET, None)]
+  #[case::p2sh("7mUyau75ATy1c6LoZeG3D57jKBkR4iHJkE", &MAINNET, None)]
+  #[case::other_network("XgNfgrEB9n6uCY9Pi1hb2foimxPdtiZ4Z2", &TESTNET, Some(ProposalInvalid::AddressInvalid))]
+  #[case::garbage("not-an-address", &MAINNET, Some(ProposalInvalid::AddressInvalid))]
+  fn payment_address_is_invalid(
+    #[case] address: &str,
+    #[case] params: &AddrParams,
+    #[case] expected: Option<ProposalInvalid>,
+  ) {
+    let proposal = proposal_with(|p| p.payment_address = String::from(address));
+    assert_eq!(proposal.check_payment_address(params), expected);
+  }
+
+  #[rstest]
+  #[case::space("https://x.org/a b")]
+  #[case::vertical_tab("https://x.org/\u{0b}")]
+  fn url_cant_have_whitespaces(#[case] url: &str) {
+    let proposal = proposal_with(|p| p.url = String::from(url));
+    assert_eq!(proposal.check(), Some(ProposalInvalid::UrlWhitespace));
+  }
+
+  #[rstest]
+  fn url_too_short() {
+    let proposal = proposal_with(|p| p.url = String::from("a.b"));
+    assert_eq!(proposal.check(), Some(ProposalInvalid::UrlTooShort { len: 3 }));
+  }
+
+  #[rstest]
+  #[case::open_only("http://[::1/path", Some(ProposalInvalid::UrlInvalid))]
+  #[case::close_only("http://::1]/path", Some(ProposalInvalid::UrlInvalid))]
+  #[case::balanced("http://[::1]:80/path", None)]
+  #[case::bracket_in_path("http://x.org/[a", None)]
+  #[case::no_netloc("mailto:[a", None)]
+  fn url_invalid(#[case] url: &str, #[case] expected: Option<ProposalInvalid>) {
+    let proposal = proposal_with(|p| p.url = String::from(url));
+    assert_eq!(proposal.check(), expected);
   }
 
   #[rstest]
@@ -482,6 +669,8 @@ mod tests {
         if let Some(e) = proposal.check() {
           panic!("{label}: proposal check: {e}");
         }
+        assert_eq!(obj.check_proposal_data(), None, "{label}");
+        assert_eq!(proposal.check_payment_address(&MAINNET), None, "{label}");
         let Value::Object(fields) = &details.data else {
           panic!("{label}: proposal data is not an object");
         };

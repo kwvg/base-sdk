@@ -38,6 +38,7 @@ pub use block::{
 pub use codec::MAX_SPTX_PAYLOAD_SIZE;
 pub use gov::{
   GovData, GovObject, GovObjectType, GovVote, Proposal, ProposalInvalid, Trigger, VoteOutcome, VoteSignal,
+  MAX_PROPOSAL_DATA_SIZE,
 };
 pub use merkle::{
   merkle_root, merkle_root_mutated, MerkleMatches, PartialMerkleTree, PartialMerkleTreeInvalid,
