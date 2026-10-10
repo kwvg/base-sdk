@@ -43,6 +43,16 @@ pub enum AssetLockInvalid {
   CreditOutOfRange { index: usize },
   /// `bad-assetlocktx-pubKeyHash`
   CreditNotP2pkh { index: usize },
+  /// `bad-assetlocktx-non-empty-return`
+  NonEmptyReturn { index: usize },
+  /// `bad-assetlocktx-opreturn-outofrange`
+  ReturnOutOfRange { index: usize },
+  /// `bad-assetlocktx-multiple-return`
+  MultipleReturn { index: usize },
+  /// `bad-assetlocktx-no-return`
+  NoReturn,
+  /// `bad-assetlocktx-creditamount`
+  CreditAmountMismatch { credited: u64, returned: u64 },
 }
 
 impl core::fmt::Display for AssetLockInvalid {
@@ -52,6 +62,16 @@ impl core::fmt::Display for AssetLockInvalid {
       Self::EmptyCreditOutputs => write!(f, "bad-assetlocktx-emptycreditoutputs"),
       Self::CreditOutOfRange { index } => write!(f, "bad-assetlocktx-credit-outofrange: output {index}"),
       Self::CreditNotP2pkh { index } => write!(f, "bad-assetlocktx-pubKeyHash: output {index}"),
+      Self::NonEmptyReturn { index } => write!(f, "bad-assetlocktx-non-empty-return: output {index}"),
+      Self::ReturnOutOfRange { index } => write!(f, "bad-assetlocktx-opreturn-outofrange: output {index}"),
+      Self::MultipleReturn { index } => write!(f, "bad-assetlocktx-multiple-return: output {index}"),
+      Self::NoReturn => write!(f, "bad-assetlocktx-no-return"),
+      Self::CreditAmountMismatch { credited, returned } => {
+        write!(
+          f,
+          "bad-assetlocktx-creditamount: {credited} credited, {returned} locked"
+        )
+      }
     }
   }
 }

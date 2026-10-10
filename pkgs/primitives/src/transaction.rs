@@ -8,7 +8,9 @@
 //! special transactions.
 
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
-use crate::payload::{AssetUnlockInvalid, PayloadError, PayloadInvalid, TxType, MAXIMUM_WITHDRAWALS};
+use crate::payload::{
+  AssetLockInvalid, AssetUnlockInvalid, PayloadError, PayloadInvalid, SpecialPayload, TxType, MAXIMUM_WITHDRAWALS,
+};
 use crate::prelude::*;
 use crate::{codec_type, hash_impl};
 
@@ -24,6 +26,9 @@ use core::fmt;
 
 /// Maximum extra payload size in bytes.
 pub const MAX_TX_EXTRA_PAYLOAD: usize = 10_000;
+
+/// Opcode that starts an unspendable output.
+const OP_RETURN: u8 = 0x6a;
 
 /// Maximum coinbase script size in bytes.
 pub const MAX_COINBASE_SCRIPT_SIZE: usize = 100;
@@ -326,6 +331,15 @@ impl Checkable for Transaction {
       }
     }
 
+    let locked = if self.has_extra_payload() && self.tx_type == TxType::AssetLock {
+      match self.asset_lock_return() {
+        Ok(amount) => Some(amount),
+        Err(e) => return Some(TxInvalid::PayloadCheck(PayloadInvalid::AssetLock(e))),
+      }
+    } else {
+      None
+    };
+
     if let Some(result) = self.decode_payload() {
       match result {
         Ok(ref payload) if payload.is_unknown() => {
@@ -334,6 +348,13 @@ impl Checkable for Transaction {
         Ok(payload) => {
           if let Some(e) = payload.check() {
             return Some(TxInvalid::PayloadCheck(e));
+          }
+          if let (SpecialPayload::AssetLock(lock), Some(returned)) = (&payload, locked) {
+            let credited = lock.credit_outputs.iter().map(|out| out.value.to_sat()).sum();
+            if credited != returned {
+              let e = AssetLockInvalid::CreditAmountMismatch { credited, returned };
+              return Some(TxInvalid::PayloadCheck(PayloadInvalid::AssetLock(e)));
+            }
           }
         }
         Err(e) => return Some(TxInvalid::PayloadDecode(e)),
@@ -391,6 +412,34 @@ impl Transaction {
     }))
   }
 
+  /// Returns the amount an asset lock burns in its one `OP_RETURN` output,
+  /// whose script must be `OP_RETURN OP_0`.
+  fn asset_lock_return(&self) -> Result<u64, AssetLockInvalid> {
+    let max_money = Amount::MAX_MONEY.to_sat();
+    let mut returned = 0;
+    for (index, output) in self.outputs.iter().enumerate() {
+      let script = output.script_pubkey.as_bytes();
+      if script.first() != Some(&OP_RETURN) {
+        continue;
+      }
+      if script != [OP_RETURN, 0x00] {
+        return Err(AssetLockInvalid::NonEmptyReturn { index });
+      }
+      let value = output.value.to_sat();
+      if value == 0 || value > max_money {
+        return Err(AssetLockInvalid::ReturnOutOfRange { index });
+      }
+      if returned > 0 {
+        return Err(AssetLockInvalid::MultipleReturn { index });
+      }
+      returned = value;
+    }
+    if returned == 0 {
+      return Err(AssetLockInvalid::NoReturn);
+    }
+    Ok(returned)
+  }
+
   /// Checks that an asset unlock spends nothing and pays few enough outputs.
   fn check_asset_unlock_shape(&self) -> Option<AssetUnlockInvalid> {
     if !self.inputs.is_empty() {
@@ -422,7 +471,7 @@ impl fmt::Display for Transaction {
 }
 
 #[cfg(all(test, feature = "serde"))]
-#[expect(clippy::unwrap_used, reason = "test code")]
+#[expect(clippy::panic, clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
 
@@ -564,6 +613,69 @@ mod tests {
       tx.check(),
       expected.map(|e| TxInvalid::PayloadCheck(PayloadInvalid::AssetUnlock(e)))
     );
+  }
+
+  fn corpus_asset_lock() -> Transaction {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetlock");
+    let mut raws = Vec::new();
+    corpus.entries::<crate::AssetLock>("assetlock", |raw, _, _| raws.push(raw.to_vec()));
+    Transaction::decode(&mut raws[0].as_slice()).unwrap()
+  }
+
+  fn return_index(tx: &Transaction) -> usize {
+    tx.outputs
+      .iter()
+      .position(|out| out.script_pubkey.as_bytes() == [0x6a, 0x00])
+      .unwrap()
+  }
+
+  #[rstest]
+  #[case::non_empty_return(|tx: &mut Transaction, i: usize| tx.outputs[i].script_pubkey = ScriptPubKeyBuf::from_bytes(vec![0x6a, 0x01]), AssetLockInvalid::NonEmptyReturn { index: 0 })]
+  #[case::zero_return(|tx: &mut Transaction, i: usize| tx.outputs[i].value = Amount::ZERO, AssetLockInvalid::ReturnOutOfRange { index: 0 })]
+  #[case::multiple_return(|tx: &mut Transaction, i: usize| { let out = tx.outputs[i].clone(); tx.outputs.push(out) }, AssetLockInvalid::MultipleReturn { index: 0 })]
+  #[case::no_return(|tx: &mut Transaction, i: usize| { tx.outputs.remove(i); }, AssetLockInvalid::NoReturn)]
+  #[case::credit_amount(|tx: &mut Transaction, i: usize| tx.outputs[i].value = Amount::from_sat(tx.outputs[i].value.to_sat() + 1).unwrap(), AssetLockInvalid::CreditAmountMismatch { credited: 0, returned: 0 })]
+  fn asset_lock_burns_its_credit_in_one_return(
+    #[case] edit: fn(&mut Transaction, usize),
+    #[case] fault: AssetLockInvalid,
+  ) {
+    let mut tx = corpus_asset_lock();
+    assert_eq!(tx.check(), None);
+    let index = return_index(&tx);
+    edit(&mut tx, index);
+    let Some(TxInvalid::PayloadCheck(PayloadInvalid::AssetLock(found))) = tx.check() else {
+      panic!("{:?}", tx.check());
+    };
+    assert_eq!(core::mem::discriminant(&found), core::mem::discriminant(&fault));
+  }
+
+  #[rstest]
+  fn asset_lock_reasons_match_the_reference() {
+    let reasons = [
+      (
+        AssetLockInvalid::NonEmptyReturn { index: 1 },
+        "bad-assetlocktx-non-empty-return",
+      ),
+      (
+        AssetLockInvalid::ReturnOutOfRange { index: 1 },
+        "bad-assetlocktx-opreturn-outofrange",
+      ),
+      (
+        AssetLockInvalid::MultipleReturn { index: 1 },
+        "bad-assetlocktx-multiple-return",
+      ),
+      (AssetLockInvalid::NoReturn, "bad-assetlocktx-no-return"),
+      (
+        AssetLockInvalid::CreditAmountMismatch {
+          credited: 1,
+          returned: 2,
+        },
+        "bad-assetlocktx-creditamount",
+      ),
+    ];
+    for (error, reason) in reasons {
+      assert!(error.to_string().starts_with(reason), "{error}");
+    }
   }
 
   #[rstest]
