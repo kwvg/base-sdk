@@ -14,7 +14,7 @@ use crate::{P2pDecodeError, ProtocolVersion};
 use dash_pkc::bls::{BlsScIetf, BlsSigBytes, BLS_PK_LEN};
 use dash_primitives::{
   hash_impl, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MnType, NetInfo, NetInfoV1, NetInfoV2,
-  PlatformNodeId, Transaction, TxHash, PROTX_VERSION_EXT_ADDR,
+  PartialMerkleTree, PlatformNodeId, Transaction, TxHash, PROTX_VERSION_EXT_ADDR,
 };
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
@@ -87,13 +87,8 @@ pub struct MnListDiffPayload {
   pub base_block_hash: BlockHash,
   /// Target block hash (end of the diff range).
   pub block_hash: BlockHash,
-  /// Number of transactions in the coinbase merkle proof.
-  pub total_transactions: u32,
-  /// Merkle branch hashes.
-  pub merkle_hashes: Vec<TxHash>,
-  /// Merkle branch flag bytes.
-  #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex"))]
-  pub merkle_flags: Vec<u8>,
+  /// Proof of the coinbase transaction against the target block.
+  pub cb_tx_merkle_tree: PartialMerkleTree,
   /// Coinbase transaction (carries the MN list commitment).
   pub cb_tx: Transaction,
   /// ProTxHashes of removed masternodes.
@@ -136,9 +131,7 @@ impl MnListDiffPayload {
     }
     let base_block_hash = BlockHash::decode(data)?;
     let block_hash = BlockHash::decode(data)?;
-    let total_transactions = u32::decode(data)?;
-    let merkle_hashes = Vec::decode(data)?;
-    let merkle_flags = Vec::decode(data)?;
+    let cb_tx_merkle_tree = PartialMerkleTree::decode(data)?;
     let cb_tx = Transaction::decode(data)?;
     if (ProtocolVersion::BLS_SCHEME..ProtocolVersion::MNLISTDIFF_VERSION_ORDER).contains(&version) {
       diff_version = u16::decode(data)?;
@@ -159,9 +152,7 @@ impl MnListDiffPayload {
       version: diff_version,
       base_block_hash,
       block_hash,
-      total_transactions,
-      merkle_hashes,
-      merkle_flags,
+      cb_tx_merkle_tree,
       cb_tx,
       deleted_mns,
       mn_list,
@@ -179,9 +170,7 @@ impl MnListDiffPayload {
     }
     self.base_block_hash.encode(buf);
     self.block_hash.encode(buf);
-    self.total_transactions.encode(buf);
-    self.merkle_hashes.encode(buf);
-    self.merkle_flags.encode(buf);
+    self.cb_tx_merkle_tree.encode(buf);
     self.cb_tx.encode(buf);
     if (ProtocolVersion::BLS_SCHEME..ProtocolVersion::MNLISTDIFF_VERSION_ORDER).contains(&version) {
       self.version.encode(buf);
@@ -468,7 +457,9 @@ mod tests {
   use crate::{CommandString, P2pMsg};
 
   use dash_dev::{assert_serde_rt, check_wire, json_rejects, Corpus};
+  use dash_num::Hash256;
   use dash_primitives::{AddrV2, NIEntry, NIPurpose, ServiceV2};
+  use dash_types::Hashable;
   use hex_conservative::decode_to_vec;
   use rstest::rstest;
 
@@ -522,9 +513,7 @@ mod tests {
     for part in [
       enc(&diff.base_block_hash),
       enc(&diff.block_hash),
-      enc(&diff.total_transactions),
-      enc(&diff.merkle_hashes),
-      enc(&diff.merkle_flags),
+      enc(&diff.cb_tx_merkle_tree),
       enc(&diff.cb_tx),
     ] {
       out.extend(part);
@@ -626,6 +615,15 @@ mod tests {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "mnlistdiff");
     let items = corpus.entries::<MnListDiffPayload>("mnlistdiff", check_wire);
     assert_serde_rt("mnlistdiff", &items);
+  }
+
+  /// The coinbase merkle tree proves the coinbase transaction at position 0.
+  #[rstest]
+  fn cb_tx_merkle_tree_matches_the_coinbase() {
+    let diff = corpus_diff();
+    let cb_tx = Hash256::from_lendian(*diff.cb_tx.hash().as_bytes());
+    let matched = diff.cb_tx_merkle_tree.extract_matches().map(|matches| matches.matched);
+    assert_eq!(matched, Ok(vec![(0, cb_tx)]));
   }
 
   #[rstest]

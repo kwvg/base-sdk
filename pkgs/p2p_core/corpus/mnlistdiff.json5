@@ -7,15 +7,17 @@
         "version": 1,
         "baseBlockHash": "0000000000000012c182df37d82de1ca02a9a18162af8cf50f6cb6f17bd2ccaa",
         "blockHash": "000000000000001571c885183cffca87096388f24eb8452f6f22b202b20226c8",
-        "totalTransactions": 10,
-        "merkleHashes": [
-          "353de007b1de9ebb527ab2a81677025e9bef575ad5a95d1a786370da9b2b2b6e",
-          "740fe7bf99c1f60828188177c302bb0a6a2ba667955384a6f900f77e9ffd2dec",
-          "ee20989cefb0f936cd55626f42813e7bc220b109543d7333aed9da59604d87c3",
-          "da1f39344aca139dc23b0ccd339a7b4a3008ec00f63a0f8a7af15fa209c01185",
-          "2af06bf79b0250d9ef8489ac337bb0dd0ab9c162295e5337369457126118c5ad"
-        ],
-        "merkleFlags": "1f00",
+        "cbTxMerkleTree": {
+          "transactions": 10,
+          "hashes": [
+            "353de007b1de9ebb527ab2a81677025e9bef575ad5a95d1a786370da9b2b2b6e",
+            "740fe7bf99c1f60828188177c302bb0a6a2ba667955384a6f900f77e9ffd2dec",
+            "ee20989cefb0f936cd55626f42813e7bc220b109543d7333aed9da59604d87c3",
+            "da1f39344aca139dc23b0ccd339a7b4a3008ec00f63a0f8a7af15fa209c01185",
+            "2af06bf79b0250d9ef8489ac337bb0dd0ab9c162295e5337369457126118c5ad"
+          ],
+          "flags": "1f00"
+        },
         "cbTx": {
           "version": 3,
           "txType": 5,
