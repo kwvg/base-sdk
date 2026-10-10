@@ -36,28 +36,24 @@ define_p2p! {
   parsed {
     /// Protocol version exchange.
     Version(Version) => VERSION "version",
-    /// Keepalive request.
-    Ping(Ping) => PING "ping" @ 18,
-    /// Keepalive response.
-    Pong(Pong) => PONG "pong" @ 19,
     /// V1 address list.
     Addr(Addr) => ADDR "addr" @ 1,
-    /// BIP155 V2 address list.
-    AddrV2(AddrV2Msg) => ADDRV2 "addrv2" @ 28,
-    /// Inventory announcement.
-    Inv(Inv) => INV "inv" @ 14,
     /// Request specific inventory.
     GetData(GetData) => GETDATA "getdata" @ 11,
-    /// Inventory not found.
-    NotFound(NotFound) => NOTFOUND "notfound" @ 17,
     /// Request block headers.
     GetHeaders(GetHeaders) => GETHEADERS "getheaders" @ 12,
     /// Block headers.
     Headers(Headers) => HEADERS "headers" @ 13,
-    /// Request compressed block headers.
-    GetHeaders2(GetHeaders2) => GETHEADERS2 "getheaders2" @ 163,
-    /// Compressed block headers.
-    Headers2(Headers2) => HEADERS2 "headers2" @ 165,
+    /// Inventory announcement.
+    Inv(Inv) => INV "inv" @ 14,
+    /// Inventory not found.
+    NotFound(NotFound) => NOTFOUND "notfound" @ 17,
+    /// Keepalive request.
+    Ping(Ping) => PING "ping" @ 18,
+    /// Keepalive response.
+    Pong(Pong) => PONG "pong" @ 19,
+    /// BIP155 V2 address list.
+    AddrV2(AddrV2Msg) => ADDRV2 "addrv2" @ 28,
     /// Governance sync request.
     GovSync(GovSync) => GOVSYNC "govsync" @ 140,
     /// Governance object.
@@ -68,22 +64,28 @@ define_p2p! {
     GetMnListDiff(GetMnListDiff) => GETMNLISTD "getmnlistd" @ 143,
     /// MN list diff.
     MnListDiff(MnListDiff) => MNLISTDIFF "mnlistdiff" @ 144,
+    /// Request compressed block headers.
+    GetHeaders2(GetHeaders2) => GETHEADERS2 "getheaders2" @ 163,
+    /// Compressed block headers.
+    Headers2(Headers2) => HEADERS2 "headers2" @ 165,
   }
 
   parsed_empty {
-    /// Version acknowledgement.
-    Verack => VERACK "verack",
     /// Request peer addresses.
     GetAddr => GETADDR "getaddr",
     /// Signal addrv2 support.
     SendAddrV2 => SENDADDRV2 "sendaddrv2",
     /// Prefer unsolicited header announcements.
     SendHeaders => SENDHEADERS "sendheaders",
+    /// Version acknowledgement.
+    Verack => VERACK "verack",
     /// Prefer compressed header announcements.
     SendHeaders2 => SENDHEADERS2 "sendheaders2" @ 164,
   }
 
   stub {
+    /// BIP330: transaction reconciliation.
+    SendTxRcncl => SENDTXRCNCL "sendtxrcncl",
     /// Block data.
     Block => BLOCK "block" @ 2,
     /// BIP152: compact block transactions.
@@ -116,8 +118,6 @@ define_p2p! {
     GetCFCheckpt => GETCFCHECKPT "getcfcheckpt" @ 26,
     /// Compact filter checkpoints.
     CFCheckpt => CFCHECKPT "cfcheckpt" @ 27,
-    /// BIP330: transaction reconciliation.
-    SendTxRcncl => SENDTXRCNCL "sendtxrcncl",
     /// Spork broadcast/request.
     Spork => SPORK "spork" @ 128,
     /// CoinJoin: accept denomination.
