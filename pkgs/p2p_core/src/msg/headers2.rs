@@ -108,7 +108,7 @@ impl CompressionState {
     let prev_hash = if flags & FLAG_PREV_HASH != 0 {
       BlockHash::decode(sl)?
     } else {
-      self.prev_hash().unwrap_or_default()
+      self.prev_hash().ok_or_else(|| no_predecessor(FLAG_PREV_HASH))?
     };
 
     let merkle_root = MerkleRoot::decode(sl)?;
@@ -117,19 +117,21 @@ impl CompressionState {
       u32::decode(sl)?
     } else {
       let delta = i16::decode(sl)?;
-      match &self.prev_header {
-        Some(prev) => (prev.time as i64 + delta as i64) as u32,
-        None => delta as u32,
-      }
+      let prev = self
+        .prev_header
+        .as_ref()
+        .ok_or_else(|| no_predecessor(FLAG_TIMESTAMP_FULL))?;
+      (prev.time as i64 + delta as i64) as u32
     };
 
     let bits = if flags & FLAG_NBITS != 0 {
       u32::decode(sl)?
     } else {
-      match &self.prev_header {
-        Some(prev) => prev.bits,
-        None => 0,
-      }
+      self
+        .prev_header
+        .as_ref()
+        .ok_or_else(|| no_predecessor(FLAG_NBITS))?
+        .bits
     };
 
     let nonce = u32::decode(sl)?;
@@ -213,6 +215,14 @@ impl CompressionState {
     header.nonce.encode(buf);
     self.prev_block_hash = Some(header.hash());
     self.prev_header = Some(*header);
+  }
+}
+
+/// Error for a first header that omits the field behind `flag`.
+fn no_predecessor(flag: u8) -> DecodeError {
+  DecodeError::InvalidValue {
+    expected: vec![u64::from(flag)],
+    actual: 0,
   }
 }
 
@@ -318,6 +328,36 @@ mod tests {
     let mut wire = Vec::new();
     msg.encode(&mut wire);
     assert_eq!(Headers2::decode(&mut wire.as_slice()), Ok(msg));
+  }
+
+  #[rstest]
+  #[case::version(1, FLAG_PREV_HASH | FLAG_TIMESTAMP_FULL | FLAG_NBITS)]
+  #[case::prev_hash(0, FLAG_TIMESTAMP_FULL | FLAG_NBITS)]
+  #[case::time(0, FLAG_PREV_HASH | FLAG_NBITS)]
+  #[case::bits(0, FLAG_PREV_HASH | FLAG_TIMESTAMP_FULL)]
+  fn rejects_a_first_header_delta_coded(#[case] version_offset: u8, #[case] full: u8) {
+    let first = header_at(BlockHash::default(), 1_000);
+    let mut wire = vec![1, version_offset | full];
+    if version_offset == 0 {
+      first.version.encode(&mut wire);
+    }
+    if full & FLAG_PREV_HASH != 0 {
+      first.prev_hash.encode(&mut wire);
+    }
+    first.merkle_root.encode(&mut wire);
+    if full & FLAG_TIMESTAMP_FULL != 0 {
+      first.time.encode(&mut wire);
+    } else {
+      0i16.encode(&mut wire);
+    }
+    if full & FLAG_NBITS != 0 {
+      first.bits.encode(&mut wire);
+    }
+    first.nonce.encode(&mut wire);
+    assert!(matches!(
+      Headers2::decode(&mut wire.as_slice()),
+      Err(DecodeError::InvalidValue { .. })
+    ));
   }
 
   #[rstest]
