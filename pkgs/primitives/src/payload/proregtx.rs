@@ -6,7 +6,9 @@
 
 //! ProRegTx registration payload (type 1).
 
-use super::protx::{decode_u8_list, encode_u8_count, encode_u8_list, MAX_U8_LIST_LEN};
+use super::protx::{
+  check_payout_list, decode_u8_list, encode_u8_count, encode_u8_list, legacy_payout_list, MAX_U8_LIST_LEN,
+};
 use super::{
   check_sptx_netinfo, decode_version, encode_net_info, payload_hash, CollateralShare, CompactSignature, InputsHash,
   MasternodePayoutShare, MnType, NetInfoForm, ProTxInvalid, MAX_OPERATOR_REWARD, PROTX_VERSION_BASIC_BLS,
@@ -21,7 +23,7 @@ use crate::TxHash;
 use bitcoin_primitives::script::ScriptPubKeyBuf;
 use dash_num::Hash256;
 use dash_pkc::bls::BLS_PK_LEN;
-use dash_script::{PubKeyHash, Recipient};
+use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Hashable;
@@ -226,12 +228,8 @@ impl Checkable for ProRegTx {
       return Some(ProTxInvalid::NullKey);
     }
 
-    let recipient =
-      (self.version < PROTX_VERSION_EXT_ADDR).then(|| Recipient::from_script(self.script_payout.as_bytes()));
-    if let Some(recipient) = &recipient {
-      if !matches!(recipient, Some(Recipient::PubKeyHash(_) | Recipient::ScriptHash(_))) {
-        return Some(ProTxInvalid::BadPayoutScript);
-      }
+    if let Some(e) = self.check_owner_payouts() {
+      return Some(e);
     }
 
     if let Some(e) = self.check_fields() {
@@ -250,12 +248,6 @@ impl Checkable for ProRegTx {
             return Some(e);
           }
         }
-      }
-    }
-
-    if let Some(Some(Recipient::PubKeyHash(hash))) = &recipient {
-      if *hash == self.key_id_owner || *hash == self.key_id_voting {
-        return Some(ProTxInvalid::PayoutKeyReuse);
       }
     }
 
@@ -455,6 +447,15 @@ impl ProRegTx {
       .map(|error| ProTxInvalid::NetInfoInvalid { error })
   }
 
+  fn check_owner_payouts(&self) -> Option<ProTxInvalid> {
+    let owner = Some(&self.key_id_owner);
+    if self.version >= PROTX_VERSION_EXT_ADDR {
+      check_payout_list(&self.payouts, owner, &self.key_id_voting)
+    } else {
+      check_payout_list(&legacy_payout_list(&self.script_payout), owner, &self.key_id_voting)
+    }
+  }
+
   fn check_fields(&self) -> Option<ProTxInvalid> {
     let is_extended = matches!(self.net_info, NetInfo::Extended(_));
     if is_extended != (self.version >= PROTX_VERSION_EXT_ADDR) {
@@ -554,7 +555,7 @@ impl fmt::Display for ProRegTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
-  use crate::types::{AddrV1, NIError};
+  use crate::types::{AddrV1, NIError, NIPurpose};
 
   use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
   use hex_conservative::hex;
@@ -932,6 +933,38 @@ mod tests {
     let item = corpus_item(2, MnType::Evo);
     let json = to_json(&item).replace("\"platformP2PPort\":", "\"platformP2PPort\":null,\"unused\":");
     assert!(json_rejects::<ProRegTx>(&json));
+  }
+
+  /// A payout that reuses the voting key fails ahead of an invalid service.
+  #[rstest]
+  #[case::v2(2)]
+  #[case::v3(3)]
+  fn owner_payouts_are_checked_before_net_info(#[case] version: u16) {
+    let voting = PubKeyHash::from_lendian([0xa2; 20]);
+    let mut script = hex!("76a914").to_vec();
+    script.extend([0xa2; 20]);
+    script.extend(hex!("88ac"));
+    let reuse = ScriptPubKeyBuf::from_bytes(script);
+    let mut item = corpus_item(version, MnType::Regular);
+    item.key_id_voting = voting;
+    if version >= PROTX_VERSION_EXT_ADDR {
+      item.payouts = vec![MasternodePayoutShare {
+        script_payout: reuse,
+        reward: MasternodePayoutShare::MAX_REWARD,
+      }];
+    } else {
+      item.script_payout = reuse;
+    }
+    assert_eq!(item.check(), Some(ProTxInvalid::PayoutKeyReuse));
+    item.net_info = match item.net_info {
+      NetInfo::Legacy(_) => NetInfo::Legacy(NetInfoV1(ServiceV1 {
+        addr: AddrV1(hex!("20010000000000000000000000000001")),
+        port: 9999,
+      })),
+      NetInfo::Extended(_) => NetInfo::Extended(NetInfoV2::new(vec![(NIPurpose::CoreP2p, vec![])])),
+    };
+    assert!(!item.net_info.is_empty());
+    assert_eq!(item.check(), Some(ProTxInvalid::PayoutKeyReuse));
   }
 
   #[rstest]

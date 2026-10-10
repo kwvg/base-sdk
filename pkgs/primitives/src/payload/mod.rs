@@ -163,6 +163,14 @@ pub enum ProTxInvalid {
   OperatorKeyMismatch,
   /// `bad-protx-payee`
   BadPayoutScript,
+  /// `bad-protx-payouts-count`
+  BadPayoutCount { count: usize },
+  /// `bad-protx-payout-reward`
+  BadPayoutReward { reward: u16 },
+  /// `bad-protx-payee-dup`
+  DuplicatePayoutScript,
+  /// `bad-protx-payout-reward-sum`
+  BadPayoutRewardSum { total: u32 },
   /// `bad-protx-netinfo-version`
   NetInfoVersionMismatch,
   /// `bad-protx-netinfo-empty`
@@ -214,6 +222,10 @@ impl fmt::Display for ProTxInvalid {
       Self::NullKey => write!(f, "bad-protx-key-null"),
       Self::OperatorKeyMismatch => write!(f, "bad-protx-operator-pubkey"),
       Self::BadPayoutScript => write!(f, "bad-protx-payee"),
+      Self::BadPayoutCount { count } => write!(f, "bad-protx-payouts-count: {count}"),
+      Self::BadPayoutReward { reward } => write!(f, "bad-protx-payout-reward: {reward}"),
+      Self::DuplicatePayoutScript => write!(f, "bad-protx-payee-dup"),
+      Self::BadPayoutRewardSum { total } => write!(f, "bad-protx-payout-reward-sum: {total}"),
       Self::NetInfoVersionMismatch => write!(f, "bad-protx-netinfo-version"),
       Self::NetInfoEmpty => write!(f, "bad-protx-netinfo-empty"),
       Self::NetInfoInvalid { error } => {

@@ -6,11 +6,12 @@
 
 //! Building blocks shared by the ProTx payloads.
 
+use super::ProTxInvalid;
 use crate::prelude::*;
 use crate::{codec_type, hash_impl};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
-use dash_script::PubKeyHash;
+use dash_script::{PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::{derive_bytes, impl_bytes};
@@ -57,6 +58,14 @@ pub struct MasternodePayoutShare {
 
 codec_type!(MasternodePayoutShare { script_payout, reward });
 
+impl MasternodePayoutShare {
+  /// Smallest share of the owner reward in basis points.
+  pub const MIN_REWARD: u16 = 100;
+
+  /// Whole owner reward in basis points.
+  pub const MAX_REWARD: u16 = 10_000;
+}
+
 /// One participant's contribution to a shared masternode collateral.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -82,6 +91,51 @@ codec_type!(CollateralShare {
   script_reward,
   key_id_owner
 });
+
+/// Most entries an owner payout list holds.
+const MAX_PAYOUTS: usize = 8;
+
+/// The single payout script of a version 1 or 2 payload as a payout list.
+pub(crate) fn legacy_payout_list(script_payout: &ScriptPubKeyBuf) -> [MasternodePayoutShare; 1] {
+  [MasternodePayoutShare {
+    script_payout: script_payout.clone(),
+    reward: MasternodePayoutShare::MAX_REWARD,
+  }]
+}
+
+/// Checks an owner payout list. A payout may pay neither `owner`, when
+/// given, nor `voting`.
+pub(crate) fn check_payout_list(
+  payouts: &[MasternodePayoutShare],
+  owner: Option<&PubKeyHash>,
+  voting: &PubKeyHash,
+) -> Option<ProTxInvalid> {
+  if payouts.is_empty() || payouts.len() > MAX_PAYOUTS {
+    return Some(ProTxInvalid::BadPayoutCount { count: payouts.len() });
+  }
+  let mut total = 0u32;
+  let mut scripts = BTreeSet::new();
+  for payout in payouts {
+    let reward = payout.reward;
+    if !(MasternodePayoutShare::MIN_REWARD..=MasternodePayoutShare::MAX_REWARD).contains(&reward) {
+      return Some(ProTxInvalid::BadPayoutReward { reward });
+    }
+    total += u32::from(reward);
+    let recipient = Recipient::from_script(payout.script_payout.as_bytes());
+    if !matches!(recipient, Some(Recipient::PubKeyHash(_) | Recipient::ScriptHash(_))) {
+      return Some(ProTxInvalid::BadPayoutScript);
+    }
+    if !scripts.insert(payout.script_payout.as_bytes()) {
+      return Some(ProTxInvalid::DuplicatePayoutScript);
+    }
+    if let Some(Recipient::PubKeyHash(hash)) = &recipient {
+      if Some(hash) == owner || hash == voting {
+        return Some(ProTxInvalid::PayoutKeyReuse);
+      }
+    }
+  }
+  (total != u32::from(MasternodePayoutShare::MAX_REWARD)).then_some(ProTxInvalid::BadPayoutRewardSum { total })
+}
 
 /// Most entries a list with a single-byte count holds.
 pub(crate) const MAX_U8_LIST_LEN: usize = u8::MAX as usize;
@@ -109,7 +163,8 @@ pub(crate) fn encode_u8_list<T: BaseCodec>(items: &[T], buf: &mut impl EncodeBuf
 
 #[cfg(test)]
 mod tests {
-  use super::{CollateralShare, CompactSignature, MasternodePayoutShare};
+  use super::{check_payout_list, CollateralShare, CompactSignature, MasternodePayoutShare};
+  use crate::payload::ProTxInvalid;
   use crate::prelude::*;
 
   use bitcoin_primitives::script::ScriptPubKeyBuf;
@@ -123,6 +178,75 @@ mod tests {
     let mut buf = Vec::new();
     item.encode(&mut buf);
     buf
+  }
+
+  fn p2pkh(byte: u8) -> ScriptPubKeyBuf {
+    let mut script = hex!("76a914").to_vec();
+    script.extend([byte; 20]);
+    script.extend(hex!("88ac"));
+    ScriptPubKeyBuf::from_bytes(script)
+  }
+
+  fn p2sh(byte: u8) -> ScriptPubKeyBuf {
+    let mut script = hex!("a914").to_vec();
+    script.extend([byte; 20]);
+    script.push(0x87);
+    ScriptPubKeyBuf::from_bytes(script)
+  }
+
+  fn payout(script_payout: ScriptPubKeyBuf, reward: u16) -> MasternodePayoutShare {
+    MasternodePayoutShare { script_payout, reward }
+  }
+
+  const OWNER: u8 = 0xa1;
+  const VOTING: u8 = 0xa2;
+
+  #[rstest]
+  #[case::one(vec![payout(p2pkh(1), 10_000)], None)]
+  #[case::p2sh(vec![payout(p2sh(1), 10_000)], None)]
+  #[case::eight((1..=8).map(|i| payout(p2pkh(i), 1250)).collect(), None)]
+  #[case::min_reward(vec![payout(p2pkh(1), 100), payout(p2pkh(2), 9900)], None)]
+  #[case::empty(vec![], Some(ProTxInvalid::BadPayoutCount { count: 0 }))]
+  #[case::nine((1..=9).map(|i| payout(p2pkh(i), 1000)).collect(), Some(ProTxInvalid::BadPayoutCount { count: 9 }))]
+  #[case::reward_below_min(vec![payout(p2pkh(1), 99), payout(p2pkh(2), 9901)], Some(ProTxInvalid::BadPayoutReward { reward: 99 }))]
+  #[case::reward_above_max(vec![payout(p2pkh(1), 10_001)], Some(ProTxInvalid::BadPayoutReward { reward: 10_001 }))]
+  #[case::bad_script(vec![payout(ScriptPubKeyBuf::from_bytes(vec![0x51]), 10_000)], Some(ProTxInvalid::BadPayoutScript))]
+  #[case::duplicate(vec![payout(p2pkh(1), 5000), payout(p2pkh(1), 5000)], Some(ProTxInvalid::DuplicatePayoutScript))]
+  #[case::owner(vec![payout(p2pkh(OWNER), 10_000)], Some(ProTxInvalid::PayoutKeyReuse))]
+  #[case::voting(vec![payout(p2pkh(VOTING), 10_000)], Some(ProTxInvalid::PayoutKeyReuse))]
+  #[case::sum_short(vec![payout(p2pkh(1), 5000), payout(p2pkh(2), 4999)], Some(ProTxInvalid::BadPayoutRewardSum { total: 9999 }))]
+  #[case::sum_over(vec![payout(p2pkh(1), 5000), payout(p2pkh(2), 5001)], Some(ProTxInvalid::BadPayoutRewardSum { total: 10_001 }))]
+  fn payout_list_rules(#[case] payouts: Vec<MasternodePayoutShare>, #[case] expected: Option<ProTxInvalid>) {
+    let owner = PubKeyHash::from_lendian([OWNER; 20]);
+    let voting = PubKeyHash::from_lendian([VOTING; 20]);
+    assert_eq!(check_payout_list(&payouts, Some(&owner), &voting), expected);
+  }
+
+  /// The entries are checked in order, ahead of the reward sum.
+  #[rstest]
+  fn payout_list_reports_the_first_failing_entry() {
+    let voting = PubKeyHash::from_lendian([VOTING; 20]);
+    let payouts = [payout(p2pkh(VOTING), 5000), payout(p2pkh(1), 50)];
+    assert_eq!(
+      check_payout_list(&payouts, None, &voting),
+      Some(ProTxInvalid::PayoutKeyReuse)
+    );
+  }
+
+  #[rstest]
+  fn payout_list_without_an_owner_may_pay_any_other_key() {
+    let voting = PubKeyHash::from_lendian([VOTING; 20]);
+    let payouts = [payout(p2pkh(OWNER), 10_000)];
+    assert_eq!(check_payout_list(&payouts, None, &voting), None);
+  }
+
+  #[rstest]
+  #[case::count(ProTxInvalid::BadPayoutCount { count: 9 }, "bad-protx-payouts-count: 9")]
+  #[case::reward(ProTxInvalid::BadPayoutReward { reward: 99 }, "bad-protx-payout-reward: 99")]
+  #[case::duplicate(ProTxInvalid::DuplicatePayoutScript, "bad-protx-payee-dup")]
+  #[case::sum(ProTxInvalid::BadPayoutRewardSum { total: 9999 }, "bad-protx-payout-reward-sum: 9999")]
+  fn payout_list_reasons(#[case] error: ProTxInvalid, #[case] reason: &str) {
+    assert_eq!(error.to_string(), reason);
   }
 
   #[rstest]

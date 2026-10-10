@@ -6,7 +6,7 @@
 
 //! ProUpRegTx registrar-update payload (type 3).
 
-use super::protx::{decode_u8_list, encode_u8_list, MAX_U8_LIST_LEN};
+use super::protx::{check_payout_list, decode_u8_list, encode_u8_list, legacy_payout_list, MAX_U8_LIST_LEN};
 use super::{decode_version, payload_hash, InputsHash, MasternodePayoutShare, ProTxInvalid, PROTX_VERSION_EXT_ADDR};
 use crate::codec::impl_payload;
 use crate::prelude::*;
@@ -16,7 +16,7 @@ use crate::TxHash;
 use bitcoin_primitives::script::ScriptPubKeyBuf;
 use dash_num::Hash256;
 use dash_pkc::bls::BLS_PK_LEN;
-use dash_script::{PubKeyHash, Recipient};
+use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Checkable;
@@ -106,17 +106,11 @@ impl Checkable for ProUpRegTx {
       return Some(ProTxInvalid::NullKey);
     }
 
-    let payout = self.script_payout.as_bytes();
-    if self.version < PROTX_VERSION_EXT_ADDR
-      && !matches!(
-        Recipient::from_script(payout),
-        Some(Recipient::PubKeyHash(_) | Recipient::ScriptHash(_))
-      )
-    {
-      return Some(ProTxInvalid::BadPayoutScript);
+    if self.version >= PROTX_VERSION_EXT_ADDR {
+      check_payout_list(&self.payouts, None, &self.key_id_voting)
+    } else {
+      check_payout_list(&legacy_payout_list(&self.script_payout), None, &self.key_id_voting)
     }
-
-    None
   }
 }
 
@@ -256,6 +250,7 @@ mod tests {
   use super::*;
 
   use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
+  use dash_types::Numeric;
   use rstest::rstest;
 
   fn corpus_items() -> BTreeMap<String, ProUpRegTx> {
@@ -378,6 +373,26 @@ mod tests {
     for (label, item) in corpus_items().into_iter().filter(|(_, item)| item.version == 3) {
       let json = to_json(&item).replace("\"scriptPayout\":\"\"", "\"scriptPayout\":\"51\"");
       assert!(json_rejects::<ProUpRegTx>(&json), "{label}");
+    }
+  }
+
+  /// An update carries no owner key, so only the voting key is guarded.
+  #[rstest]
+  fn payouts_may_not_pay_the_voting_key() {
+    for (label, mut item) in corpus_items() {
+      let mut script = vec![0x76, 0xa9, 0x14];
+      script.extend(item.key_id_voting.to_lendian());
+      script.extend([0x88, 0xac]);
+      let payout = MasternodePayoutShare {
+        script_payout: ScriptPubKeyBuf::from_bytes(script),
+        reward: MasternodePayoutShare::MAX_REWARD,
+      };
+      if item.version >= PROTX_VERSION_EXT_ADDR {
+        item.payouts = vec![payout];
+      } else {
+        item.script_payout = payout.script_payout;
+      }
+      assert_eq!(item.check(), Some(ProTxInvalid::PayoutKeyReuse), "{label}");
     }
   }
 
