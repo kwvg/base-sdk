@@ -7,10 +7,12 @@
 //! P2P message types and dispatch.
 
 mod addr;
+mod coinjoin;
 mod gov;
 mod headers;
 mod headers2;
 mod inv;
+mod llmq;
 mod mn_list;
 mod ping;
 mod version;
@@ -24,10 +26,12 @@ use dash_primitives::{GovObject, GovVote};
 use dash_types::type_id::Unencodable;
 
 pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
+pub use coinjoin::SendDsq;
 pub use gov::GovSync;
 pub use headers::{GetHeaders, Headers};
 pub use headers2::{CompressionState, GetHeaders2, Headers2};
 pub use inv::{GetData, Inv, InvType, Inventory, NotFound};
+pub use llmq::QSendRecSigs;
 pub use mn_list::{DeletedQuorum, GetMnListDiff, MnListDiff, MnListDiffPayload, QuorumClSig, SimplifiedMnListEntry};
 pub use ping::{Ping, Pong};
 pub use version::{ServiceFlags, UserAgent, UserAgentTooLong, Version, VersionAddr};
@@ -54,6 +58,8 @@ define_p2p! {
     Pong(Pong) => PONG "pong" @ 19,
     /// BIP155 V2 address list.
     AddrV2(AddrV2Msg) => ADDRV2 "addrv2" @ 28,
+    /// Signal CoinJoin queue relay.
+    SendDsq(SendDsq) => SENDDSQ "senddsq" @ 130,
     /// Governance sync request.
     GovSync(GovSync) => GOVSYNC "govsync" @ 140,
     /// Governance object.
@@ -64,6 +70,8 @@ define_p2p! {
     GetMnListDiff(GetMnListDiff) => GETMNLISTD "getmnlistd" @ 143,
     /// MN list diff.
     MnListDiff(MnListDiff) => MNLISTDIFF "mnlistdiff" @ 144,
+    /// LLMQ: send recovered signatures.
+    QSendRecSigs(QSendRecSigs) => QSENDRECSIGS "qsendrecsigs" @ 145,
     /// Request compressed block headers.
     GetHeaders2(GetHeaders2) => GETHEADERS2 "getheaders2" @ 163,
     /// Compressed block headers.
@@ -186,12 +194,7 @@ define_p2p! {
     PlatformBan => PLATFORMBAN "platformban" @ 168,
   }
 
-  stub_empty {
-    /// Signal CoinJoin queue relay.
-    SendDsq => SENDDSQ "senddsq" @ 130,
-    /// LLMQ: send recovered signatures.
-    QSendRecSigs => QSENDRECSIGS "qsendrecsigs" @ 145,
-  }
+  stub_empty {}
 }
 
 #[cfg(test)]
