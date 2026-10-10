@@ -43,8 +43,8 @@ pub use chainlock::ChainLockSig;
 pub use codec::MAX_SPTX_PAYLOAD_SIZE;
 pub use deployment::{Activation, Deployments};
 pub use gov::{
-  GovData, GovObject, GovObjectType, GovVote, GovVoteInvalid, Proposal, ProposalInvalid, Trigger, VoteOutcome,
-  VoteSignal, MAX_PROPOSAL_DATA_SIZE,
+  GovData, GovObject, GovObjectType, GovVote, GovVoteInvalid, Proposal, ProposalInvalid, SuperblockPayment, Trigger,
+  TriggerInvalid, VoteOutcome, VoteSignal, MAX_PROPOSAL_DATA_SIZE,
 };
 pub use instantsend::{InstantSendLock, InstantSendLockInvalid, MAX_ISLOCK_INPUTS};
 pub use merkle::{

@@ -43,6 +43,12 @@ const PROPOSAL_TYPE: i64 = 1;
 #[cfg(feature = "serde")]
 const TRIGGER_TYPE: i64 = 2;
 
+/// Longest payment amount a trigger may list, in characters.
+const MAX_PAYMENT_AMOUNT_LEN: usize = 20;
+
+/// Decimal places of a coin amount.
+const COIN_DECIMALS: usize = 8;
+
 /// Allowed characters in governance proposal names.
 const PROPOSAL_NAME_CHARS: &[u8] = b"-_abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -162,6 +168,103 @@ impl From<Trigger> for __TriggerFields {
       object_type: TRIGGER_TYPE,
     }
   }
+}
+
+/// One payment of a superblock schedule.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub struct SuperblockPayment {
+  /// Recipient of the payment.
+  pub recipient: Recipient,
+  /// Amount paid.
+  pub amount: Amount,
+  /// Hash of the proposal the payment funds.
+  pub proposal_hash: Hash256,
+}
+
+/// Trigger payment schedule failure.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub enum TriggerInvalid {
+  /// The address, amount and proposal hash lists differ in length.
+  MismatchedPayments,
+  /// The address of a payment is not a P2PKH or P2SH address of the network.
+  BadAddress { index: usize },
+  /// The amount of a payment is not a decimal number of coins in the money
+  /// range.
+  BadAmount { index: usize },
+  /// The proposal hash of a payment is not 64 hex digits.
+  BadProposalHash { index: usize },
+}
+
+impl fmt::Display for TriggerInvalid {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::MismatchedPayments => write!(f, "mismatched payments, amounts and proposal hashes"),
+      Self::BadAddress { index } => write!(f, "invalid address of payment {index}"),
+      Self::BadAmount { index } => write!(f, "invalid amount of payment {index}"),
+      Self::BadProposalHash { index } => write!(f, "invalid proposal hash of payment {index}"),
+    }
+  }
+}
+
+impl Trigger {
+  /// Payments the superblock at [`Trigger::event_block_height`] makes, in
+  /// list order, for the network `params` describes.
+  ///
+  /// # Errors
+  ///
+  /// Returns a [`TriggerInvalid`] for the first list or payment that does not
+  /// parse.
+  pub fn payments(&self, params: &AddrParams) -> Result<Vec<SuperblockPayment>, TriggerInvalid> {
+    let addresses: Vec<_> = self.payment_addresses.split('|').collect();
+    let amounts: Vec<_> = self.payment_amounts.split('|').collect();
+    let hashes: Vec<_> = self.proposal_hashes.split('|').collect();
+    if addresses.len() != amounts.len() || addresses.len() != hashes.len() {
+      return Err(TriggerInvalid::MismatchedPayments);
+    }
+    let payments = addresses.iter().zip(&amounts).zip(&hashes);
+    payments
+      .enumerate()
+      .map(|(index, ((address, amount), hash))| {
+        Ok(SuperblockPayment {
+          recipient: Recipient::from_base58c(address, params).ok_or(TriggerInvalid::BadAddress { index })?,
+          amount: parse_payment_amount(amount).ok_or(TriggerInvalid::BadAmount { index })?,
+          proposal_hash: parse_proposal_hash(hash).ok_or(TriggerInvalid::BadProposalHash { index })?,
+        })
+      })
+      .collect()
+  }
+}
+
+/// Parses a payment amount of at most [`MAX_PAYMENT_AMOUNT_LEN`] characters,
+/// written as a decimal number of coins without sign, exponent or leading
+/// zeros. Digits past the eighth decimal must be zeros.
+fn parse_payment_amount(text: &str) -> Option<Amount> {
+  if text.len() > MAX_PAYMENT_AMOUNT_LEN {
+    return None;
+  }
+  let (whole, fraction) = text.split_once('.').unwrap_or((text, "0"));
+  let is_digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+  if !is_digits(whole) || !is_digits(fraction) || (whole.len() > 1 && whole.starts_with('0')) {
+    return None;
+  }
+  let (decimals, rest) = fraction.split_at(fraction.len().min(COIN_DECIMALS));
+  if rest.bytes().any(|b| b != b'0') {
+    return None;
+  }
+  let scale = 10u64.pow((COIN_DECIMALS - decimals.len()) as u32);
+  let duffs = whole
+    .parse::<u64>()
+    .ok()?
+    .checked_mul(Amount::ONE_BTC.to_sat())?
+    .checked_add(decimals.parse::<u64>().ok()? * scale)?;
+  Amount::from_sat(duffs).ok()
+}
+
+/// Parses a proposal hash written as exactly 64 hex digits.
+fn parse_proposal_hash(text: &str) -> Option<Hash256> {
+  (text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit()))
+    .then(|| Hash256::from_hex(text).ok())
+    .flatten()
 }
 
 /// Decoded governance object data payload.
@@ -734,6 +837,117 @@ mod tests {
   }
 
   #[rstest]
+  #[case::whole("200", Some(200 * 100_000_000))]
+  #[case::zero("0", Some(0))]
+  #[case::zero_fraction("0.5", Some(50_000_000))]
+  #[case::eight_decimals("1.23456789", Some(123_456_789))]
+  #[case::trailing_zero_decimals("1.234567890000", Some(123_456_789))]
+  #[case::ninth_decimal("1.000000001", None)]
+  #[case::max_money("21000000", Some(21_000_000 * 100_000_000))]
+  #[case::past_max_money("21000000.00000001", None)]
+  #[case::twenty_chars("1.000000000000000000", Some(100_000_000))]
+  #[case::twenty_one_chars("1.0000000000000000000", None)]
+  #[case::overflow("99999999999999999999", None)]
+  #[case::empty("", None)]
+  #[case::leading_point(".5", None)]
+  #[case::trailing_point("1.", None)]
+  #[case::two_points("1.2.3", None)]
+  #[case::leading_zero("01", None)]
+  #[case::double_zero("00", None)]
+  #[case::sign("-1", None)]
+  #[case::exponent("1e8", None)]
+  #[case::space(" 1", None)]
+  fn payment_amounts_are_fixed_point_coins(#[case] text: &str, #[case] duffs: Option<u64>) {
+    assert_eq!(parse_payment_amount(text).map(Amount::to_sat), duffs);
+  }
+
+  const HASH: &str = "df6e0fe06a5e388a46c903cdbde8702f6e7d1f9c08340a8d80755fb7e7865ae2";
+
+  #[rstest]
+  #[case::lower(HASH, true)]
+  #[case::upper("DF6E0FE06A5E388A46C903CDBDE8702F6E7D1F9C08340A8D80755FB7E7865AE2", true)]
+  #[case::short(&HASH[1..], false)]
+  #[case::prefixed("0xdf6e0fe06a5e388a46c903cdbde8702f6e7d1f9c08340a8d80755fb7e7865a", false)]
+  #[case::leading_space(" f6e0fe06a5e388a46c903cdbde8702f6e7d1f9c08340a8d80755fb7e7865ae2", false)]
+  #[case::non_hex("gf6e0fe06a5e388a46c903cdbde8702f6e7d1f9c08340a8d80755fb7e7865ae2", false)]
+  fn proposal_hashes_are_64_hex_digits(#[case] text: &str, #[case] ok: bool) {
+    let parsed = parse_proposal_hash(text);
+    assert_eq!(parsed.is_some(), ok);
+    if ok {
+      assert_eq!(parsed, Hash256::from_hex(HASH).ok());
+    }
+  }
+
+  fn trigger_with(addresses: &str, amounts: &str, hashes: &str) -> Trigger {
+    Trigger {
+      event_block_height: 160,
+      payment_addresses: String::from(addresses),
+      payment_amounts: String::from(amounts),
+      proposal_hashes: String::from(hashes),
+    }
+  }
+
+  const ADDRESS: &str = "XgNfgrEB9n6uCY9Pi1hb2foimxPdtiZ4Z2";
+
+  #[rstest]
+  #[case::fewer_amounts(&format!("{ADDRESS}|{ADDRESS}"), "1", &format!("{HASH}|{HASH}"))]
+  #[case::fewer_hashes(&format!("{ADDRESS}|{ADDRESS}"), "1|2", HASH)]
+  #[case::fewer_addresses(ADDRESS, "1|2", &format!("{HASH}|{HASH}"))]
+  fn payment_lists_must_match_in_length(#[case] addresses: &str, #[case] amounts: &str, #[case] hashes: &str) {
+    let trigger = trigger_with(addresses, amounts, hashes);
+    assert_eq!(trigger.payments(&MAINNET), Err(TriggerInvalid::MismatchedPayments));
+  }
+
+  #[rstest]
+  #[case::address(&format!("{ADDRESS}|yZLYHtcDsBM5VRMuBZf3QPFNf5YLHUkVbP"), "1|2", TriggerInvalid::BadAddress { index: 1 })]
+  #[case::empty_address("", "1", TriggerInvalid::BadAddress { index: 0 })]
+  #[case::amount(&format!("{ADDRESS}|{ADDRESS}"), "1|2.", TriggerInvalid::BadAmount { index: 1 })]
+  fn bad_payment_fails_the_schedule(#[case] addresses: &str, #[case] amounts: &str, #[case] expected: TriggerInvalid) {
+    let count = amounts.split('|').count();
+    let hashes = vec![HASH; count].join("|");
+    assert_eq!(
+      trigger_with(addresses, amounts, &hashes).payments(&MAINNET),
+      Err(expected)
+    );
+  }
+
+  #[rstest]
+  fn bad_proposal_hash_fails_the_schedule() {
+    let trigger = trigger_with(ADDRESS, "1", &HASH[1..]);
+    assert_eq!(
+      trigger.payments(&MAINNET),
+      Err(TriggerInvalid::BadProposalHash { index: 0 })
+    );
+  }
+
+  #[rstest]
+  fn corpus_trigger_pays_its_schedule() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "triggers");
+    let mut raws = Vec::new();
+    corpus.entries::<Value>("triggers", |raw, _, _| raws.push(raw.to_vec()));
+    let obj = GovObject::decode(&mut raws[0].as_slice()).unwrap();
+    let trigger: Trigger = from_json_slice(&obj.data);
+    let payments = trigger.payments(&TESTNET).unwrap();
+    let amounts: Vec<_> = payments.iter().map(|payment| payment.amount.to_sat()).collect();
+    assert_eq!(amounts, [220_000_000, 110_000_000, 330_000_000]);
+    let hashes: Vec<_> = trigger
+      .proposal_hashes
+      .split('|')
+      .map(|hash| Hash256::from_hex(hash).unwrap())
+      .collect();
+    let proposal_hashes: Vec<_> = payments.iter().map(|payment| payment.proposal_hash).collect();
+    assert_eq!(proposal_hashes, hashes);
+    let recipients: Vec<_> = trigger
+      .payment_addresses
+      .split('|')
+      .map(|address| Recipient::from_base58c(address, &TESTNET).unwrap())
+      .collect();
+    let payees: Vec<_> = payments.into_iter().map(|payment| payment.recipient).collect();
+    assert_eq!(payees, recipients);
+    assert!(trigger.payments(&MAINNET).is_err());
+  }
+
+  #[rstest]
   fn zero_payment_amount_fails_the_check() {
     let proposal: Proposal = from_json(&proposal_json("0"));
     assert_eq!(proposal.check(), Some(ProposalInvalid::BadPaymentAmount));
@@ -888,6 +1102,8 @@ mod tests {
           assert_eq!(fields.get(key), Some(value), "{label}: {key}");
         }
         assert_eq!(parsed.len(), 5, "{label}");
+        let payments = trigger.payments(&MAINNET).or_else(|_| trigger.payments(&TESTNET));
+        assert!(payments.is_ok(), "{label}: payments");
       }
 
       let mut encoded = Vec::new();
