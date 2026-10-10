@@ -14,9 +14,9 @@ use bitcoin_hashes::sha256d;
 use bitcoin_units::Amount;
 use dash_num::Hash256;
 use dash_script::{AddrParams, Recipient};
-use dash_types::codec::BaseCodec;
+use dash_types::codec::{self, BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
-use dash_types::{enum_map, impl_num, ArrayBuf, Checkable, Hashable, Numeric};
+use dash_types::{enum_map, impl_num, impl_type, ArrayBuf, Checkable, Hashable, Numeric};
 use hex_conservative::DisplayHex;
 
 use core::fmt;
@@ -29,6 +29,12 @@ const MIN_URL_LEN: usize = 4;
 
 /// Largest data a proposal object may carry, in bytes.
 pub const MAX_PROPOSAL_DATA_SIZE: usize = 512;
+
+/// Length of a compact ECDSA vote signature.
+const VOTE_COMPACT_SIG_SIZE: usize = 65;
+
+/// Length of a BLS vote signature.
+const VOTE_BLS_SIG_SIZE: usize = 96;
 
 /// Object type a proposal declares in its data.
 const PROPOSAL_TYPE: i64 = 1;
@@ -272,19 +278,47 @@ pub struct GovVote {
   pub signal: VoteSignal,
   /// Vote timestamp.
   pub time: i64,
-  /// Signature bytes.
+  /// Signature bytes. Decoding rejects a signature that is neither 65 nor 96
+  /// bytes.
   #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex"))]
   pub sig: Vec<u8>,
 }
 
-codec_base!(GovVote {
-  masternode_outpoint,
-  parent_hash,
-  outcome,
-  signal,
-  time,
-  sig,
-});
+impl BaseCodec for GovVote {
+  fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let masternode_outpoint = OutPoint::decode(data)?;
+    let parent_hash = TxHash::decode(data)?;
+    let outcome = VoteOutcome::decode(data)?;
+    let signal = VoteSignal::decode(data)?;
+    let time = i64::decode(data)?;
+    let sig = codec::read_bytes_limited(data, VOTE_BLS_SIG_SIZE)?;
+    if sig.len() != VOTE_COMPACT_SIG_SIZE && sig.len() != VOTE_BLS_SIG_SIZE {
+      return Err(DecodeError::BadLen {
+        expected: vec![VOTE_COMPACT_SIG_SIZE, VOTE_BLS_SIG_SIZE],
+        actual: sig.len(),
+      });
+    }
+    Ok(Self {
+      masternode_outpoint,
+      parent_hash,
+      outcome,
+      signal,
+      time,
+      sig: sig.to_vec(),
+    })
+  }
+
+  fn encode(&self, buf: &mut impl EncodeBuf) {
+    self.masternode_outpoint.encode(buf);
+    self.parent_hash.encode(buf);
+    self.outcome.encode(buf);
+    self.signal.encode(buf);
+    self.time.encode(buf);
+    self.sig.encode(buf);
+  }
+}
+
+impl_type!(GovVote);
 
 /// Governance vote validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
@@ -642,16 +676,45 @@ mod tests {
     #[case] outcome: u32,
     #[case] expected: Option<GovVoteInvalid>,
   ) {
-    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "govobjvote");
-    let mut vote = corpus
-      .entries::<GovVote>("govobjvote", |_, _, _| {})
-      .into_values()
-      .next()
-      .unwrap();
+    let mut vote = corpus_vote();
     assert_eq!(vote.check(), None);
     vote.signal = VoteSignal::from_base(signal);
     vote.outcome = VoteOutcome::from_base(outcome);
     assert_eq!(vote.check(), expected);
+  }
+
+  fn corpus_vote() -> GovVote {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "govobjvote");
+    corpus
+      .entries::<GovVote>("govobjvote", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap()
+  }
+
+  fn bad_len(len: usize) -> Result<(), DecodeError> {
+    Err(DecodeError::BadLen {
+      expected: vec![65, 96],
+      actual: len,
+    })
+  }
+
+  #[rstest]
+  #[case::empty(0, bad_len(0))]
+  #[case::short_compact(64, bad_len(64))]
+  #[case::compact(65, Ok(()))]
+  #[case::long_compact(66, bad_len(66))]
+  #[case::short_bls(95, bad_len(95))]
+  #[case::bls(96, Ok(()))]
+  #[case::past_bls(97, Err(DecodeError::CompactSizeExceedsLimit { limit: 96, value: 97 }))]
+  fn vote_signatures_decode_at_65_or_96_bytes(#[case] len: usize, #[case] expected: Result<(), DecodeError>) {
+    let vote = GovVote {
+      sig: vec![0xAB; len],
+      ..corpus_vote()
+    };
+    let mut wire = Vec::new();
+    vote.encode(&mut wire);
+    assert_eq!(GovVote::decode(&mut wire.as_slice()), expected.map(|()| vote));
   }
 
   #[rstest]
