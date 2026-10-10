@@ -23,6 +23,7 @@ use core::fmt;
 /// - v1: base fields (version, height, merkle_root_mn_list)
 /// - v2: adds merkle_root_quorums
 /// - v3: adds ChainLock proof and credit pool balance
+/// - v4: adds merkle_root_asset_unlocks
 ///
 /// The version-gated fields are private, so [`CoinbaseCommitment::new`]
 /// keeps them in step with the version.
@@ -39,6 +40,7 @@ pub struct CoinbaseCommitment {
   best_cl_height_diff: Option<u32>,
   best_cl_signature: Option<BlsSig>,
   credit_pool_balance: Option<i64>,
+  merkle_root_asset_unlocks: Option<MerkleRoot>,
 }
 
 impl_payload!(CoinbaseCommitment);
@@ -64,6 +66,11 @@ impl BaseCodec for CoinbaseCommitment {
     } else {
       (None, None, None)
     };
+    let merkle_root_asset_unlocks = if version >= 4 {
+      Some(MerkleRoot::decode(data)?)
+    } else {
+      None
+    };
 
     Ok(Self {
       version,
@@ -73,6 +80,7 @@ impl BaseCodec for CoinbaseCommitment {
       best_cl_height_diff,
       best_cl_signature,
       credit_pool_balance,
+      merkle_root_asset_unlocks,
     })
   }
 
@@ -91,6 +99,9 @@ impl BaseCodec for CoinbaseCommitment {
     }
     if let Some(balance) = self.credit_pool_balance {
       balance.encode(buf);
+    }
+    if let Some(root) = self.merkle_root_asset_unlocks {
+      root.encode(buf);
     }
   }
 }
@@ -123,7 +134,7 @@ impl Checkable for CoinbaseCommitment {
   type Error = CbTxInvalid;
 
   fn check(&self) -> Option<Self::Error> {
-    if self.version == 0 || self.version >= 4 {
+    if self.version == 0 || self.version >= 5 {
       return Some(CbTxInvalid::BadVersion { version: self.version });
     }
 
@@ -146,6 +157,7 @@ impl CoinbaseCommitment {
   ///
   /// Returns [`CbTxInvalid::MissingField`] or [`CbTxInvalid::UnexpectedField`]
   /// when a field does not match `version`.
+  #[expect(clippy::too_many_arguments, reason = "one argument per payload field")]
   pub fn new(
     version: u16,
     height: BlockHeight,
@@ -154,6 +166,7 @@ impl CoinbaseCommitment {
     best_cl_height_diff: Option<u32>,
     best_cl_signature: Option<[u8; BLS_SIG_LEN]>,
     credit_pool_balance: Option<i64>,
+    merkle_root_asset_unlocks: Option<MerkleRoot>,
   ) -> Result<Self, CbTxInvalid> {
     let cbtx = Self {
       version,
@@ -163,6 +176,7 @@ impl CoinbaseCommitment {
       best_cl_height_diff,
       best_cl_signature: best_cl_signature.map(|sig| BlsSig::from_bytes(sig, BlsScheme::Basic)),
       credit_pool_balance,
+      merkle_root_asset_unlocks,
     };
     match cbtx.check_fields() {
       Some(error) => Err(error),
@@ -196,6 +210,13 @@ impl CoinbaseCommitment {
     self.credit_pool_balance
   }
 
+  /// Merkle root of the instance hashes of the block's asset unlocks with a
+  /// stable txid, carried from version 4. A block without such unlocks
+  /// commits to the null root.
+  pub const fn merkle_root_asset_unlocks(&self) -> Option<MerkleRoot> {
+    self.merkle_root_asset_unlocks
+  }
+
   const fn check_fields(&self) -> Option<CbTxInvalid> {
     if self.version >= 2 {
       if self.merkle_root_quorums.is_none() {
@@ -213,6 +234,14 @@ impl CoinbaseCommitment {
       || self.best_cl_signature.is_some()
       || self.credit_pool_balance.is_some()
     {
+      return Some(CbTxInvalid::UnexpectedField);
+    }
+
+    if self.version >= 4 {
+      if self.merkle_root_asset_unlocks.is_none() {
+        return Some(CbTxInvalid::MissingField);
+      }
+    } else if self.merkle_root_asset_unlocks.is_some() {
       return Some(CbTxInvalid::UnexpectedField);
     }
 
@@ -234,6 +263,7 @@ struct __CbTxFields {
   #[serde(default, deserialize_with = "crate::serialize::bls::sig_basic_opt")]
   best_cl_signature: Option<BlsSig>,
   credit_pool_balance: Option<i64>,
+  merkle_root_asset_unlocks: Option<MerkleRoot>,
 }
 
 #[cfg(feature = "serde")]
@@ -249,6 +279,7 @@ impl TryFrom<__CbTxFields> for CoinbaseCommitment {
       fields.best_cl_height_diff,
       fields.best_cl_signature.map(|sig| *sig.as_bytes()),
       fields.credit_pool_balance,
+      fields.merkle_root_asset_unlocks,
     )
   }
 }
@@ -260,7 +291,6 @@ impl fmt::Display for CoinbaseCommitment {
 }
 
 #[cfg(all(test, feature = "serde"))]
-#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
   use crate::prelude::*;
@@ -275,8 +305,9 @@ mod tests {
     corpus
       .entries::<CoinbaseCommitment>("cbtx", |_, _, _| {})
       .into_values()
-      .find(|item| item.version == 3)
-      .unwrap()
+      .filter(|item| item.version == 3)
+      .collect::<Vec<_>>()
+      .swap_remove(0)
   }
 
   fn sig() -> [u8; BLS_SIG_LEN] {
@@ -289,41 +320,70 @@ mod tests {
     diff: Option<u32>,
     sig: Option<[u8; BLS_SIG_LEN]>,
     balance: Option<i64>,
+    unlocks: Option<MerkleRoot>,
   ) -> Result<CoinbaseCommitment, CbTxInvalid> {
     let root = MerkleRoot::from_lendian([0x22; 32]);
-    CoinbaseCommitment::new(version, BlockHeight::from_u32(7), root, quorums, diff, sig, balance)
+    CoinbaseCommitment::new(
+      version,
+      BlockHeight::from_u32(7),
+      root,
+      quorums,
+      diff,
+      sig,
+      balance,
+      unlocks,
+    )
   }
 
   fn quorums() -> Option<MerkleRoot> {
     Some(MerkleRoot::from_lendian([0x33; 32]))
   }
 
+  fn unlocks() -> Option<MerkleRoot> {
+    Some(MerkleRoot::from_lendian([0x44; 32]))
+  }
+
   #[rstest]
-  #[case::v1(1, None, None, None, None)]
-  #[case::v2(2, quorums(), None, None, None)]
-  #[case::v3(3, quorums(), Some(5), Some(sig()), Some(-7))]
+  #[case::v0(0, true)]
+  #[case::v4(4, false)]
+  #[case::v5(5, true)]
+  fn versions_1_to_4_are_known(#[case] version: u16, #[case] rejected: bool) {
+    let mut item = v3_item();
+    item.version = version;
+    item.merkle_root_asset_unlocks = (version >= 4).then(|| MerkleRoot::from_lendian([0x44; 32]));
+    assert_eq!(item.check(), rejected.then_some(CbTxInvalid::BadVersion { version }));
+  }
+
+  #[rstest]
+  #[case::v1(1, None, None, None, None, None)]
+  #[case::v2(2, quorums(), None, None, None, None)]
+  #[case::v3(3, quorums(), Some(5), Some(sig()), Some(-7), None)]
+  #[case::v4(4, quorums(), Some(5), Some(sig()), Some(-7), unlocks())]
   fn consistent_fields_build_and_round_trip(
     #[case] version: u16,
     #[case] quorums: Option<MerkleRoot>,
     #[case] diff: Option<u32>,
     #[case] sig: Option<[u8; BLS_SIG_LEN]>,
     #[case] balance: Option<i64>,
-  ) {
-    let cbtx = build(version, quorums, diff, sig, balance).unwrap();
+    #[case] unlocks: Option<MerkleRoot>,
+  ) -> Result<(), CbTxInvalid> {
+    let cbtx = build(version, quorums, diff, sig, balance, unlocks)?;
     assert_eq!(
       (
         cbtx.version(),
         cbtx.merkle_root_quorums(),
         cbtx.best_cl_height_diff(),
         cbtx.best_cl_signature(),
-        cbtx.credit_pool_balance()
+        cbtx.credit_pool_balance(),
+        cbtx.merkle_root_asset_unlocks()
       ),
       (
         version,
         quorums,
         diff,
         sig.map(|sig| BlsSig::from_bytes(sig, BlsScheme::Basic)),
-        balance
+        balance,
+        unlocks
       )
     );
     assert_eq!(cbtx.check(), None);
@@ -334,18 +394,24 @@ mod tests {
     assert_eq!(CoinbaseCommitment::decode(&mut cursor), Ok(cbtx.clone()));
     assert!(cursor.is_empty());
     assert_eq!(from_json::<CoinbaseCommitment>(&to_json(&cbtx)), cbtx);
+    Ok(())
   }
 
   #[rstest]
-  #[case::v2_without_quorums(build(2, None, None, None, None), CbTxInvalid::MissingField)]
-  #[case::v3_without_quorums(build(3, None, Some(5), Some(sig()), Some(1)), CbTxInvalid::MissingField)]
-  #[case::v3_without_diff(build(3, quorums(), None, Some(sig()), Some(1)), CbTxInvalid::MissingField)]
-  #[case::v3_without_sig(build(3, quorums(), Some(5), None, Some(1)), CbTxInvalid::MissingField)]
-  #[case::v3_without_balance(build(3, quorums(), Some(5), Some(sig()), None), CbTxInvalid::MissingField)]
-  #[case::v1_with_quorums(build(1, quorums(), None, None, None), CbTxInvalid::UnexpectedField)]
-  #[case::v2_with_diff(build(2, quorums(), Some(5), None, None), CbTxInvalid::UnexpectedField)]
-  #[case::v2_with_sig(build(2, quorums(), None, Some(sig()), None), CbTxInvalid::UnexpectedField)]
-  #[case::v2_with_balance(build(2, quorums(), None, None, Some(1)), CbTxInvalid::UnexpectedField)]
+  #[case::v2_without_quorums(build(2, None, None, None, None, None), CbTxInvalid::MissingField)]
+  #[case::v3_without_quorums(build(3, None, Some(5), Some(sig()), Some(1), None), CbTxInvalid::MissingField)]
+  #[case::v3_without_diff(build(3, quorums(), None, Some(sig()), Some(1), None), CbTxInvalid::MissingField)]
+  #[case::v3_without_sig(build(3, quorums(), Some(5), None, Some(1), None), CbTxInvalid::MissingField)]
+  #[case::v3_without_balance(build(3, quorums(), Some(5), Some(sig()), None, None), CbTxInvalid::MissingField)]
+  #[case::v1_with_quorums(build(1, quorums(), None, None, None, None), CbTxInvalid::UnexpectedField)]
+  #[case::v2_with_diff(build(2, quorums(), Some(5), None, None, None), CbTxInvalid::UnexpectedField)]
+  #[case::v2_with_sig(build(2, quorums(), None, Some(sig()), None, None), CbTxInvalid::UnexpectedField)]
+  #[case::v2_with_balance(build(2, quorums(), None, None, Some(1), None), CbTxInvalid::UnexpectedField)]
+  #[case::v4_without_unlocks(build(4, quorums(), Some(5), Some(sig()), Some(1), None), CbTxInvalid::MissingField)]
+  #[case::v3_with_unlocks(
+    build(3, quorums(), Some(5), Some(sig()), Some(1), unlocks()),
+    CbTxInvalid::UnexpectedField
+  )]
   fn inconsistent_fields_do_not_build(
     #[case] built: Result<CoinbaseCommitment, CbTxInvalid>,
     #[case] error: CbTxInvalid,
@@ -354,10 +420,11 @@ mod tests {
   }
 
   #[rstest]
-  fn deserialization_goes_through_new() {
-    let v2 = build(2, quorums(), None, None, None).unwrap();
+  fn deserialization_goes_through_new() -> Result<(), CbTxInvalid> {
+    let v2 = build(2, quorums(), None, None, None, None)?;
     let json = to_json(&v2).replace("\"version\":2", "\"version\":3");
     assert!(json_rejects::<CoinbaseCommitment>(&json));
+    Ok(())
   }
 
   #[rstest]
@@ -434,8 +501,9 @@ mod tests {
     let mut item = corpus
       .entries::<CoinbaseCommitment>("cbtx", |_, _, _| {})
       .into_values()
-      .find(|item| item.best_cl_signature.is_some())
-      .unwrap();
+      .filter(|item| item.best_cl_signature.is_some())
+      .collect::<Vec<_>>()
+      .swap_remove(0);
     assert_eq!(item.check(), None);
     item.best_cl_signature = item.best_cl_signature.map(|sig| sig.corrupted());
     assert_eq!(item.check(), Some(CbTxInvalid::BadPayload));
