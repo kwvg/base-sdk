@@ -557,6 +557,7 @@ mod tests {
     ext_pubkey: [0x04, 0x88, 0xb2, 0x1e],
     ext_secret: [0x04, 0x88, 0xad, 0xe4],
     bip44_idx: 5,
+    platform_hrp: "dash",
   };
   const TESTNET: AddrParams = AddrParams {
     pubkey_addr: 140,
@@ -565,6 +566,7 @@ mod tests {
     ext_pubkey: [0x04, 0x35, 0x87, 0xcf],
     ext_secret: [0x04, 0x35, 0x83, 0x94],
     bip44_idx: 1,
+    platform_hrp: "tdash",
   };
 
   fn proposal_with(edit: impl FnOnce(&mut Proposal)) -> Proposal {

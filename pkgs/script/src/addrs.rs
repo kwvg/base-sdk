@@ -30,6 +30,8 @@ pub struct AddrParams {
   pub ext_secret: [u8; 4],
   /// BIP44 coin type index.
   pub bip44_idx: u32,
+  /// Bech32m human-readable part of DIP-18 Platform addresses.
+  pub platform_hrp: &'static str,
 }
 
 /// Recipient parsed from address.
@@ -177,6 +179,7 @@ mod tests {
     ext_pubkey: [0x04, 0x88, 0xB2, 0x1E],
     ext_secret: [0x04, 0x88, 0xAD, 0xE4],
     bip44_idx: 5,
+    platform_hrp: "dash",
   };
 
   // The generator point's coordinates shared across P2PK vectors
