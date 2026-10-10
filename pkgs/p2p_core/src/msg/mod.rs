@@ -52,7 +52,6 @@ unversioned_payload!(
   Headers,
   Headers2,
   Inv,
-  MnListDiff,
   NotFound,
   Ping,
   Pong,
