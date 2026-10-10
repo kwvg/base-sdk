@@ -294,13 +294,7 @@ impl_p2p!(Headers2);
 
 impl BaseCodec for Headers2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let count = CompactSize::decode(data)?.into_len(MAX_HEADERS)?;
-    let mut state = CompressionState::new();
-    let mut headers = Vec::with_capacity(count);
-    for _ in 0..count {
-      headers.push(state.decode_header(data)?);
-    }
-    Ok(Self { headers })
+    Self::decode_headers(data)
   }
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
@@ -321,6 +315,18 @@ impl Checkable for Headers2 {
 }
 
 hash_impl!(Headers2);
+
+impl Headers2 {
+  fn decode_headers(data: &mut &[u8]) -> Result<Self, DecodeError> {
+    let count = CompactSize::decode(data)?.into_len(MAX_HEADERS)?;
+    let mut state = CompressionState::new();
+    let mut headers = Vec::with_capacity(count);
+    for _ in 0..count {
+      headers.push(state.decode_header(data)?);
+    }
+    Ok(Self { headers })
+  }
+}
 
 #[cfg(all(test, feature = "serde"))]
 mod tests {
