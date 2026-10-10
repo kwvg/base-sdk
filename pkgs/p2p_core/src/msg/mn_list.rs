@@ -11,6 +11,8 @@ use crate::macros::VersionedPayload;
 use crate::prelude::*;
 use crate::{P2pDecodeError, ProtocolVersion};
 
+use bitcoin_hashes::sha256d;
+use dash_num::Hash256;
 use dash_pkc::bls::{BlsScIetf, BlsSigBytes, BLS_PK_LEN};
 use dash_primitives::{
   hash_impl, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MnType, NetInfo, NetInfoV1, NetInfoV2,
@@ -19,7 +21,7 @@ use dash_primitives::{
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
-use dash_types::{CompactSize, Numeric};
+use dash_types::{CompactSize, Hashable, Numeric};
 
 use core::fmt;
 
@@ -270,7 +272,17 @@ impl BaseCodec for SimplifiedMnListEntry {
   }
 }
 
-hash_impl!(SimplifiedMnListEntry);
+/// The hash leaves out the entry version and keeps the fields that the
+/// version carries.
+impl Hashable for SimplifiedMnListEntry {
+  type Hash = Hash256;
+
+  fn hash(&self) -> Hash256 {
+    let mut buf = Vec::new();
+    self.encode_fields(&mut buf, true);
+    Hash256::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
+  }
+}
 
 impl SimplifiedMnListEntry {
   /// Reads the entry as sent at protocol `version`. The entry version is 1
@@ -333,6 +345,12 @@ impl SimplifiedMnListEntry {
     if version >= ProtocolVersion::SMNLE_VERSIONED {
       self.version.encode(buf);
     }
+    self.encode_fields(buf, version >= ProtocolVersion::DMN_TYPE);
+  }
+
+  /// Writes the fields after the version, up to the type where `typed` is
+  /// false.
+  fn encode_fields(&self, buf: &mut impl EncodeBuf, typed: bool) {
     self.pro_reg_tx_hash.encode(buf);
     self.confirmed_hash.encode(buf);
     match &self.net_info {
@@ -342,7 +360,7 @@ impl SimplifiedMnListEntry {
     self.operator_key.encode(buf);
     self.voting_key_id.encode(buf);
     self.is_valid.encode(buf);
-    if version >= ProtocolVersion::DMN_TYPE && self.version >= 2 {
+    if typed && self.version >= 2 {
       self.mn_type.to_base().encode(buf);
       if self.mn_type == MnType::Evo {
         if self.version < PROTX_VERSION_EXT_ADDR {
@@ -457,9 +475,8 @@ mod tests {
   use crate::{CommandString, P2pMsg};
 
   use dash_dev::{assert_serde_rt, check_wire, json_rejects, Corpus};
-  use dash_num::Hash256;
-  use dash_primitives::{AddrV2, NIEntry, NIPurpose, ServiceV2};
-  use dash_types::Hashable;
+  use dash_pkc::bls::{BlsScChia, BlsSecretKey};
+  use dash_primitives::{AddrV1, AddrV2, NIEntry, NIPurpose, ServiceV1, ServiceV2};
   use hex_conservative::decode_to_vec;
   use rstest::rstest;
 
@@ -820,5 +837,71 @@ mod tests {
     let mut entry = evo_entry(2);
     entry.version = 3;
     assert!(json_rejects::<SimplifiedMnListEntry>(&dash_dev::to_json(&entry)));
+  }
+
+  /// Entry `i` of the reference `simplifiedmns_merkleroots` test, a version 1
+  /// entry whose fields all derive from `i`.
+  fn merkleroots_entry(i: u8) -> SimplifiedMnListEntry {
+    let mut bytes = [0u8; 32];
+    bytes[0] = i;
+    let secret = BlsSecretKey::<BlsScChia>::from_bytes(&bytes);
+    assert!(secret.is_ok(), "entry {i}: bad secret key");
+    let operator_key = secret.map_or([0; BLS_PK_LEN], |secret| secret.public_key().to_bytes());
+    let mut voting_key_id = [0u8; 20];
+    voting_key_id[0] = i;
+    let service = ServiceV1 {
+      addr: AddrV1::from([0, 0, 0, i]),
+      port: u16::from(i),
+    };
+    SimplifiedMnListEntry {
+      version: 1,
+      pro_reg_tx_hash: TxHash::from_lendian(bytes),
+      confirmed_hash: BlockHash::from_lendian(bytes),
+      net_info: NetInfo::Legacy(NetInfoV1(service)),
+      operator_key: BlsPubKey::from_bytes(operator_key, BlsScheme::Legacy),
+      voting_key_id: PubKeyHash::from(voting_key_id),
+      is_valid: true,
+      mn_type: MnType::Regular,
+      platform_http_port: None,
+      platform_node_id: None,
+    }
+  }
+
+  // Leaf hashes of entries 1 to 15 in the reference
+  // `simplifiedmns_merkleroots` test.
+  const MERKLEROOTS_LEAVES: [&str; 15] = [
+    "3a1010e28226558560e5296bcee6bf0b9b963b73a1514f5aa2885e270f6b90c1",
+    "85d3d93b28689128daf3a41d706ae5002f447b9b6372776f0ca9d53b31146884",
+    "8930eee6bd2e7971a7090edfb79f74c00a12280e59adfc2cc99d406a01e368f9",
+    "dc2e69caa0ef97e8f5cf40a9530641bd4933dd8c9ad533054537728f7e5f58c2",
+    "3e4a0e0a0d2ed397fa27221de3047de21f50d17d0ba43738cbdb9fee96c7cb46",
+    "eb18476a1496e1cb912b1d4dd93314b78c6a679d83cae8e144a717b967dc4b8c",
+    "6c0d01fa40ac11d7b523facd2bf5632c83f7e4df3f60fd1b364ea90f6c852156",
+    "c9e3e69d54e6e95b280ae102593fe114cf4620fa89dd88da1a146ada08815d68",
+    "1023f67f735e8e9403d5f083e7a17489619b1790feac4f6b133e9dda15999ae6",
+    "5d5fc77944f7c72df236a5baf460c7b9a947144d54d0953521f1494c8a2f7aaa",
+    "ac7db66820de3c7506f8c6415fd352e36ac5f27c6adbdfb74de3e109d0d277df",
+    "cbc25ca965d0fa69a1fdc1d796b8ee2726a0e2137414e92fb9541630e3189901",
+    "ac9934c4049ae952d41fb38e7e9659a558a5ce748bdb7fb613741598d1b16a27",
+    "a61177eb14450bb8c56e5f0547035e0f3a70fe46f36901351cc568b2e48e29d0",
+    "67798d40a2196f446114c68d86445fe088750515a96eb65392c6bcfac8f3be9b",
+  ];
+
+  #[rstest]
+  fn hash_matches_the_reference_leaves() {
+    for (i, leaf) in (1..=15).zip(MERKLEROOTS_LEAVES) {
+      assert_eq!(format!("{}", merkleroots_entry(i).hash()), leaf, "entry {i}");
+    }
+  }
+
+  /// The hash covers the wire encoding without its leading version.
+  #[rstest]
+  #[case::basic_bls(2)]
+  #[case::ext_addr(3)]
+  fn hash_leaves_out_the_version(#[case] version: u16) {
+    let entry = evo_entry(version);
+    let raw = enc(&entry);
+    let expected = Hash256::from_lendian(sha256d::Hash::hash(&raw[2..]).to_byte_array());
+    assert_eq!(entry.hash(), expected);
   }
 }

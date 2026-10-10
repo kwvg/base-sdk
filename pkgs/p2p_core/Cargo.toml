@@ -12,6 +12,7 @@ rust-version.workspace = true
 [features]
 default = []
 std = [
+  "bitcoin_hashes/std",
   "dash-pkc/std",
   "dash-primitives/std",
   "dash-script/std",
@@ -29,6 +30,7 @@ full = ["std", "serde"]
 
 [dependencies]
 bitcoin-consensus-encoding = { workspace = true, features = ["alloc"] }
+bitcoin_hashes = { workspace = true }
 cfg-if = "1"
 dash-num = { version = "0.1.0-beta", path = "../num", features = ["codec"] }
 dash-pkc = { version = "0.1.0-beta", path = "../pkc", features = ["codec"] }
@@ -45,6 +47,7 @@ serde = { workspace = true, features = [
 
 [dev-dependencies]
 dash-dev = { version = "0.0.0", path = "../dev", features = ["full"] }
+dash-pkc = { version = "0.1.0-beta", path = "../pkc", features = ["bls"] }
 hex-conservative = { workspace = true, features = ["std"] }
 rstest = { workspace = true }
 
