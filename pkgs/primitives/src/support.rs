@@ -35,12 +35,18 @@ enum_map! {
     LlmqDevnet = 101 => "llmq_devnet",
     /// Test v17-era quorum.
     LlmqTestV17 = 102 => "llmq_test_v17",
+    /// Test rotated (DIP-0024) quorum.
+    LlmqTestDip0024 = 103 => "llmq_test_dip0024",
     /// Test InstantSend quorum.
     LlmqTestInstantsend = 104 => "llmq_test_instantsend",
+    /// Devnet rotated (DIP-0024) quorum.
+    LlmqDevnetDip0024 = 105 => "llmq_devnet_dip0024",
     /// Test Platform quorum.
     LlmqTestPlatform = 106 => "llmq_test_platform",
     /// Devnet Platform quorum.
     LlmqDevnetPlatform = 107 => "llmq_devnet_platform",
+    /// No quorum type.
+    LlmqNone = 0xff => "llmq_none",
   }
 }
 
@@ -244,7 +250,7 @@ impl Iterator for DynBitsetIterator<'_> {
 
 #[cfg(test)]
 mod tests {
-  use super::{DynBitset, RevocationReason};
+  use super::{DynBitset, LlmqType, RevocationReason};
   use crate::prelude::*;
 
   use dash_types::codec::{BaseCodec, DecodeError};
@@ -286,6 +292,35 @@ mod tests {
   fn padding_bits_must_be_clear(#[case] num_bits: u64, #[case] rest: &[u8], #[case] ok: bool) {
     let wire = prefixed(num_bits, rest);
     assert_eq!(DynBitset::decode(&mut wire.as_slice()).is_ok(), ok);
+  }
+
+  #[rstest]
+  #[case::llmq_50_60(1, LlmqType::Llmq50_60)]
+  #[case::llmq_400_60(2, LlmqType::Llmq400_60)]
+  #[case::llmq_400_85(3, LlmqType::Llmq400_85)]
+  #[case::llmq_100_67(4, LlmqType::Llmq100_67)]
+  #[case::llmq_60_75(5, LlmqType::Llmq60_75)]
+  #[case::llmq_25_67(6, LlmqType::Llmq25_67)]
+  #[case::llmq_test(100, LlmqType::LlmqTest)]
+  #[case::llmq_devnet(101, LlmqType::LlmqDevnet)]
+  #[case::llmq_test_v17(102, LlmqType::LlmqTestV17)]
+  #[case::llmq_test_dip0024(103, LlmqType::LlmqTestDip0024)]
+  #[case::llmq_test_instantsend(104, LlmqType::LlmqTestInstantsend)]
+  #[case::llmq_devnet_dip0024(105, LlmqType::LlmqDevnetDip0024)]
+  #[case::llmq_test_platform(106, LlmqType::LlmqTestPlatform)]
+  #[case::llmq_devnet_platform(107, LlmqType::LlmqDevnetPlatform)]
+  #[case::llmq_none(0xff, LlmqType::LlmqNone)]
+  fn llmq_types_follow_the_reference_codes(#[case] code: u8, #[case] llmq_type: LlmqType) {
+    assert_eq!(LlmqType::from_base(code), llmq_type);
+    assert_eq!(llmq_type.to_base(), code);
+  }
+
+  #[rstest]
+  #[case::zero(0)]
+  #[case::between_mainnet_and_test(7)]
+  #[case::past_devnet_platform(108)]
+  fn other_llmq_codes_are_unknown(#[case] code: u8) {
+    assert_eq!(LlmqType::from_base(code), LlmqType::Unknown(code));
   }
 
   #[rstest]
