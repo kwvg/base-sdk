@@ -117,6 +117,8 @@ pub enum CbTxInvalid {
   UnexpectedField,
   /// `bad-cbtx-payload`
   BadPayload,
+  /// `bad-cbtx-cldiff`
+  BadClHeightDiff { diff: u32 },
 }
 
 impl core::fmt::Display for CbTxInvalid {
@@ -126,6 +128,7 @@ impl core::fmt::Display for CbTxInvalid {
       Self::MissingField => write!(f, "bad-cbtx-missing-field"),
       Self::UnexpectedField => write!(f, "bad-cbtx-unexpected-field"),
       Self::BadPayload => write!(f, "bad-cbtx-payload"),
+      Self::BadClHeightDiff { diff } => write!(f, "bad-cbtx-cldiff: {diff}"),
     }
   }
 }
@@ -143,7 +146,14 @@ impl Checkable for CoinbaseCommitment {
       return Some(CbTxInvalid::BadPayload);
     }
 
-    self.check_fields()
+    if let Some(error) = self.check_fields() {
+      return Some(error);
+    }
+
+    match (self.best_cl_signature, self.best_cl_height_diff) {
+      (Some(sig), Some(diff)) if sig.is_null() && diff != 0 => Some(CbTxInvalid::BadClHeightDiff { diff }),
+      _ => None,
+    }
   }
 }
 
@@ -357,8 +367,8 @@ mod tests {
   #[rstest]
   #[case::v1(1, None, None, None, None, None)]
   #[case::v2(2, quorums(), None, None, None, None)]
-  #[case::v3(3, quorums(), Some(5), Some(sig()), Some(-7), None)]
-  #[case::v4(4, quorums(), Some(5), Some(sig()), Some(-7), unlocks())]
+  #[case::v3(3, quorums(), Some(0), Some(sig()), Some(-7), None)]
+  #[case::v4(4, quorums(), Some(0), Some(sig()), Some(-7), unlocks())]
   fn consistent_fields_build_and_round_trip(
     #[case] version: u16,
     #[case] quorums: Option<MerkleRoot>,
@@ -474,6 +484,20 @@ mod tests {
         limit: MAX_SIZE as usize,
         value: u64::from(u32::MAX) + 1,
       })
+    );
+  }
+
+  #[rstest]
+  #[case::zero(0, None)]
+  #[case::one(1, Some(CbTxInvalid::BadClHeightDiff { diff: 1 }))]
+  fn null_chainlock_needs_a_zero_height_diff(#[case] diff: u32, #[case] expected: Option<CbTxInvalid>) {
+    let mut item = v3_item();
+    item.best_cl_signature = Some(BlsSig::from_bytes([0; BLS_SIG_LEN], BlsScheme::Basic));
+    item.best_cl_height_diff = Some(diff);
+    assert_eq!(item.check(), expected);
+    assert_eq!(
+      CbTxInvalid::BadClHeightDiff { diff: 1 }.to_string(),
+      "bad-cbtx-cldiff: 1"
     );
   }
 
