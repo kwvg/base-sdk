@@ -39,7 +39,7 @@ pub use self::proregtx::ProRegTx;
 pub use self::proupregtx::ProUpRegTx;
 pub use self::prouprevtx::ProUpRevTx;
 pub use self::proupservtx::ProUpServTx;
-pub use self::quorum::{Commitment, CommitmentInvalid, FinalCommitment, QuorumVvecHash};
+pub use self::quorum::{Commitment, CommitmentFault, CommitmentInvalid, FinalCommitment, QuorumVvecHash};
 
 pub use dash_pkc::__private::__EddsaPkHash as PlatformNodeId;
 

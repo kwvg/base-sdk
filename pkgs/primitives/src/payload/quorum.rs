@@ -9,7 +9,7 @@
 use super::QuorumHash;
 use crate::codec::impl_payload;
 use crate::hash_impl;
-use crate::support::{DynBitset, LlmqType};
+use crate::support::{DynBitset, LlmqParams, LlmqType};
 use crate::types::{BlsPubKey, BlsScheme, BlsSig};
 
 use dash_num::make_hash;
@@ -104,6 +104,17 @@ impl BaseCodec for Commitment {
   }
 }
 
+impl Checkable for Commitment {
+  type Error = CommitmentInvalid;
+
+  fn check(&self) -> Option<Self::Error> {
+    self
+      .check_encoding()
+      .or_else(|| self.check_type())
+      .or_else(|| self.verify())
+  }
+}
+
 hash_impl!(Commitment);
 
 impl Commitment {
@@ -111,6 +122,97 @@ impl Commitment {
   #[inline]
   pub fn is_indexed(&self) -> bool {
     self.version == 2 || self.version == 4
+  }
+
+  /// Tells whether the commitment records a quorum that failed to form, with
+  /// no members, keys, signatures or verification vector.
+  pub fn is_null(&self) -> bool {
+    self.signers.count_ones() == 0
+      && self.valid_members.count_ones() == 0
+      && self.quorum_public_key.is_null()
+      && self.quorum_vvec_hash.is_null()
+      && self.members_sig.is_null()
+      && self.quorum_sig.is_null()
+  }
+
+  fn check_encoding(&self) -> Option<CommitmentInvalid> {
+    // Non-canonical BLS fields count as a payload decode failure. A null
+    // commitment holds zero bytes, which count as canonical.
+    if !(self.quorum_public_key.is_canonical() && self.quorum_sig.is_canonical() && self.members_sig.is_canonical()) {
+      return Some(CommitmentInvalid::BadPayload);
+    }
+    (self.is_indexed() != self.quorum_index.is_some()).then_some(CommitmentInvalid::BadQuorumIndex)
+  }
+
+  fn check_type(&self) -> Option<CommitmentInvalid> {
+    self
+      .llmq_type
+      .params()
+      .is_none()
+      .then_some(CommitmentInvalid::UnknownType {
+        llmq_type: self.llmq_type,
+      })
+  }
+
+  /// Checks what needs no chain: the version range, the bitset sizes, the
+  /// member counts against the minimum size, and the presence of the keys,
+  /// signatures and verification vector. A null commitment needs only sizes.
+  fn verify(&self) -> Option<CommitmentInvalid> {
+    let params = self.llmq_type.params()?;
+    if self.is_null() {
+      return self.verify_sizes(params).map(CommitmentInvalid::InvalidNull);
+    }
+    let fault = self.verify_non_null(params)?;
+    Some(CommitmentInvalid::Invalid(fault))
+  }
+
+  fn verify_sizes(&self, params: LlmqParams) -> Option<CommitmentFault> {
+    let size = u64::from(params.size);
+    if self.signers.num_bits != size {
+      return Some(CommitmentFault::SignersSize {
+        size: self.signers.num_bits,
+      });
+    }
+    if self.valid_members.num_bits != size {
+      return Some(CommitmentFault::ValidMembersSize {
+        size: self.valid_members.num_bits,
+      });
+    }
+    None
+  }
+
+  fn verify_non_null(&self, params: LlmqParams) -> Option<CommitmentFault> {
+    // The exact version depends on the chain; any version a commitment can
+    // carry passes here.
+    if !(1..=4).contains(&self.version) {
+      return Some(CommitmentFault::Version { version: self.version });
+    }
+    if let Some(fault) = self.verify_sizes(params) {
+      return Some(fault);
+    }
+    let min_size = u64::from(params.min_size);
+    let valid_members = self.valid_members.count_ones();
+    if valid_members < min_size {
+      return Some(CommitmentFault::ValidMembersCount { count: valid_members });
+    }
+    let signers = self.signers.count_ones();
+    if signers < min_size {
+      return Some(CommitmentFault::SignersCount { count: signers });
+    }
+    // A canonical point is valid unless it is null.
+    if self.quorum_public_key.is_null() {
+      return Some(CommitmentFault::QuorumPublicKey);
+    }
+    if params.size > 1 && self.quorum_vvec_hash.is_null() {
+      return Some(CommitmentFault::QuorumVvecHash);
+    }
+    if self.members_sig.is_null() {
+      return Some(CommitmentFault::MembersSig);
+    }
+    if self.quorum_sig.is_null() {
+      return Some(CommitmentFault::QuorumSig);
+    }
+    None
   }
 }
 
@@ -197,6 +299,12 @@ pub enum CommitmentInvalid {
   BadQuorumIndex,
   /// `bad-qc-payload`
   BadPayload,
+  /// `bad-qc-commitment-type`
+  UnknownType { llmq_type: LlmqType },
+  /// `bad-qc-invalid-null`
+  InvalidNull(CommitmentFault),
+  /// `bad-qc-invalid`
+  Invalid(CommitmentFault),
 }
 
 impl fmt::Display for CommitmentInvalid {
@@ -204,6 +312,48 @@ impl fmt::Display for CommitmentInvalid {
     match self {
       Self::BadQuorumIndex => write!(f, "bad-qc-quorum-index"),
       Self::BadPayload => write!(f, "bad-qc-payload"),
+      Self::UnknownType { llmq_type } => write!(f, "bad-qc-commitment-type: {llmq_type}"),
+      Self::InvalidNull(fault) => write!(f, "bad-qc-invalid-null: {fault}"),
+      Self::Invalid(fault) => write!(f, "bad-qc-invalid: {fault}"),
+    }
+  }
+}
+
+/// The part of a commitment that fails its context-free verification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Unencodable)]
+pub enum CommitmentFault {
+  /// The version is not one a commitment can carry.
+  Version { version: u16 },
+  /// The signers bitset is not the quorum size.
+  SignersSize { size: u64 },
+  /// The valid-members bitset is not the quorum size.
+  ValidMembersSize { size: u64 },
+  /// Fewer valid members than the quorum's minimum size.
+  ValidMembersCount { count: u64 },
+  /// Fewer signers than the quorum's minimum size.
+  SignersCount { count: u64 },
+  /// The quorum public key is null.
+  QuorumPublicKey,
+  /// The verification vector hash is null.
+  QuorumVvecHash,
+  /// The aggregated members signature is null.
+  MembersSig,
+  /// The quorum signature is null.
+  QuorumSig,
+}
+
+impl fmt::Display for CommitmentFault {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Version { version } => write!(f, "version {version}"),
+      Self::SignersSize { size } => write!(f, "signers size {size}"),
+      Self::ValidMembersSize { size } => write!(f, "valid members size {size}"),
+      Self::ValidMembersCount { count } => write!(f, "valid members count {count}"),
+      Self::SignersCount { count } => write!(f, "signers count {count}"),
+      Self::QuorumPublicKey => write!(f, "null quorum public key"),
+      Self::QuorumVvecHash => write!(f, "null verification vector hash"),
+      Self::MembersSig => write!(f, "null members signature"),
+      Self::QuorumSig => write!(f, "null quorum signature"),
     }
   }
 }
@@ -212,18 +362,7 @@ impl Checkable for FinalCommitment {
   type Error = CommitmentInvalid;
 
   fn check(&self) -> Option<Self::Error> {
-    // Non-canonical BLS fields count as a payload decode failure. A null
-    // commitment holds zero bytes, which count as canonical.
-    let qc = &self.commitment;
-    if !(qc.quorum_public_key.is_canonical() && qc.quorum_sig.is_canonical() && qc.members_sig.is_canonical()) {
-      return Some(CommitmentInvalid::BadPayload);
-    }
-
-    let indexed = self.commitment.version == 2 || self.commitment.version == 4;
-    if indexed != self.commitment.quorum_index.is_some() {
-      return Some(CommitmentInvalid::BadQuorumIndex);
-    }
-    None
+    self.commitment.check()
   }
 }
 
@@ -236,7 +375,7 @@ impl fmt::Display for FinalCommitment {
 }
 
 #[cfg(all(test, feature = "serde"))]
-#[expect(clippy::unwrap_used, reason = "test code")]
+#[expect(clippy::panic, clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
   use crate::prelude::*;
@@ -305,8 +444,9 @@ mod tests {
     assert_eq!(CommitmentInvalid::BadPayload.to_string(), "bad-qc-payload");
   }
 
+  /// Null BLS fields pass the encoding check and fail verification as missing.
   #[rstest]
-  fn null_bls_fields_pass() {
+  fn null_bls_fields_pass_the_encoding_check() {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "qctx");
     let mut item = corpus
       .entries::<FinalCommitment>("qctx", |_, _, _| {})
@@ -317,6 +457,121 @@ mod tests {
     qc.quorum_public_key = BlsPubKey::from_bytes([0; BLS_PK_LEN], BlsScheme::Basic);
     qc.quorum_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], BlsScheme::Basic);
     qc.members_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], BlsScheme::Basic);
-    assert_eq!(item.check(), None);
+    assert_eq!(
+      item.check(),
+      Some(CommitmentInvalid::Invalid(CommitmentFault::QuorumPublicKey))
+    );
+  }
+
+  fn corpus_commitment() -> Commitment {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "qctx");
+    corpus
+      .entries::<FinalCommitment>("qctx", |_, _, _| {})
+      .into_values()
+      .map(|item| item.commitment)
+      .find(|qc| !qc.is_null())
+      .unwrap()
+  }
+
+  /// Builds a bitset of `num_bits` bits with the lowest `ones` set.
+  fn bitset(num_bits: u64, ones: u64) -> DynBitset {
+    let mut data = vec![0u8; (num_bits as usize).div_ceil(8)];
+    for i in 0..ones as usize {
+      data[i / 8] |= 1 << (i % 8);
+    }
+    DynBitset { num_bits, data }
+  }
+
+  fn null_commitment() -> Commitment {
+    let mut qc = corpus_commitment();
+    let size = u64::from(qc.llmq_type.params().unwrap().size);
+    let scheme = qc.quorum_public_key.scheme();
+    qc.signers = bitset(size, 0);
+    qc.valid_members = bitset(size, 0);
+    qc.quorum_public_key = BlsPubKey::from_bytes([0; BLS_PK_LEN], scheme);
+    qc.quorum_vvec_hash = QuorumVvecHash::default();
+    qc.members_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], scheme);
+    qc.quorum_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], scheme);
+    qc
+  }
+
+  #[rstest]
+  fn corpus_commitments_verify() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "qctx");
+    let mut nulls = BTreeSet::new();
+    for (label, item) in corpus.entries::<FinalCommitment>("qctx", |_, _, _| {}) {
+      assert_eq!(item.commitment.check(), None, "{label}");
+      nulls.insert(item.commitment.is_null());
+    }
+    assert_eq!(nulls.len(), 2, "the corpus holds null and non-null commitments");
+  }
+
+  #[rstest]
+  #[case::none(LlmqType::LlmqNone)]
+  #[case::unknown(LlmqType::Unknown(7))]
+  fn type_without_params_is_unknown(#[case] llmq_type: LlmqType) {
+    let mut qc = corpus_commitment();
+    qc.llmq_type = llmq_type;
+    assert_eq!(qc.check(), Some(CommitmentInvalid::UnknownType { llmq_type }));
+    assert_eq!(
+      qc.check().unwrap().to_string(),
+      format!("bad-qc-commitment-type: {llmq_type}")
+    );
+  }
+
+  /// A null commitment needs only the right bitset sizes, whatever its
+  /// version.
+  #[rstest]
+  fn null_commitment_needs_only_sizes() {
+    let qc = null_commitment();
+    assert!(qc.is_null());
+    assert_eq!(qc.check(), None);
+
+    let mut wrong = qc.clone();
+    wrong.signers = bitset(qc.signers.num_bits + 1, 0);
+    assert_eq!(
+      wrong.check(),
+      Some(CommitmentInvalid::InvalidNull(CommitmentFault::SignersSize {
+        size: qc.signers.num_bits + 1
+      }))
+    );
+    assert!(wrong.check().unwrap().to_string().starts_with("bad-qc-invalid-null: "));
+  }
+
+  #[rstest]
+  #[case::version(|qc: &mut Commitment| qc.version = 5, CommitmentFault::Version { version: 5 })]
+  #[case::signers_size(|qc: &mut Commitment| qc.signers = bitset(qc.signers.num_bits - 1, 1), CommitmentFault::SignersSize { size: 0 })]
+  #[case::valid_members_size(|qc: &mut Commitment| qc.valid_members = bitset(qc.valid_members.num_bits + 1, 1), CommitmentFault::ValidMembersSize { size: 0 })]
+  #[case::valid_members_count(|qc: &mut Commitment| qc.valid_members = bitset(qc.valid_members.num_bits, min_size(qc) - 1), CommitmentFault::ValidMembersCount { count: 0 })]
+  #[case::signers_count(|qc: &mut Commitment| qc.signers = bitset(qc.signers.num_bits, min_size(qc) - 1), CommitmentFault::SignersCount { count: 0 })]
+  #[case::quorum_public_key(|qc: &mut Commitment| qc.quorum_public_key = BlsPubKey::from_bytes([0; BLS_PK_LEN], BlsScheme::Basic), CommitmentFault::QuorumPublicKey)]
+  #[case::quorum_vvec_hash(|qc: &mut Commitment| qc.quorum_vvec_hash = QuorumVvecHash::default(), CommitmentFault::QuorumVvecHash)]
+  #[case::members_sig(|qc: &mut Commitment| qc.members_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], BlsScheme::Basic), CommitmentFault::MembersSig)]
+  #[case::quorum_sig(|qc: &mut Commitment| qc.quorum_sig = BlsSig::from_bytes([0; BLS_SIG_LEN], BlsScheme::Basic), CommitmentFault::QuorumSig)]
+  fn non_null_commitment_faults(#[case] edit: fn(&mut Commitment), #[case] fault: CommitmentFault) {
+    let mut qc = corpus_commitment();
+    edit(&mut qc);
+    let Some(CommitmentInvalid::Invalid(found)) = qc.check() else {
+      panic!("{:?}", qc.check());
+    };
+    assert_eq!(core::mem::discriminant(&found), core::mem::discriminant(&fault));
+    assert!(CommitmentInvalid::Invalid(found)
+      .to_string()
+      .starts_with("bad-qc-invalid: "));
+  }
+
+  fn min_size(qc: &Commitment) -> u64 {
+    u64::from(qc.llmq_type.params().unwrap().min_size)
+  }
+
+  /// The counts compare with the minimum size, not the threshold.
+  #[rstest]
+  fn counts_at_the_minimum_size_pass() {
+    let mut qc = corpus_commitment();
+    let params = qc.llmq_type.params().unwrap();
+    assert!(params.min_size > params.threshold);
+    qc.valid_members = bitset(qc.valid_members.num_bits, u64::from(params.min_size));
+    qc.signers = bitset(qc.signers.num_bits, u64::from(params.min_size));
+    assert_eq!(qc.check(), None);
   }
 }
