@@ -71,12 +71,28 @@ pub struct ProRegTx {
 
 impl_payload!(ProRegTx);
 
+/// Core P2P port of mainnet, which platform ports may not take on any network.
+const MAINNET_CORE_PORT: u16 = 9999;
+
 /// Checks the values of the platform fields that the masternode type and the
-/// version require.
-pub(super) fn check_platform_values(platform_node_id: Option<PlatformNodeId>) -> Option<ProTxInvalid> {
-  platform_node_id
-    .is_some_and(|node_id| node_id.is_null())
-    .then_some(ProTxInvalid::NullPlatformNodeId)
+/// version require. Ports carried before version 3 must differ from the
+/// mainnet core port, from each other and from `core_port`.
+pub(super) fn check_platform_values(
+  platform_node_id: Option<PlatformNodeId>,
+  platform_ports: Option<(u16, u16)>,
+  core_port: u16,
+) -> Option<ProTxInvalid> {
+  if platform_node_id.is_some_and(|node_id| node_id.is_null()) {
+    return Some(ProTxInvalid::NullPlatformNodeId);
+  }
+  let (p2p, http) = platform_ports?;
+  if p2p == MAINNET_CORE_PORT {
+    return Some(ProTxInvalid::BadPlatformP2pPort { port: p2p });
+  }
+  if http == MAINNET_CORE_PORT {
+    return Some(ProTxInvalid::BadPlatformHttpPort { port: http });
+  }
+  (p2p == http || p2p == core_port || http == core_port).then_some(ProTxInvalid::DuplicatePlatformPorts)
 }
 
 /// Checks that platform fields are consistent with mn_type and version.
@@ -223,7 +239,11 @@ impl Checkable for ProRegTx {
       });
     }
 
-    check_platform_values(self.platform_node_id)
+    check_platform_values(
+      self.platform_node_id,
+      self.platform_p2p_port.zip(self.platform_http_port),
+      self.net_info.primary().map_or(0, |service| service.port),
+    )
   }
 }
 
@@ -628,6 +648,41 @@ mod tests {
       ProTxInvalid::NullPlatformNodeId.to_string(),
       "bad-protx-platform-nodeid"
     );
+  }
+
+  #[rstest]
+  #[case::p2p_mainnet_core(Some(9999), None, ProTxInvalid::BadPlatformP2pPort { port: 9999 })]
+  #[case::http_mainnet_core(None, Some(9999), ProTxInvalid::BadPlatformHttpPort { port: 9999 })]
+  #[case::same_ports(Some(4000), Some(4000), ProTxInvalid::DuplicatePlatformPorts)]
+  #[case::p2p_is_core(Some(0), None, ProTxInvalid::DuplicatePlatformPorts)]
+  #[case::http_is_core(None, Some(0), ProTxInvalid::DuplicatePlatformPorts)]
+  fn evo_platform_ports_are_distinct_and_not_9999(
+    #[case] p2p: Option<u16>,
+    #[case] http: Option<u16>,
+    #[case] error: ProTxInvalid,
+  ) {
+    let item = corpus_item(2, MnType::Evo);
+    assert_eq!(item.check(), None);
+    // The core port moves off the mainnet port, so the cases can collide
+    // with it alone. A port of 0 in a case stands for the core port.
+    const CORE: u16 = 4001;
+    let port = |case: Option<u16>, current: Option<u16>| match case {
+      Some(0) => Some(CORE),
+      Some(port) => Some(port),
+      None => current,
+    };
+    let built = rebuild(&item, |t| {
+      if let NetInfo::Legacy(NetInfoV1(service)) = &mut t.net_info {
+        service.port = CORE;
+      }
+      t.platform_p2p_port = port(p2p, t.platform_p2p_port);
+      t.platform_http_port = port(http, t.platform_http_port);
+    });
+    assert_eq!(
+      built.as_ref().map(|t| t.net_info.primary().map(|s| s.port)),
+      Ok(Some(CORE))
+    );
+    assert_eq!(built.map(|t| t.check()), Ok(Some(error)));
   }
 
   #[rstest]

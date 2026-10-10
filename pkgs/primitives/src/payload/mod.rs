@@ -157,6 +157,12 @@ pub enum ProTxInvalid {
   BadOperatorPayoutScript,
   /// `bad-protx-platform-nodeid`
   NullPlatformNodeId,
+  /// `bad-protx-platform-p2p-port`
+  BadPlatformP2pPort { port: u16 },
+  /// `bad-protx-platform-http-port`
+  BadPlatformHttpPort { port: u16 },
+  /// `bad-protx-platform-dup-ports`
+  DuplicatePlatformPorts,
 }
 
 impl fmt::Display for ProTxInvalid {
@@ -193,6 +199,9 @@ impl fmt::Display for ProTxInvalid {
       Self::BadPayload => write!(f, "bad-protx-payload"),
       Self::BadOperatorPayoutScript => write!(f, "bad-protx-operator-payee"),
       Self::NullPlatformNodeId => write!(f, "bad-protx-platform-nodeid"),
+      Self::BadPlatformP2pPort { port } => write!(f, "bad-protx-platform-p2p-port: {port}"),
+      Self::BadPlatformHttpPort { port } => write!(f, "bad-protx-platform-http-port: {port}"),
+      Self::DuplicatePlatformPorts => write!(f, "bad-protx-platform-dup-ports"),
     }
   }
 }
