@@ -11,16 +11,15 @@ use crate::macros::VersionedPayload;
 use crate::prelude::*;
 use crate::{P2pDecodeError, ProtocolVersion};
 
-#[cfg(feature = "serde")]
-use dash_pkc::bls::BLS_PK_LEN;
-use dash_pkc::bls::{BlsScIetf, BlsSigBytes};
+use dash_pkc::bls::{BlsScIetf, BlsSigBytes, BLS_PK_LEN};
 use dash_primitives::{
-  hash_impl, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MnType, PlatformNodeId, ServiceV1, Transaction,
-  TxHash,
+  hash_impl, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MnType, NetInfo, NetInfoV1, NetInfoV2,
+  PlatformNodeId, Transaction, TxHash, PROTX_VERSION_EXT_ADDR,
 };
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
-use dash_types::{type_id::TypeId, CompactSize, Numeric};
+use dash_types::type_id::{TypeId, Unencodable};
+use dash_types::{CompactSize, Numeric};
 
 use core::fmt;
 
@@ -230,28 +229,40 @@ pub struct QuorumClSig {
 
 codec_p2p!(QuorumClSig { sig, index_set });
 
+/// The net info form of a simplified masternode list entry disagrees with
+/// its version.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub struct NetInfoVersionMismatch;
+
+impl fmt::Display for NetInfoVersionMismatch {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str("net info form does not match the entry version")
+  }
+}
+
 /// A single entry in the simplified masternode list.
+///
+/// The version-coupled fields are private, so [`SimplifiedMnListEntry::new`]
+/// keeps the net info form and the operator key scheme in step with the
+/// version.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", from = "__SmlEntryFields"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase", try_from = "__SmlEntryFields"))]
 pub struct SimplifiedMnListEntry {
-  /// Entry serialisation version.
-  pub version: u16,
+  version: u16,
   /// Masternode registration transaction hash.
   pub pro_reg_tx_hash: TxHash,
   /// Block hash at confirmation depth.
   pub confirmed_hash: BlockHash,
-  /// Network service address.
-  pub service: ServiceV1,
-  /// BLS operator public key, in the scheme of the entry version.
-  pub operator_key: BlsPubKey,
+  net_info: NetInfo,
+  operator_key: BlsPubKey,
   /// Voting key hash (HASH160).
   pub voting_key_id: PubKeyHash,
   /// Whether this masternode is currently valid.
   pub is_valid: bool,
   /// Masternode type (Regular or Evo).
   pub mn_type: MnType,
-  /// Platform HTTP port (Evo masternodes only).
+  /// Platform HTTP port, carried by evo masternodes below version 3.
   #[cfg_attr(feature = "serde", serde(rename = "platformHTTPPort"))]
   pub platform_http_port: Option<u16>,
   /// Platform node ID (Evo masternodes only).
@@ -287,7 +298,11 @@ impl SimplifiedMnListEntry {
     };
     let pro_reg_tx_hash = TxHash::decode(data)?;
     let confirmed_hash = BlockHash::decode(data)?;
-    let service = ServiceV1::decode(data)?;
+    let net_info = if entry_version >= PROTX_VERSION_EXT_ADDR {
+      NetInfo::Extended(NetInfoV2::decode(data)?)
+    } else {
+      NetInfo::Legacy(NetInfoV1::decode(data)?)
+    };
     let operator_key = BlsPubKey::decode(data, BlsScheme::from_protx_version(entry_version))?;
     let voting_key_id = PubKeyHash::decode(data)?;
     let is_valid = bool::decode(data)?;
@@ -299,7 +314,12 @@ impl SimplifiedMnListEntry {
     };
 
     let (platform_http_port, platform_node_id) = if mn_type == MnType::Evo {
-      (Some(u16::decode(data)?), Some(PlatformNodeId::decode(data)?))
+      let http_port = if entry_version < PROTX_VERSION_EXT_ADDR {
+        Some(u16::decode(data)?)
+      } else {
+        None
+      };
+      (http_port, Some(PlatformNodeId::decode(data)?))
     } else {
       (None, None)
     };
@@ -308,7 +328,7 @@ impl SimplifiedMnListEntry {
       version: entry_version,
       pro_reg_tx_hash,
       confirmed_hash,
-      service,
+      net_info,
       operator_key,
       voting_key_id,
       is_valid,
@@ -326,21 +346,78 @@ impl SimplifiedMnListEntry {
     }
     self.pro_reg_tx_hash.encode(buf);
     self.confirmed_hash.encode(buf);
-    self.service.encode(buf);
+    match &self.net_info {
+      NetInfo::Legacy(v1) => v1.encode(buf),
+      NetInfo::Extended(v2) => v2.encode(buf),
+    }
     self.operator_key.encode(buf);
     self.voting_key_id.encode(buf);
     self.is_valid.encode(buf);
     if version >= ProtocolVersion::DMN_TYPE && self.version >= 2 {
       self.mn_type.to_base().encode(buf);
       if self.mn_type == MnType::Evo {
-        self.platform_http_port.unwrap_or(0).encode(buf);
+        if self.version < PROTX_VERSION_EXT_ADDR {
+          self.platform_http_port.unwrap_or(0).encode(buf);
+        }
         self.platform_node_id.unwrap_or_default().encode(buf);
       }
     }
   }
+
+  /// Builds an entry whose net info form and operator key scheme follow
+  /// `version`.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`NetInfoVersionMismatch`] for extended net info below version 3
+  /// or legacy net info from it.
+  #[expect(clippy::too_many_arguments, reason = "one argument per wire field")]
+  pub fn new(
+    version: u16,
+    pro_reg_tx_hash: TxHash,
+    confirmed_hash: BlockHash,
+    net_info: NetInfo,
+    operator_key: [u8; BLS_PK_LEN],
+    voting_key_id: PubKeyHash,
+    is_valid: bool,
+    mn_type: MnType,
+    platform_http_port: Option<u16>,
+    platform_node_id: Option<PlatformNodeId>,
+  ) -> Result<Self, NetInfoVersionMismatch> {
+    if matches!(net_info, NetInfo::Extended(_)) != (version >= PROTX_VERSION_EXT_ADDR) {
+      return Err(NetInfoVersionMismatch);
+    }
+    Ok(Self {
+      version,
+      pro_reg_tx_hash,
+      confirmed_hash,
+      net_info,
+      operator_key: BlsPubKey::from_bytes(operator_key, BlsScheme::from_protx_version(version)),
+      voting_key_id,
+      is_valid,
+      mn_type,
+      platform_http_port,
+      platform_node_id,
+    })
+  }
+
+  /// Entry version.
+  pub const fn version(&self) -> u16 {
+    self.version
+  }
+
+  /// Network addresses, legacy below version 3 and extended from it.
+  pub const fn net_info(&self) -> &NetInfo {
+    &self.net_info
+  }
+
+  /// BLS operator public key, in the scheme of the entry version.
+  pub const fn operator_key(&self) -> &BlsPubKey {
+    &self.operator_key
+  }
 }
 
-/// Field set that tags the operator key from the entry version.
+/// Field set that builds the entry through [`SimplifiedMnListEntry::new`].
 #[cfg(feature = "serde")]
 #[derive(::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -348,7 +425,7 @@ struct __SmlEntryFields {
   version: u16,
   pro_reg_tx_hash: TxHash,
   confirmed_hash: BlockHash,
-  service: ServiceV1,
+  net_info: NetInfo,
   #[serde(deserialize_with = "dash_primitives::serialize::bls::pk_bytes")]
   operator_key: [u8; BLS_PK_LEN],
   voting_key_id: PubKeyHash,
@@ -360,20 +437,22 @@ struct __SmlEntryFields {
 }
 
 #[cfg(feature = "serde")]
-impl From<__SmlEntryFields> for SimplifiedMnListEntry {
-  fn from(fields: __SmlEntryFields) -> Self {
-    Self {
-      version: fields.version,
-      pro_reg_tx_hash: fields.pro_reg_tx_hash,
-      confirmed_hash: fields.confirmed_hash,
-      service: fields.service,
-      operator_key: BlsPubKey::from_bytes(fields.operator_key, BlsScheme::from_protx_version(fields.version)),
-      voting_key_id: fields.voting_key_id,
-      is_valid: fields.is_valid,
-      mn_type: fields.mn_type,
-      platform_http_port: fields.platform_http_port,
-      platform_node_id: fields.platform_node_id,
-    }
+impl TryFrom<__SmlEntryFields> for SimplifiedMnListEntry {
+  type Error = NetInfoVersionMismatch;
+
+  fn try_from(fields: __SmlEntryFields) -> Result<Self, Self::Error> {
+    Self::new(
+      fields.version,
+      fields.pro_reg_tx_hash,
+      fields.confirmed_hash,
+      fields.net_info,
+      fields.operator_key,
+      fields.voting_key_id,
+      fields.is_valid,
+      fields.mn_type,
+      fields.platform_http_port,
+      fields.platform_node_id,
+    )
   }
 }
 
@@ -384,18 +463,22 @@ impl fmt::Display for SimplifiedMnListEntry {
 }
 
 #[cfg(all(test, feature = "serde"))]
-#[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
   use super::*;
   use crate::{CommandString, P2pMsg};
 
-  use dash_dev::{assert_serde_rt, check_wire, Corpus};
+  use dash_dev::{assert_serde_rt, check_wire, json_rejects, Corpus};
+  use dash_primitives::{AddrV2, NIEntry, NIPurpose, ServiceV2};
+  use hex_conservative::decode_to_vec;
   use rstest::rstest;
 
   fn corpus_diff() -> MnListDiffPayload {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "mnlistdiff");
-    let items = corpus.entries::<MnListDiffPayload>("mnlistdiff", |_, _, _| {});
-    items.into_values().next().unwrap()
+    let items: Vec<_> = corpus
+      .entries::<MnListDiffPayload>("mnlistdiff", |_, _, _| {})
+      .into_values()
+      .collect();
+    items[0].clone()
   }
 
   /// Corpus diff reduced to what every layout carries. Entries are version 1
@@ -457,7 +540,10 @@ mod tests {
       }
       out.extend(enc(&entry.pro_reg_tx_hash));
       out.extend(enc(&entry.confirmed_hash));
-      out.extend(enc(&entry.service));
+      match &entry.net_info {
+        NetInfo::Legacy(v1) => out.extend(enc(v1)),
+        NetInfo::Extended(v2) => out.extend(enc(v2)),
+      }
       entry.operator_key.encode(&mut out);
       out.extend(enc(&entry.voting_key_id));
       out.extend(enc(&entry.is_valid));
@@ -494,7 +580,10 @@ mod tests {
     assert_eq!(buf, raw);
 
     let mut cursor = raw.as_slice();
-    assert_eq!(MnListDiffPayload::decode_versioned(&mut cursor, version).unwrap(), diff);
+    assert_eq!(
+      MnListDiffPayload::decode_versioned(&mut cursor, version),
+      Ok(diff.clone())
+    );
     assert!(cursor.is_empty());
 
     assert_eq!(
@@ -509,8 +598,8 @@ mod tests {
     let mut diff = diff_for(false);
     diff.version = 7;
     let raw = layout(&diff, false, false, false, false);
-    let back = MnListDiffPayload::decode_versioned(&mut raw.as_slice(), ProtocolVersion::MIN_PEER).unwrap();
-    assert_eq!(back.version, 1);
+    let back = MnListDiffPayload::decode_versioned(&mut raw.as_slice(), ProtocolVersion::MIN_PEER);
+    assert_eq!(back.map(|back| back.version), Ok(1));
   }
 
   /// An entry version 2 carries its type only from `DMN_TYPE`, and an entry
@@ -528,8 +617,8 @@ mod tests {
     entry.encode_versioned(&mut untyped, ProtocolVersion(70226));
     assert_eq!(buf.len(), untyped.len() + if typed { 2 } else { 0 });
 
-    let back = SimplifiedMnListEntry::decode_versioned(&mut untyped.as_slice(), ProtocolVersion(70226)).unwrap();
-    assert_eq!((back.version, back.mn_type), (1, MnType::Regular));
+    let back = SimplifiedMnListEntry::decode_versioned(&mut untyped.as_slice(), ProtocolVersion(70226));
+    assert_eq!(back.map(|back| (back.version, back.mn_type)), Ok((1, MnType::Regular)));
   }
 
   #[rstest]
@@ -553,9 +642,11 @@ mod tests {
     entry.mn_type = MnType::Regular;
     let mut buf = Vec::new();
     entry.encode_versioned(&mut buf, ProtocolVersion(version));
-    let back = SimplifiedMnListEntry::decode_versioned(&mut buf.as_slice(), ProtocolVersion(version)).unwrap();
-    assert_eq!(back.operator_key.scheme(), scheme);
-    assert_eq!(back.operator_key.as_bytes(), entry.operator_key.as_bytes());
+    let back = SimplifiedMnListEntry::decode_versioned(&mut buf.as_slice(), ProtocolVersion(version));
+    assert_eq!(
+      back.map(|back| back.operator_key),
+      Ok(BlsPubKey::from_bytes(*entry.operator_key.as_bytes(), scheme))
+    );
   }
 
   #[rstest]
@@ -566,5 +657,170 @@ mod tests {
     entry.version = entry_version;
     let back: SimplifiedMnListEntry = dash_dev::from_json(&dash_dev::to_json(&entry));
     assert_eq!(back.operator_key.scheme(), scheme);
+  }
+
+  fn extended() -> NetInfo {
+    let service = ServiceV2 {
+      addr: AddrV2::Ipv4([1, 2, 3, 4]),
+      port: 9999,
+    };
+    NetInfo::Extended(NetInfoV2::new(vec![(
+      NIPurpose::CoreP2p,
+      vec![NIEntry::Service(service)],
+    )]))
+  }
+
+  /// Corpus entry rebuilt as an evo masternode at `version`, with net info
+  /// of the form `version` takes.
+  fn evo_entry(version: u16) -> SimplifiedMnListEntry {
+    let entry = corpus_diff().mn_list[0].clone();
+    let net_info = if version >= PROTX_VERSION_EXT_ADDR {
+      extended()
+    } else {
+      entry.net_info.clone()
+    };
+    SimplifiedMnListEntry {
+      version,
+      net_info,
+      operator_key: BlsPubKey::from_bytes(*entry.operator_key.as_bytes(), BlsScheme::from_protx_version(version)),
+      mn_type: MnType::Evo,
+      platform_http_port: (version < PROTX_VERSION_EXT_ADDR).then_some(443),
+      platform_node_id: Some(PlatformNodeId::from([7; 20])),
+      ..entry
+    }
+  }
+
+  /// Version 3 entries carry extended net info and no platform HTTP port.
+  #[rstest]
+  #[case::basic_bls(2)]
+  #[case::ext_addr(3)]
+  fn ext_addr_entry_layout(#[case] version: u16) {
+    let entry = evo_entry(version);
+    let mut raw = enc(&version);
+    raw.extend(enc(&entry.pro_reg_tx_hash));
+    raw.extend(enc(&entry.confirmed_hash));
+    match &entry.net_info {
+      NetInfo::Legacy(v1) => raw.extend(enc(v1)),
+      NetInfo::Extended(v2) => raw.extend(enc(v2)),
+    }
+    entry.operator_key.encode(&mut raw);
+    raw.extend(enc(&entry.voting_key_id));
+    raw.extend(enc(&entry.is_valid));
+    raw.extend(enc(&MnType::Evo.to_base()));
+    if let Some(port) = entry.platform_http_port {
+      raw.extend(enc(&port));
+    }
+    raw.extend(enc(&entry.platform_node_id.unwrap_or_default()));
+
+    assert_eq!(enc(&entry), raw);
+    assert_eq!(SimplifiedMnListEntry::decode(&mut raw.as_slice()), Ok(entry));
+  }
+
+  /// Version 3 entries as written at the current protocol, with zero bytes
+  /// for the fields that every version shares.
+  #[rstest]
+  #[case::empty_regular(
+    "0100", // version 1, no purposes
+    NetInfoV2::new(vec![]),
+    MnType::Regular,
+    "0000", // regular
+  )]
+  #[case::ipv4_regular(
+    concat!(
+      "01",               // version 1
+      "01",               // one purpose
+      "00", "01",         // core P2P, one entry
+      "01", "01", "04",   // service, IPv4, 4 bytes
+      "01020304", "270f", // 1.2.3.4, port 9999
+    ),
+    NetInfoV2::new(vec![(
+      NIPurpose::CoreP2p,
+      vec![NIEntry::Service(ServiceV2 { addr: AddrV2::Ipv4([1, 2, 3, 4]), port: 9999 })],
+    )]),
+    MnType::Regular,
+    "0000", // regular
+  )]
+  #[case::domain_evo(
+    concat!(
+      "01",                     // version 1
+      "01",                     // one purpose
+      "02", "01",               // platform HTTPS, one entry
+      "02", "0b",               // domain, 11 bytes
+      "6578616d706c652e636f6d", // "example.com"
+      "01bb",                   // port 443
+    ),
+    NetInfoV2::new(vec![(
+      NIPurpose::PlatformHttps,
+      vec![NIEntry::Domain { name: b"example.com".to_vec(), port: 443 }],
+    )]),
+    MnType::Evo,
+    concat!("0100", "0000000000000000000000000000000000000000"), // evo, node id
+  )]
+  fn ext_addr_entry_vectors(
+    #[case] net_info_hex: &str,
+    #[case] net_info: NetInfoV2,
+    #[case] mn_type: MnType,
+    #[case] type_hex: &str,
+  ) {
+    let hex = [
+      "0300",
+      &"00".repeat(64),
+      net_info_hex,
+      &"00".repeat(BLS_PK_LEN + 20),
+      "01",
+      type_hex,
+    ]
+    .concat();
+    let raw = decode_to_vec(&hex).unwrap_or_default();
+    let entry = SimplifiedMnListEntry::decode(&mut raw.as_slice());
+    assert_eq!(
+      entry
+        .as_ref()
+        .map(|entry| (entry.net_info(), entry.mn_type, entry.platform_http_port)),
+      Ok((&NetInfo::Extended(net_info), mn_type, None))
+    );
+    assert_eq!(entry.map(|entry| enc(&entry)), Ok(raw));
+  }
+
+  #[rstest]
+  #[case::legacy_below_ext_addr(2, false, true)]
+  #[case::extended_below_ext_addr(2, true, false)]
+  #[case::legacy_at_ext_addr(3, false, false)]
+  #[case::extended_at_ext_addr(3, true, true)]
+  #[case::extended_above_ext_addr(4, true, true)]
+  fn new_matches_net_info_to_the_version(#[case] version: u16, #[case] is_extended: bool, #[case] ok: bool) {
+    let entry = corpus_diff().mn_list[0].clone();
+    let net_info = if is_extended {
+      extended()
+    } else {
+      entry.net_info.clone()
+    };
+    let built = SimplifiedMnListEntry::new(
+      version,
+      entry.pro_reg_tx_hash,
+      entry.confirmed_hash,
+      net_info,
+      *entry.operator_key.as_bytes(),
+      entry.voting_key_id,
+      entry.is_valid,
+      MnType::Regular,
+      None,
+      None,
+    );
+    assert_eq!(built.err(), (!ok).then_some(NetInfoVersionMismatch));
+  }
+
+  #[rstest]
+  fn json_ext_addr_entry_round_trips() {
+    let entry = evo_entry(3);
+    let back: SimplifiedMnListEntry = dash_dev::from_json(&dash_dev::to_json(&entry));
+    assert_eq!(back, entry);
+  }
+
+  #[rstest]
+  fn json_rejects_net_info_of_the_wrong_form() {
+    let mut entry = evo_entry(2);
+    entry.version = 3;
+    assert!(json_rejects::<SimplifiedMnListEntry>(&dash_dev::to_json(&entry)));
   }
 }

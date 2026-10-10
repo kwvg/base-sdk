@@ -52,9 +52,11 @@
             "version": 2,
             "proRegTxHash": "7a9b3753d3af9affcc11e3b54ea86769960c9ecf82c725252a1a274fc055c2c2",
             "confirmedHash": "000000000000000c5f865b9a608cab1e5b649de6bf5fafe9fcce14d2bd943ac8",
-            "service": {
-              "addr": "00000000000000000000ffffc0f8bd42",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffffc0f8bd42",
+                "port": 9999
+              }
             },
             "operatorKey": "b60fba0f9c1a76b69619c17c145f8a7ee9eaa13c214219777d56b15efc68c43f04873f8235b738d8e7b806c4f8afbc4a",
             "votingKeyId": "9b0bcb480a0a2b07be10f135298b816ccf523890",
@@ -67,9 +69,11 @@
             "version": 2,
             "proRegTxHash": "3f85e5d14d27581943bf46e2dfb53ae733f8c10786db0a0a651b6692c6ecd2ab",
             "confirmedHash": "000000000000002558cbfe47b67eb66792ca2b9cc0a81bbc1069e7f53e481b66",
-            "service": {
-              "addr": "00000000000000000000ffffb9d8b305",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffffb9d8b305",
+                "port": 9999
+              }
             },
             "operatorKey": "832e090090b5f78ff6be581bd51ddc4511e9ecc5f147cef310ffc2cc452847b4e3f577f1fd84039789e613a41e11ceab",
             "votingKeyId": "988e3f95d42a1da575700908da70eb13efd65588",
@@ -82,9 +86,11 @@
             "version": 2,
             "proRegTxHash": "57fd98f0964205ab0cdb4bd9651bb974a16a69d9e95c582dce3ef7ac452ad8cc",
             "confirmedHash": "0000000000000019460a5bb1ee0d035f93166c21c0a4bc1c78518539f122bc64",
-            "service": {
-              "addr": "00000000000000000000ffff97f4554c",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffff97f4554c",
+                "port": 9999
+              }
             },
             "operatorKey": "a0d2cd8b8ff02763ce7ccc19daa78922b79e68e0fe884695680176f4fb7dc96fb77e8bc25f0765b9f9d9ab9e2493ce4b",
             "votingKeyId": "06c394b5e341795321a83f574210ef8efe9c09ac",
@@ -97,9 +103,11 @@
             "version": 2,
             "proRegTxHash": "927e563b632a7937010f7d619655a0e1db3dc1bf01290cfb0c845ef30d60cb74",
             "confirmedHash": "0000000000000019c27d87a616e6882471c9faea8accab710e72ad18bb054564",
-            "service": {
-              "addr": "00000000000000000000ffff334f3660",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffff334f3660",
+                "port": 9999
+              }
             },
             "operatorKey": "821c519051c7c590fbbe986a93643b52f66df9a1ed80fa08952e475ec4f1da7f76a78aa0ef8ddf0d2404368ea8e584b6",
             "votingKeyId": "65b157b5f9ba8067c846e05f753e333b804c728d",
@@ -112,9 +120,11 @@
             "version": 2,
             "proRegTxHash": "c67cef59c906885b4a5cf0300e2aabc951643d64da4ef746a1ea7204ba6376d7",
             "confirmedHash": "0000000000000034cd790f54bcc1325ecac6a8015ceb3e68efacdae70f720efd",
-            "service": {
-              "addr": "00000000000000000000ffff97f4556d",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffff97f4556d",
+                "port": 9999
+              }
             },
             "operatorKey": "802e1e55c506e930327788db0528089a1d48cbc350cfe874514873ac2bcaee483a0f6b225552e6c1b02169d0a7403117",
             "votingKeyId": "e6762be748479c430ceeacc3fa4073f6776c51bf",
@@ -127,9 +137,11 @@
             "version": 2,
             "proRegTxHash": "fe75c2edf5d5076295a54dbcf1c0df7b3c73510e01cc3fc19b361803c1909459",
             "confirmedHash": "0000000000000018face1e7e0dea8fc2f57fc9e71b4914eb589b79fd8baca6b8",
-            "service": {
-              "addr": "00000000000000000000ffff9471d161",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffff9471d161",
+                "port": 9999
+              }
             },
             "operatorKey": "917e3809889b89ac65c6cc2b4544a507656cec1a1040a82662be13cf93bfa1d12f2b5205f3b6b0c5c43571a8eb94709b",
             "votingKeyId": "1a8858c9002f927d62d67f91c6e591e92ebcb78d",
@@ -142,9 +154,11 @@
             "version": 2,
             "proRegTxHash": "2ff7b917d2c7c4da46afcff9bc0a2911267900595f27ed6180d680fa566ac2dd",
             "confirmedHash": "0000000000000039a98809386c3bb01382b72ea828ee6ec79d8ca8f59648e529",
-            "service": {
-              "addr": "00000000000000000000ffffb9be8f5b",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffffb9be8f5b",
+                "port": 9999
+              }
             },
             "operatorKey": "b4805c1a34826a5b2d6f610437958ceaeb0e870261ffe97f57c384928c26c1b4f7bff6d024d1311fb6c704cd15a74feb",
             "votingKeyId": "45091819aa1b3602aeb51ff23119015332927853",
@@ -157,9 +171,11 @@
             "version": 2,
             "proRegTxHash": "8e6b2d83d21384e29ec9a1359a3f50cf3e13f4bd9bea9542f22a8b53bdd21d9f",
             "confirmedHash": "000000000000002558cbfe47b67eb66792ca2b9cc0a81bbc1069e7f53e481b66",
-            "service": {
-              "addr": "00000000000000000000ffff4f8fb56c",
-              "port": 9999
+            "netInfo": {
+              "legacy": {
+                "addr": "00000000000000000000ffff4f8fb56c",
+                "port": 9999
+              }
             },
             "operatorKey": "b838c7baca69548d9a7e2a98385d300e81cc2d738a6444d0cbfce0120689b9f16252308558ea269198407fc22e29897f",
             "votingKeyId": "a55ec150ebad29d9777698975f26ed06e94ffacc",
