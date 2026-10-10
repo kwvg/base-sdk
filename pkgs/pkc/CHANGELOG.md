@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - `Bls{Public,Secret}Key::negate`, `BlsSecretKey::mul_tweak`, `EcdsaPublicKey::negate` and `EcdsaSecretKey::mul_tweak`.
+- `BlsPkBytes::is_canonical`, `BlsSigBytes::is_canonical` and `BlsSkBytes::is_canonical`, behind the `bls` feature.
+  They reject bytes that decode in the scheme only after masking, or not at all. Null bytes count as canonical.
 
 ### Changed
 
@@ -25,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `Bls{Pk,Sig}Share`, `BlsIes{Blob,Multi}`, `EcdsaPkBytes`, `EcdsaSigBytes`, `EcdsaRecSigBytes`, `EcdsaPkHash`,
   `EcdsaPublicKey`, `EcdsaSignature`, `EcdsaRecSignature`, `EddsaPkBytes`, `EddsaSigBytes`, `EddsaPkHash`,
   `EddsaPublicKey`, `EddsaSignature`.
+- `BlsIesBlobBytes` and `BlsIesMultiBytes` report a length or count past the remaining input as `DecodeError::Eof`
+  instead of `DecodeError::CompactSizeExceedsLimit`.
 
 ## [0.1.0-beta] - 2026-09-15
 

@@ -8,3 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 - Initial release.
+
+### Removed
+
+- `LlmqType`, in favour of `dash_primitives::LlmqType`, which the consensus parameters now use. Callers import it from
+  `dash-primitives` and spell `LlmqTestInstantSend` as `LlmqTestInstantsend`.

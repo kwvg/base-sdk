@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ParseHexError` is moved from `dash-num`, superseding `dash_num::ParseHexError`.
 - `serialize::hex::serialize_as` and `serialize::hex::deserialize_as`, to permit caller-defined handling of
   human-readable encoding while sharing common machine-readable encoding.
+- `CompactSize::decode_len`, which reads a length or count prefix and rejects one above `MAX_SIZE` or past the
+  remaining input.
+- `MAX_SIZE`, `CompactSize::decode_checked`, `CompactSize::decode_as` and `CompactSize::decode_checked_as`, with the
+  sealed `CompactUint` trait, for CompactSize-encoded integer fields that are range-checked, bounded by their type, or
+  both.
 
 ### Changed
 
@@ -31,6 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `Vec<u8>` as the fixed return type must now mention it explicitly.
 - `serialize::str_u64` writes a native `u64` to machine-readable formats. `str_u64` is a workaround for number-precision
   limitations in JSON and is now contained only for human-readable formats.
+- `bool` decodes any non-zero byte as `true` instead of rejecting bytes above `1`. Encoding still writes `0` or `1`, so
+  a decoded byte above `1` does not round-trip.
+- `Vec<T>`, `String` and the `ScriptBuf` adapter reject a count above `MAX_SIZE` with
+  `DecodeError::CompactSizeExceedsLimit`, and report a count past the remaining input as `DecodeError::Eof` instead of
+  `CompactSizeExceedsLimit`. Callers that match `CompactSizeExceedsLimit` for truncated input must match `Eof`.
 
 ### Removed
 
