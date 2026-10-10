@@ -234,6 +234,8 @@ pub enum ProTxInvalid {
   DuplicatePlatformPorts,
   /// `bad-protx-inputs-hash`
   BadInputsHash,
+  /// `bad-prodis-version`
+  BadDissolveVersion { version: u16 },
   /// `bad-prodis-sig-count`
   BadDissolveSigCount { count: usize },
   /// `bad-proupsharedreg-sig-count`
@@ -297,6 +299,7 @@ impl fmt::Display for ProTxInvalid {
       Self::BadPlatformHttpPort { port } => write!(f, "bad-protx-platform-http-port: {port}"),
       Self::DuplicatePlatformPorts => write!(f, "bad-protx-platform-dup-ports"),
       Self::BadInputsHash => write!(f, "bad-protx-inputs-hash"),
+      Self::BadDissolveVersion { version } => write!(f, "bad-prodis-version: {version}"),
       Self::BadDissolveSigCount { count } => write!(f, "bad-prodis-sig-count: {count}"),
       Self::BadSharedRegSigCount { count } => write!(f, "bad-proupsharedreg-sig-count: {count}"),
     }
