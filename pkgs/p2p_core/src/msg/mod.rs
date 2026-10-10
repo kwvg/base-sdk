@@ -7,6 +7,7 @@
 //! P2P message types and dispatch.
 
 mod addr;
+mod bloom;
 mod coinjoin;
 mod gov;
 mod headers;
@@ -26,6 +27,7 @@ use dash_primitives::{GovObject, GovVote};
 use dash_types::type_id::Unencodable;
 
 pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
+pub use bloom::BloomFilter;
 pub use coinjoin::SendDsq;
 pub use gov::GovSync;
 pub use headers::{GetHeaders, Headers};
