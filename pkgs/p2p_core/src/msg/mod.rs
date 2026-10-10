@@ -30,7 +30,7 @@ pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
 pub use bloom::BloomFilter;
 pub use coinjoin::SendDsq;
 pub use gov::GovSync;
-pub use headers::{GetHeaders, Headers};
+pub use headers::{GetHeaders, Headers, NonContinuousHeaders};
 pub use headers2::{CompressionState, GetHeaders2, Headers2};
 pub use inv::{GetData, Inv, InvType, Inventory, NotFound};
 pub use llmq::QSendRecSigs;

@@ -7,13 +7,14 @@
 //! Compressed header messages.
 
 use crate::codec::{codec_p2p, impl_p2p};
+use crate::msg::headers::{check_chain, NonContinuousHeaders};
 use crate::prelude::*;
 use crate::version::ProtocolVersion;
 
 use dash_primitives::{hash_impl, BlockHash, BlockHeader, MerkleRoot};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
-use dash_types::{CompactSize, Hashable};
+use dash_types::{Checkable, CompactSize, Hashable};
 
 /// Maximum headers per message.
 const MAX_HEADERS: usize = 2_000;
@@ -302,6 +303,14 @@ impl BaseCodec for Headers2 {
   }
 }
 
+impl Checkable for Headers2 {
+  type Error = NonContinuousHeaders;
+
+  fn check(&self) -> Option<Self::Error> {
+    check_chain(&self.headers)
+  }
+}
+
 hash_impl!(Headers2);
 
 #[cfg(all(test, feature = "serde"))]
@@ -417,6 +426,19 @@ mod tests {
     let mut buf = Vec::new();
     state.encode_header(&header_at(first.hash(), 1_001), &mut buf);
     assert_eq!(buf[0] & FLAG_PREV_HASH, 0);
+  }
+
+  #[rstest]
+  fn rejects_a_broken_link() {
+    let first = header_at(BlockHash::default(), 1_000);
+    let chained = Headers2 {
+      headers: vec![first, header_at(first.hash(), 1_001)],
+    };
+    assert_eq!(chained.check(), None);
+    let broken = Headers2 {
+      headers: vec![first, header_at(BlockHash::default(), 1_001)],
+    };
+    assert_eq!(broken.check(), Some(NonContinuousHeaders { index: 1 }));
   }
 
   #[rstest]
