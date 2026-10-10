@@ -138,11 +138,7 @@ impl AssetUnlock {
   /// Quorum signing request id, shared by every instance and payload version
   /// of one withdrawal.
   pub fn request_id(&self) -> Hash256 {
-    payload_hash(|buf| {
-      CompactSize::from(REQUEST_ID_PREFIX.len()).encode(buf);
-      REQUEST_ID_PREFIX.encode(buf);
-      self.index.encode(buf);
-    })
+    withdrawal_request_id(self.index)
   }
 
   /// Rejects a payload version above 1 while v24 is inactive.
@@ -150,6 +146,15 @@ impl AssetUnlock {
     (deployments.v24 == Activation::Inactive && self.version > 1)
       .then_some(AssetUnlockInvalid::Version2Inactive { version: self.version })
   }
+}
+
+/// Quorum signing request id of the withdrawal with index `index`.
+pub(crate) fn withdrawal_request_id(index: u64) -> Hash256 {
+  payload_hash(|buf| {
+    CompactSize::from(REQUEST_ID_PREFIX.len()).encode(buf);
+    REQUEST_ID_PREFIX.encode(buf);
+    index.encode(buf);
+  })
 }
 
 impl fmt::Display for AssetUnlock {

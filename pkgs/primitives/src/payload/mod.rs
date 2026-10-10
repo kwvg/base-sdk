@@ -23,6 +23,7 @@ mod proupsharedregtx;
 mod proupsharetx;
 mod quorum;
 
+pub(crate) use self::assetunlock::withdrawal_request_id;
 use crate::hash_impl;
 use crate::prelude::*;
 use crate::types::{NIError, NIPurpose, NITrait, NetAddrError, NetInfo, NetInfoV2};

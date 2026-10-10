@@ -10,8 +10,8 @@
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
 use crate::deployment::{Activation, Deployments};
 use crate::payload::{
-  AssetLockInvalid, AssetUnlockInvalid, InputsHash, OutputsHash, PayloadError, PayloadInvalid, ProTxInvalid,
-  ProTxPayload, SpecialPayload, TxType, ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE,
+  withdrawal_request_id, AssetLockInvalid, AssetUnlockInvalid, InputsHash, OutputsHash, PayloadError, PayloadInvalid,
+  ProTxInvalid, ProTxPayload, SpecialPayload, TxType, ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE,
   ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS,
 };
 use crate::prelude::*;
@@ -464,6 +464,25 @@ impl Transaction {
     self.version >= 3 && self.tx_type == TxType::AssetUnlock && self.extra_payload.len() == ASSET_UNLOCK_PAYLOAD_SIZE
   }
 
+  /// Outpoints an InstantSend lock on the transaction pins. An asset unlock
+  /// spends nothing, so its lock pins index 0 of the withdrawal request id,
+  /// which every instance and payload version of the withdrawal shares.
+  pub fn lock_inputs(&self) -> Vec<OutPoint> {
+    let index = self
+      .extra_payload
+      .get(1..9)
+      .filter(|_| self.is_asset_unlock_payload())
+      .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok());
+    if let Some(index) = index {
+      let id = withdrawal_request_id(u64::from_le_bytes(index));
+      return vec![OutPoint {
+        hash: TxHash::from_lendian(id.to_lendian()),
+        index: 0,
+      }];
+    }
+    self.inputs.iter().map(|input| input.prevout).collect()
+  }
+
   /// Tells whether the txid leaves out the quorum signing fields, which holds
   /// for asset unlock payload versions 2 to 255 whether or not v24 is active.
   pub fn has_stable_txid(&self) -> bool {
@@ -815,6 +834,49 @@ mod tests {
     let mut tx = corpus_asset_unlock();
     tx.extra_payload[0] = version;
     tx
+  }
+
+  #[rstest]
+  #[case::v1(1)]
+  #[case::v2(2)]
+  fn asset_unlock_locks_its_withdrawal_request_id(#[case] version: u8) {
+    let tx = asset_unlock_of_version(version);
+    let Some(Ok(SpecialPayload::AssetUnlock(payload))) = tx.decode_payload() else {
+      panic!("corpus asset unlock does not decode");
+    };
+    let hash = TxHash::from_lendian(payload.request_id().to_lendian());
+    assert_eq!(tx.lock_inputs(), vec![OutPoint { hash, index: 0 }]);
+  }
+
+  #[rstest]
+  fn asset_unlock_without_a_full_payload_locks_its_inputs() {
+    let mut tx = asset_unlock_of_version(2);
+    tx.extra_payload.pop();
+    assert_eq!(tx.lock_inputs(), Vec::new());
+  }
+
+  #[rstest]
+  fn spend_locks_its_prevouts_in_order() {
+    let mut tx = bare(2, 0);
+    let prevouts = [
+      OutPoint {
+        hash: TxHash::from_lendian([0x22; 32]),
+        index: 1,
+      },
+      OutPoint {
+        hash: TxHash::from_lendian([0x11; 32]),
+        index: 0,
+      },
+    ];
+    tx.inputs = prevouts
+      .iter()
+      .map(|&prevout| TxIn {
+        prevout,
+        script_sig: ScriptSigBuf::new(),
+        sequence: u32::MAX,
+      })
+      .collect();
+    assert_eq!(tx.lock_inputs(), prevouts);
   }
 
   #[rstest]
