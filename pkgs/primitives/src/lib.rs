@@ -17,6 +17,7 @@ mod chainlock;
 mod codec;
 mod deployment;
 mod gov;
+mod instantsend;
 mod llmq;
 mod merkle;
 mod payload;
@@ -45,6 +46,7 @@ pub use gov::{
   GovData, GovObject, GovObjectType, GovVote, GovVoteInvalid, Proposal, ProposalInvalid, Trigger, VoteOutcome,
   VoteSignal, MAX_PROPOSAL_DATA_SIZE,
 };
+pub use instantsend::{InstantSendLock, InstantSendLockInvalid, MAX_ISLOCK_INPUTS};
 pub use merkle::{
   merkle_root, merkle_root_mutated, MerkleMatches, PartialMerkleTree, PartialMerkleTreeInvalid,
   MAX_PARTIAL_MERKLE_TRANSACTIONS,
