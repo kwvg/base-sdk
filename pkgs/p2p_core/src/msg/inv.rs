@@ -38,12 +38,36 @@ enum_map! {
     Block = 2 => "block",
     /// Filtered block (BIP37).
     FilteredBlock = 3 => "filtered_block",
+    /// Spork message.
+    Spork = 6 => "spork",
+    /// CoinJoin broadcast transaction.
+    Dstx = 16 => "dstx",
     /// Governance object.
     GovernanceObject = 17 => "governance_object",
     /// Governance object vote.
     GovernanceObjectVote = 18 => "governance_object_vote",
     /// Compact block (BIP152).
     CompactBlock = 20 => "compact_block",
+    /// LLMQ final commitment.
+    QuorumFinalCommitment = 21 => "quorum_final_commitment",
+    /// LLMQ DKG contribution.
+    QuorumContrib = 23 => "quorum_contrib",
+    /// LLMQ DKG complaint.
+    QuorumComplaint = 24 => "quorum_complaint",
+    /// LLMQ DKG justification.
+    QuorumJustification = 25 => "quorum_justification",
+    /// LLMQ DKG premature commitment.
+    QuorumPrematureCommitment = 26 => "quorum_premature_commitment",
+    /// LLMQ recovered signature.
+    QuorumRecoveredSig = 28 => "quorum_recovered_sig",
+    /// ChainLock signature.
+    ClSig = 29 => "clsig",
+    /// Deterministic InstantSend lock.
+    IsdLock = 31 => "isdlock",
+    /// CoinJoin queue announcement.
+    Dsq = 32 => "dsq",
+    /// Platform service ban (DIP-0031).
+    PlatformBan = 33 => "platform_ban",
   }
 }
 
@@ -95,7 +119,37 @@ mod tests {
   use super::*;
 
   use dash_dev::{assert_serde_rt, check_wire, Corpus};
+  use dash_types::Numeric;
   use rstest::rstest;
+
+  #[rstest]
+  #[case::spork(6, InvType::Spork)]
+  #[case::dstx(16, InvType::Dstx)]
+  #[case::quorum_final_commitment(21, InvType::QuorumFinalCommitment)]
+  #[case::quorum_contrib(23, InvType::QuorumContrib)]
+  #[case::quorum_complaint(24, InvType::QuorumComplaint)]
+  #[case::quorum_justification(25, InvType::QuorumJustification)]
+  #[case::quorum_premature_commitment(26, InvType::QuorumPrematureCommitment)]
+  #[case::quorum_recovered_sig(28, InvType::QuorumRecoveredSig)]
+  #[case::clsig(29, InvType::ClSig)]
+  #[case::isdlock(31, InvType::IsdLock)]
+  #[case::dsq(32, InvType::Dsq)]
+  #[case::platform_ban(33, InvType::PlatformBan)]
+  fn inv_types_follow_the_reference_codes(#[case] code: u32, #[case] inv_type: InvType) {
+    assert_eq!(InvType::from_base(code), inv_type);
+    assert_eq!(inv_type.to_base(), code);
+  }
+
+  #[rstest]
+  #[case::legacy_txlock_request(4)]
+  #[case::masternode_verify(19)]
+  #[case::quorum_dummy_commitment(22)]
+  #[case::quorum_debug_status(27)]
+  #[case::islock(30)]
+  #[case::asset_unlock(34)]
+  fn other_inv_codes_are_unknown(#[case] code: u32) {
+    assert_eq!(InvType::from_base(code), InvType::Unknown(code));
+  }
 
   #[rstest]
   fn corpus_inv() {
