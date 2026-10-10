@@ -48,8 +48,9 @@ pub use payload::{
   AssetLock, AssetLockInvalid, AssetUnlock, AssetUnlockInvalid, CbTxInvalid, CoinbaseCommitment, Commitment,
   CommitmentFault, CommitmentInvalid, FinalCommitment, InputsHash, MnHardFork, MnHardForkInvalid, MnType, PayloadError,
   PayloadInvalid, PlatformNodeId, ProRegTx, ProTxInvalid, ProTxPayload, ProUpRegTx, ProUpRevTx, ProUpServTx,
-  QuorumHash, QuorumVvecHash, SpecialPayload, TxType, UnknownProTxVersion, MAXIMUM_WITHDRAWALS,
-  PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR, PROTX_VERSION_LEGACY_BLS, VERSIONBITS_NUM_BITS,
+  QuorumHash, QuorumVvecHash, SpecialPayload, TxType, UnknownProTxVersion, ASSET_UNLOCK_PAYLOAD_SIZE,
+  ASSET_UNLOCK_QUORUM_INFO_SIZE, ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS, PROTX_VERSION_BASIC_BLS,
+  PROTX_VERSION_EXT_ADDR, PROTX_VERSION_LEGACY_BLS, VERSIONBITS_NUM_BITS,
 };
 pub use support::{DynBitset, DynBitsetIterator, LlmqParams, LlmqType, RevocationReason};
 pub use transaction::{

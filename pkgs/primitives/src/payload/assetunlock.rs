@@ -66,6 +66,16 @@ impl BaseCodec for AssetUnlock {
 /// Most outputs an asset unlock transaction may carry.
 pub const MAXIMUM_WITHDRAWALS: usize = 32;
 
+/// Size of the trailing `requested_height`, `quorum_hash` and `quorum_sig`
+/// fields, which Platform rewrites when it re-signs an expired withdrawal.
+pub const ASSET_UNLOCK_QUORUM_INFO_SIZE: usize = 4 + 32 + 96;
+
+/// Serialized size of an asset unlock payload.
+pub const ASSET_UNLOCK_PAYLOAD_SIZE: usize = 1 + 8 + 4 + ASSET_UNLOCK_QUORUM_INFO_SIZE;
+
+/// First payload version whose txid leaves out the quorum signing fields.
+pub const ASSET_UNLOCK_STABLE_TXID_VERSION: u8 = 2;
+
 /// Asset unlock validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
 pub enum AssetUnlockInvalid {

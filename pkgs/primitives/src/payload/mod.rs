@@ -32,7 +32,10 @@ use dash_types::{enum_map, impl_num, Checkable};
 use core::fmt;
 
 pub use self::assetlock::{AssetLock, AssetLockInvalid};
-pub use self::assetunlock::{AssetUnlock, AssetUnlockInvalid, MAXIMUM_WITHDRAWALS};
+pub use self::assetunlock::{
+  AssetUnlock, AssetUnlockInvalid, ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE,
+  ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS,
+};
 pub use self::cbtx::{CbTxInvalid, CoinbaseCommitment};
 pub use self::mnhftx::{MnHardFork, MnHardForkInvalid, VERSIONBITS_NUM_BITS};
 pub use self::proregtx::ProRegTx;

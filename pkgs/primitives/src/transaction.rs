@@ -9,7 +9,8 @@
 
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
 use crate::payload::{
-  AssetLockInvalid, AssetUnlockInvalid, PayloadError, PayloadInvalid, SpecialPayload, TxType, MAXIMUM_WITHDRAWALS,
+  AssetLockInvalid, AssetUnlockInvalid, PayloadError, PayloadInvalid, SpecialPayload, TxType,
+  ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE, ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS,
 };
 use crate::prelude::*;
 use crate::{codec_type, hash_impl};
@@ -368,9 +369,19 @@ impl Checkable for Transaction {
 impl Hashable for Transaction {
   type Hash = TxHash;
 
+  /// Returns the txid. An asset unlock with a stable txid hashes with its
+  /// quorum signing fields zeroed, so a merkle proof of it does not cover
+  /// them.
   fn hash(&self) -> TxHash {
     let mut buf = Vec::new();
     self.encode(&mut buf);
+    if self.has_stable_txid() {
+      buf
+        .iter_mut()
+        .rev()
+        .take(ASSET_UNLOCK_QUORUM_INFO_SIZE)
+        .for_each(|byte| *byte = 0);
+    }
     TxHash::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
   }
 }
@@ -379,6 +390,32 @@ impl Transaction {
   /// Returns the packed i32 version field as on the wire.
   pub fn raw_version(&self) -> i32 {
     i32::from(self.version) | (i32::from(self.tx_type.to_base()) << 16)
+  }
+
+  /// Hash of the full serialization, which tells re-signed instances of an
+  /// asset unlock with a stable txid apart. It equals [`Hashable::hash`] for
+  /// every other transaction.
+  pub fn instance_hash(&self) -> TxHash {
+    let mut buf = Vec::new();
+    self.encode(&mut buf);
+    TxHash::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
+  }
+
+  /// Tells whether the transaction is an asset unlock with a payload of the
+  /// asset unlock size. The payload bytes are judged undecoded, since the
+  /// txid must not depend on payload validity.
+  pub fn is_asset_unlock_payload(&self) -> bool {
+    self.version >= 3 && self.tx_type == TxType::AssetUnlock && self.extra_payload.len() == ASSET_UNLOCK_PAYLOAD_SIZE
+  }
+
+  /// Tells whether the txid leaves out the quorum signing fields, which holds
+  /// for asset unlock payload versions 2 to 255 whether or not v24 is active.
+  pub fn has_stable_txid(&self) -> bool {
+    self.is_asset_unlock_payload()
+      && self
+        .extra_payload
+        .first()
+        .is_some_and(|&version| version >= ASSET_UNLOCK_STABLE_TXID_VERSION)
   }
 
   /// Returns true when this transaction carries an extra payload.
@@ -584,6 +621,61 @@ mod tests {
     let mut raws = Vec::new();
     corpus.entries::<crate::AssetUnlock>("assetunlock", |raw, _, _| raws.push(raw.to_vec()));
     Transaction::decode(&mut raws[0].as_slice()).unwrap()
+  }
+
+  #[rstest]
+  fn corpus_stable_txid() {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "stabletxid");
+    corpus.entries::<TxHash>("stabletxid", |raw, instance, label| {
+      let tx = Transaction::decode(&mut &raw[..]).unwrap();
+      assert_eq!(tx.hash(), TxHash::from_hex(label).unwrap(), "{label}");
+      assert_eq!(tx.instance_hash(), *instance, "{label}");
+    });
+  }
+
+  fn asset_unlock_of_version(version: u8) -> Transaction {
+    let mut tx = corpus_asset_unlock();
+    tx.extra_payload[0] = version;
+    tx
+  }
+
+  #[rstest]
+  #[case::v0(0, false)]
+  #[case::v1(1, false)]
+  #[case::v2(2, true)]
+  #[case::v255(255, true)]
+  fn stable_txid_starts_at_payload_version_2(#[case] version: u8, #[case] stable: bool) {
+    let tx = asset_unlock_of_version(version);
+    assert_eq!(tx.has_stable_txid(), stable);
+    assert_eq!(tx.hash() == tx.instance_hash(), !stable);
+  }
+
+  #[rstest]
+  #[case::short_payload(|tx: &mut Transaction| {
+    tx.extra_payload.pop();
+  })]
+  #[case::long_payload(|tx: &mut Transaction| tx.extra_payload.push(0))]
+  #[case::other_type(|tx: &mut Transaction| tx.tx_type = TxType::AssetLock)]
+  #[case::classic_version(|tx: &mut Transaction| tx.version = 2)]
+  fn stable_txid_needs_an_asset_unlock_payload(#[case] edit: fn(&mut Transaction)) {
+    let mut tx = asset_unlock_of_version(2);
+    edit(&mut tx);
+    assert!(!tx.is_asset_unlock_payload());
+    assert_eq!(tx.hash(), tx.instance_hash());
+  }
+
+  #[rstest]
+  #[case::index(1, false)]
+  #[case::fee(9, false)]
+  #[case::requested_height(13, true)]
+  #[case::quorum_hash(17, true)]
+  #[case::quorum_sig(ASSET_UNLOCK_PAYLOAD_SIZE - 1, true)]
+  fn stable_txid_leaves_out_only_the_quorum_signing_fields(#[case] offset: usize, #[case] same_txid: bool) {
+    let tx = asset_unlock_of_version(2);
+    let mut resigned = tx.clone();
+    resigned.extra_payload[offset] ^= 1;
+    assert_eq!(resigned.hash() == tx.hash(), same_txid);
+    assert_ne!(resigned.instance_hash(), tx.instance_hash());
   }
 
   #[rstest]
