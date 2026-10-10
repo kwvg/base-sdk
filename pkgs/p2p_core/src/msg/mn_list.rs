@@ -15,8 +15,8 @@ use bitcoin_hashes::sha256d;
 use dash_num::Hash256;
 use dash_pkc::bls::{BlsScIetf, BlsSigBytes, BLS_PK_LEN};
 use dash_primitives::{
-  hash_impl, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MnType, NetInfo, NetInfoV1, NetInfoV2,
-  PartialMerkleTree, PlatformNodeId, Transaction, TxHash, PROTX_VERSION_EXT_ADDR,
+  hash_impl, merkle_root_mutated, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MerkleRoot, MnType, NetInfo,
+  NetInfoV1, NetInfoV2, PartialMerkleTree, PlatformNodeId, Transaction, TxHash, PROTX_VERSION_EXT_ADDR,
 };
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
@@ -422,6 +422,20 @@ impl SimplifiedMnListEntry {
   pub const fn operator_key(&self) -> &BlsPubKey {
     &self.operator_key
   }
+}
+
+/// Computes the merkle root of a full simplified masternode list along with
+/// a mutation flag. Entries are ordered by ProRegTx hash first, so the order
+/// of `entries` does not change the root.
+///
+/// The flag is `true` when a row pairs two equal hashes, which a list with a
+/// duplicate entry can produce.
+pub fn sml_merkle_root(entries: &[SimplifiedMnListEntry]) -> (MerkleRoot, bool) {
+  let mut sorted: Vec<&SimplifiedMnListEntry> = entries.iter().collect();
+  sorted.sort_by_key(|entry| entry.pro_reg_tx_hash);
+  let leaves: Vec<Hash256> = sorted.iter().map(|entry| entry.hash()).collect();
+  let (root, mutated) = merkle_root_mutated(&leaves);
+  (MerkleRoot::from_lendian(*root.as_bytes()), mutated)
 }
 
 /// Field set that builds the entry through [`SimplifiedMnListEntry::new`].
@@ -903,5 +917,30 @@ mod tests {
     let raw = enc(&entry);
     let expected = Hash256::from_lendian(sha256d::Hash::hash(&raw[2..]).to_byte_array());
     assert_eq!(entry.hash(), expected);
+  }
+
+  // Merkle root of entries 1 to 15 in the reference
+  // `simplifiedmns_merkleroots` test.
+  const MERKLEROOTS_ROOT: &str = "0bae2176078cf42fa3e1fda761d4255d1c1c54777c6a793d0ab2b07c85ed4022";
+
+  #[rstest]
+  #[case::ascending(false)]
+  #[case::descending(true)]
+  fn sml_merkle_root_matches_the_reference(#[case] reversed: bool) {
+    let mut entries: Vec<_> = (1..=15).map(merkleroots_entry).collect();
+    if reversed {
+      entries.reverse();
+    }
+    let (root, mutated) = sml_merkle_root(&entries);
+    assert_eq!((format!("{root}").as_str(), mutated), (MERKLEROOTS_ROOT, false));
+  }
+
+  /// A duplicated last entry keeps the root and sets the mutation flag.
+  #[rstest]
+  fn sml_merkle_root_flags_a_duplicate_entry() {
+    let mut entries: Vec<_> = (1..=15).map(merkleroots_entry).collect();
+    entries.push(merkleroots_entry(15));
+    let (root, mutated) = sml_merkle_root(&entries);
+    assert_eq!((format!("{root}").as_str(), mutated), (MERKLEROOTS_ROOT, true));
   }
 }
