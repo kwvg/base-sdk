@@ -27,7 +27,7 @@ use dash_primitives::{GovObject, GovVote};
 use dash_types::type_id::Unencodable;
 
 pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
-pub use bloom::BloomFilter;
+pub use bloom::{BloomFilter, BloomFilterInvalid};
 pub use coinjoin::SendDsq;
 pub use gov::GovSync;
 pub use headers::{GetHeaders, Headers, NonContinuousHeaders};

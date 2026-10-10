@@ -6,11 +6,12 @@
 
 //! Governance sync request message.
 
-use super::BloomFilter;
+use super::{BloomFilter, BloomFilterInvalid};
 use crate::codec::codec_p2p;
 
 use dash_num::Hash256;
 use dash_types::type_id::TypeId;
+use dash_types::Checkable;
 
 /// Requests governance objects and votes from a peer.
 ///
@@ -28,14 +29,22 @@ pub struct GovSync {
 
 codec_p2p!(GovSync { hash, bloom_filter });
 
+impl Checkable for GovSync {
+  type Error = BloomFilterInvalid;
+
+  fn check(&self) -> Option<Self::Error> {
+    self.bloom_filter.check()
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use super::{BloomFilter, GovSync};
+  use super::{BloomFilter, BloomFilterInvalid, GovSync};
   use crate::prelude::*;
   use crate::{CommandString, P2pDecodeError, P2pMsg};
 
   use dash_num::Hash256;
-  use dash_types::Numeric;
+  use dash_types::{Checkable, Numeric};
   use rstest::rstest;
 
   /// Full sync request as `SyncManager` sends it, with a null hash and a
@@ -73,6 +82,17 @@ mod tests {
       P2pMsg::decode_payload(&CommandString::GOVSYNC, &raw),
       Ok(P2pMsg::GovSync(want))
     );
+  }
+
+  #[rstest]
+  fn checks_the_filter() {
+    let mut msg = GovSync {
+      hash: Hash256::default(),
+      bloom_filter: BloomFilter::default(),
+    };
+    assert_eq!(msg.check(), None);
+    msg.bloom_filter.hash_funcs = 51;
+    assert_eq!(msg.check(), Some(BloomFilterInvalid::TooManyHashFuncs { count: 51 }));
   }
 
   #[rstest]
