@@ -79,6 +79,14 @@ define_p2p! {
     SendHeaders => SENDHEADERS "sendheaders",
     /// Version acknowledgement.
     Verack => VERACK "verack",
+    /// BIP37: clear bloom filter.
+    FilterClear => FILTERCLEAR "filterclear" @ 7,
+    /// Request mempool contents.
+    Mempool => MEMPOOL "mempool" @ 15,
+    /// Request active sporks.
+    GetSporks => GETSPORKS "getsporks" @ 129,
+    /// LLMQ: watch quorums.
+    QWatch => QWATCH "qwatch" @ 151,
     /// Prefer compressed header announcements.
     SendHeaders2 => SENDHEADERS2 "sendheaders2" @ 164,
   }
@@ -179,17 +187,31 @@ define_p2p! {
   }
 
   stub_empty {
-    /// BIP37: clear bloom filter.
-    FilterClear => FILTERCLEAR "filterclear" @ 7,
-    /// Request mempool contents.
-    Mempool => MEMPOOL "mempool" @ 15,
-    /// Request active sporks.
-    GetSporks => GETSPORKS "getsporks" @ 129,
     /// Signal CoinJoin queue relay.
     SendDsq => SENDDSQ "senddsq" @ 130,
     /// LLMQ: send recovered signatures.
     QSendRecSigs => QSENDRECSIGS "qsendrecsigs" @ 145,
-    /// LLMQ: watch quorums.
-    QWatch => QWATCH "qwatch" @ 151,
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{CommandString, P2pMsg};
+  use crate::P2pDecodeError;
+
+  use rstest::rstest;
+
+  #[rstest]
+  #[case::filterclear(CommandString::FILTERCLEAR, P2pMsg::FilterClear)]
+  #[case::mempool(CommandString::MEMPOOL, P2pMsg::Mempool)]
+  #[case::getsporks(CommandString::GETSPORKS, P2pMsg::GetSporks)]
+  #[case::qwatch(CommandString::QWATCH, P2pMsg::QWatch)]
+  fn payload_less_messages_are_parsed(#[case] cmd: CommandString, #[case] msg: P2pMsg) {
+    assert_eq!(P2pMsg::decode_payload(&cmd, &[]), Ok(msg.clone()));
+    assert!(!msg.is_stub());
+    assert!(matches!(
+      P2pMsg::decode_payload(&cmd, &[0]),
+      Err(P2pDecodeError::PayloadNotEmpty { size: 1, .. })
+    ));
   }
 }
