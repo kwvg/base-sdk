@@ -39,6 +39,10 @@ const VOTE_BLS_SIG_SIZE: usize = 96;
 /// Object type a proposal declares in its data.
 const PROPOSAL_TYPE: i64 = 1;
 
+/// Object type a trigger declares in its data.
+#[cfg(feature = "serde")]
+const TRIGGER_TYPE: i64 = 2;
+
 /// Allowed characters in governance proposal names.
 const PROPOSAL_NAME_CHARS: &[u8] = b"-_abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -102,8 +106,11 @@ pub struct Proposal {
 ///   "proposal_hashes": "hash1|hash2"
 /// }
 /// ```
+///
+/// Deserializing rejects data whose `type` is not the integer 2.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "__TriggerFields", into = "__TriggerFields"))]
 pub struct Trigger {
   /// Block height at which payments occur.
   pub event_block_height: i32,
@@ -113,6 +120,48 @@ pub struct Trigger {
   pub payment_amounts: String,
   /// Pipe-delimited proposal hashes.
   pub proposal_hashes: String,
+}
+
+/// Field set that carries the declared type of a trigger.
+#[cfg(feature = "serde")]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+struct __TriggerFields {
+  event_block_height: i32,
+  payment_addresses: String,
+  payment_amounts: String,
+  proposal_hashes: String,
+  #[serde(rename = "type")]
+  object_type: i64,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<__TriggerFields> for Trigger {
+  type Error = String;
+
+  fn try_from(fields: __TriggerFields) -> Result<Self, Self::Error> {
+    if fields.object_type != TRIGGER_TYPE {
+      return Err(format!("trigger type is not {TRIGGER_TYPE}: {}", fields.object_type));
+    }
+    Ok(Self {
+      event_block_height: fields.event_block_height,
+      payment_addresses: fields.payment_addresses,
+      payment_amounts: fields.payment_amounts,
+      proposal_hashes: fields.proposal_hashes,
+    })
+  }
+}
+
+#[cfg(feature = "serde")]
+impl From<Trigger> for __TriggerFields {
+  fn from(trigger: Trigger) -> Self {
+    Self {
+      event_block_height: trigger.event_block_height,
+      payment_addresses: trigger.payment_addresses,
+      payment_amounts: trigger.payment_amounts,
+      proposal_hashes: trigger.proposal_hashes,
+      object_type: TRIGGER_TYPE,
+    }
+  }
 }
 
 /// Decoded governance object data payload.
@@ -662,6 +711,28 @@ mod tests {
     assert_eq!(proposal.check(), expected);
   }
 
+  fn trigger_json(object_type: &str) -> String {
+    format!(
+      r#"{{"event_block_height":160,"payment_addresses":"a","payment_amounts":"1","proposal_hashes":"h"{object_type}}}"#
+    )
+  }
+
+  #[rstest]
+  fn trigger_type_is_2() {
+    let trigger: Trigger = from_json(&trigger_json(r#","type":2"#));
+    assert_eq!(to_value(&trigger)["type"], from_json::<Value>("2"));
+    assert_eq!(from_json::<Trigger>(&to_json(&trigger)), trigger);
+  }
+
+  #[rstest]
+  #[case::proposal(r#","type":1"#)]
+  #[case::string(r#","type":"2""#)]
+  #[case::float(r#","type":2.0"#)]
+  #[case::missing("")]
+  fn trigger_type_must_be_the_integer_2(#[case] object_type: &str) {
+    assert!(json_rejects::<Trigger>(&trigger_json(object_type)));
+  }
+
   #[rstest]
   fn zero_payment_amount_fails_the_check() {
     let proposal: Proposal = from_json(&proposal_json("0"));
@@ -816,7 +887,7 @@ mod tests {
         for (key, value) in &parsed {
           assert_eq!(fields.get(key), Some(value), "{label}: {key}");
         }
-        assert_eq!(parsed.len(), 4, "{label}");
+        assert_eq!(parsed.len(), 5, "{label}");
       }
 
       let mut encoded = Vec::new();
