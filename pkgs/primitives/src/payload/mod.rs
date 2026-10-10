@@ -23,6 +23,7 @@ use crate::hash_impl;
 use crate::prelude::*;
 use crate::types::{NIError, NIPurpose, NITrait, NetAddrError, NetInfo, NetInfoV2};
 
+use bitcoin_units::Amount;
 use dash_num::{make_hash, Hash256};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
@@ -124,6 +125,18 @@ enum_map! {
 impl_num!(MnType, u16);
 
 hash_impl!(MnType);
+
+impl MnType {
+  /// Collateral a masternode of this type locks, or `None` for an unknown
+  /// type.
+  pub const fn collateral_amount(self) -> Option<Amount> {
+    match self {
+      Self::Regular => Some(Amount::from_btc_u16(1000)),
+      Self::Evo => Some(Amount::from_btc_u16(4000)),
+      Self::Unknown(_) => None,
+    }
+  }
+}
 
 /// Provider transaction validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
@@ -532,7 +545,9 @@ impl SpecialPayload {
 #[cfg(test)]
 #[expect(clippy::unwrap_used, reason = "test code")]
 mod tests {
-  use super::{PayloadInvalid, ProRegTx, ProTxInvalid, ProTxPayload, SpecialPayload, TxType, UnknownProTxVersion};
+  use super::{
+    MnType, PayloadInvalid, ProRegTx, ProTxInvalid, ProTxPayload, SpecialPayload, TxType, UnknownProTxVersion,
+  };
   use crate::prelude::*;
   use crate::types::{NIError, NetAddrError};
   use crate::{OutPoint, Transaction, TxHash, TxIn, TxInvalid, TxOut};
@@ -555,6 +570,14 @@ mod tests {
   fn net_info_errors_use_the_reference_reasons(#[case] error: NIError, #[case] reason: &str) {
     let shown = ProTxInvalid::NetInfoInvalid { error }.to_string();
     assert!(shown.starts_with(&format!("{reason}: ")), "{shown}");
+  }
+
+  #[rstest]
+  #[case::regular(MnType::Regular, Some(100_000_000_000))]
+  #[case::evo(MnType::Evo, Some(400_000_000_000))]
+  #[case::unknown(MnType::Unknown(2), None)]
+  fn collateral_amount_follows_the_type(#[case] mn_type: MnType, #[case] duffs: Option<u64>) {
+    assert_eq!(mn_type.collateral_amount().map(Amount::to_sat), duffs);
   }
 
   #[rstest]
