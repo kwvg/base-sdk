@@ -158,8 +158,17 @@ impl Recipient {
   /// Decode a Base58Check address string.
   ///
   /// Returns `None` when the string is not a valid P2PKH or P2SH address for
-  /// the given network parameters.
+  /// the given network parameters. A string that starts with the Platform
+  /// HRP, in any case, is never read as Base58.
   pub fn from_base58c(s: &str, params: &AddrParams) -> Option<Self> {
+    let hrp = params.platform_hrp.as_bytes();
+    if s
+      .as_bytes()
+      .get(..hrp.len())
+      .is_some_and(|prefix| prefix.eq_ignore_ascii_case(hrp))
+    {
+      return None;
+    }
     let data = decode_check(s).ok()?;
     if data.len() != 21 {
       return None;
@@ -489,6 +498,21 @@ mod tests {
     assert_eq!(expected.to_platform(&params).as_deref(), Some(addr));
     // A single-case string decodes in either case.
     assert_eq!(Recipient::from_platform(&addr.to_uppercase(), &params), Ok(expected));
+  }
+
+  #[rstest]
+  #[case::other_prefix("dash", true)]
+  #[case::lowercase_prefix("xgn", false)]
+  #[case::uppercase_prefix("XGN", false)]
+  fn base58_refuses_the_platform_hrp_prefix(#[case] platform_hrp: &'static str, #[case] decodes: bool) {
+    // No network's HRP starts its own Base58 addresses, so the test picks
+    // HRPs that start this mainnet address.
+    let params = AddrParams {
+      platform_hrp,
+      ..MAINNET
+    };
+    let decoded = Recipient::from_base58c("XgNfgrEB9n6uCY9Pi1hb2foimxPdtiZ4Z2", &params);
+    assert_eq!(decoded.is_some(), decodes);
   }
 
   #[rstest]
