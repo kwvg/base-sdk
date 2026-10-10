@@ -12,7 +12,7 @@ use crate::types::{BlsScheme, BlsSig};
 use crate::{hash_impl, MerkleRoot};
 
 use bitcoin_units::BlockHeight;
-use dash_pkc::bls::BLS_SIG_LEN;
+use dash_pkc::bls::{BlsScIetf, BlsSigBytes, BLS_SIG_LEN};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::{Checkable, CompactSize};
@@ -233,6 +233,22 @@ impl CoinbaseCommitment {
     self.merkle_root_asset_unlocks
   }
 
+  /// Height and signature of the best ChainLock the commitment carries, or
+  /// `None` when it carries no valid one. A [`ChainLockSig`] needs the hash
+  /// of the block at that height, which only the chain knows.
+  ///
+  /// [`ChainLockSig`]: crate::ChainLockSig
+  pub fn best_chainlock(&self) -> Option<(i32, BlsSigBytes<BlsScIetf>)> {
+    let sig = self
+      .best_cl_signature
+      .filter(|sig| !sig.is_null() && sig.is_canonical())?;
+    // The payload height stands in for the block height, which it equals in
+    // any block that passes `bad-cbtx-height`.
+    let block_height = i32::try_from(self.height.to_u32()).ok()?;
+    let diff = i32::try_from(self.best_cl_height_diff?).ok()?;
+    (diff < block_height).then(|| (block_height - diff - 1, BlsSigBytes::from_bytes(*sig.as_bytes())))
+  }
+
   /// Requires version 4 once v20 and v24 are both active, and rejects it
   /// otherwise.
   pub fn check_deployments(&self, deployments: Deployments) -> Option<CbTxInvalid> {
@@ -364,6 +380,44 @@ mod tests {
 
   fn unlocks() -> Option<MerkleRoot> {
     Some(MerkleRoot::from_lendian([0x44; 32]))
+  }
+
+  #[rstest]
+  fn best_chainlock_sits_below_the_parent() {
+    let item = v3_item();
+    let expected = item.best_cl_signature.zip(item.best_cl_height_diff).map(|(sig, diff)| {
+      let height = item.height.to_u32() - diff - 1;
+      (height as i32, BlsSigBytes::from_bytes(*sig.as_bytes()))
+    });
+    assert!(expected.is_some());
+    assert_eq!(item.best_chainlock(), expected);
+  }
+
+  #[rstest]
+  #[case::diff_below_height(6, Some(0))]
+  #[case::diff_at_height(7, None)]
+  #[case::diff_past_height(8, None)]
+  #[case::diff_past_i32(u32::MAX, None)]
+  fn best_chainlock_needs_a_diff_below_the_height(#[case] diff: u32, #[case] expected: Option<i32>) {
+    let mut item = v3_item();
+    item.height = BlockHeight::from_u32(7);
+    item.best_cl_height_diff = Some(diff);
+    assert_eq!(item.best_chainlock().map(|(height, _)| height), expected);
+  }
+
+  #[rstest]
+  fn best_chainlock_needs_a_valid_signature() {
+    let mut item = v3_item();
+    item.best_cl_signature = item.best_cl_signature.map(|sig| sig.corrupted());
+    assert_eq!(item.best_chainlock(), None);
+    item.best_cl_signature = Some(BlsSig::from_bytes(sig(), BlsScheme::Basic));
+    assert_eq!(item.best_chainlock(), None);
+  }
+
+  #[rstest]
+  fn best_chainlock_needs_version_3() -> Result<(), CbTxInvalid> {
+    assert_eq!(build(2, quorums(), None, None, None, None)?.best_chainlock(), None);
+    Ok(())
   }
 
   #[rstest]
