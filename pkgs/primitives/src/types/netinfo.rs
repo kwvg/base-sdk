@@ -146,7 +146,7 @@ pub enum NIEntry {
   Service(ServiceV2),
   /// Domain name + port.
   Domain {
-    /// The domain name as raw bytes.
+    /// The domain name as raw bytes. Decoding rejects more than 253 bytes.
     #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::utf8"))]
     name: Vec<u8>,
     /// Network port (big-endian on wire).
@@ -159,8 +159,7 @@ impl BaseCodec for NIEntry {
     match NIEntryCode::from_base(u8::decode(data)?) {
       NIEntryCode::Service => Ok(Self::Service(ServiceV2::decode(data)?)),
       NIEntryCode::Domain => {
-        let name_len = CompactSize::decode_len(data)?;
-        let name = codec::read_bytes(data, name_len)?.to_vec();
+        let name = codec::read_bytes_limited(data, DOMAIN_MAX)?.to_vec();
         let port = codec::read_u16_be(data)?;
         Ok(Self::Domain { name, port })
       }
@@ -872,6 +871,23 @@ mod tests {
         remaining: 3
       })
     );
+  }
+
+  fn domain_wire(len: usize) -> Vec<u8> {
+    let mut wire = Vec::new();
+    NIEntry::Domain {
+      name: vec![b'a'; len],
+      port: 443,
+    }
+    .encode(&mut wire);
+    wire
+  }
+
+  #[rstest]
+  #[case::at_limit(DOMAIN_MAX, Ok(NIEntry::Domain { name: vec![b'a'; DOMAIN_MAX], port: 443 }))]
+  #[case::past_limit(DOMAIN_MAX + 1, Err(DecodeError::CompactSizeExceedsLimit { limit: DOMAIN_MAX, value: 254 }))]
+  fn nientry_domain_decodes_at_most_253_bytes(#[case] len: usize, #[case] expected: Result<NIEntry, DecodeError>) {
+    assert_eq!(NIEntry::decode(&mut domain_wire(len).as_slice()), expected);
   }
 
   /// An unknown version ends the payload, so the bytes after it belong to the
