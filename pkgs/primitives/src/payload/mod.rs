@@ -72,6 +72,13 @@ make_hash! {
 
 hash_impl!(InputsHash);
 
+make_hash! {
+  /// Hash of serialized transaction outputs.
+  OutputsHash, 32
+}
+
+hash_impl!(OutputsHash);
+
 enum_map! {
   /// Dash transaction type, encoded in the upper 16 bits of the version field.
   #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]

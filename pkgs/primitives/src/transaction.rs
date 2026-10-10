@@ -9,8 +9,9 @@
 
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
 use crate::payload::{
-  AssetLockInvalid, AssetUnlockInvalid, InputsHash, PayloadError, PayloadInvalid, ProTxInvalid, SpecialPayload, TxType,
-  ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE, ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS,
+  AssetLockInvalid, AssetUnlockInvalid, InputsHash, OutputsHash, PayloadError, PayloadInvalid, ProTxInvalid,
+  SpecialPayload, TxType, ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE, ASSET_UNLOCK_STABLE_TXID_VERSION,
+  MAXIMUM_WITHDRAWALS,
 };
 use crate::prelude::*;
 use crate::{codec_type, hash_impl};
@@ -419,6 +420,16 @@ impl Transaction {
     InputsHash::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
   }
 
+  /// SHA256d of the outputs without their count, which shared masternode
+  /// signatures commit to.
+  pub fn outputs_hash(&self) -> OutputsHash {
+    let mut buf = Vec::new();
+    for output in &self.outputs {
+      output.encode(&mut buf);
+    }
+    OutputsHash::from_lendian(sha256d::Hash::hash(&buf).to_byte_array())
+  }
+
   /// Tells whether the transaction is an asset unlock with a payload of the
   /// asset unlock size. The payload bytes are judged undecoded, since the
   /// txid must not depend on payload validity.
@@ -693,6 +704,22 @@ mod tests {
     // No count prefix is hashed, so no inputs give SHA256d of the empty string.
     let empty = InputsHash::from_lendian(hex!("5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456"));
     assert_eq!(bare(1, 0).inputs_hash(), empty);
+  }
+
+  #[rstest]
+  #[case::none(0, hex!("5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456"))]
+  #[case::one(1, hex!("821695858266d629c1db10e38a71ba67e9b18613c3ccdc142c4f43ca3c0c83cd"))]
+  #[case::two(2, hex!("339208a1214cebc61e755a386c4b59c6321c163829b7d942675ffcc5074d9afd"))]
+  fn outputs_hash_leaves_out_the_count(#[case] count: usize, #[case] expected: [u8; 32]) {
+    // The output of mainnet unlock 65fc488b, repeated. Python hashlib gives the
+    // expected hashes.
+    let output = TxOut {
+      value: Amount::from_sat(838_000_000).unwrap(),
+      script_pubkey: ScriptPubKeyBuf::from_bytes(hex!("76a9142305541d202312cf87a21003f908697a93982e6c88ac").to_vec()),
+    };
+    let mut tx = bare(1, 0);
+    tx.outputs = vec![output; count];
+    assert_eq!(tx.outputs_hash(), OutputsHash::from_lendian(expected));
   }
 
   fn asset_unlock_of_version(version: u8) -> Transaction {
