@@ -16,6 +16,7 @@ mod inv;
 mod llmq;
 mod mn_list;
 mod ping;
+mod sync;
 mod version;
 
 use crate::command::CommandString;
@@ -36,6 +37,7 @@ pub use inv::{GetData, Inv, InvType, Inventory, NotFound};
 pub use llmq::QSendRecSigs;
 pub use mn_list::{DeletedQuorum, GetMnListDiff, MnListDiff, MnListDiffPayload, QuorumClSig, SimplifiedMnListEntry};
 pub use ping::{Ping, Pong};
+pub use sync::{SyncItemId, SyncStatusCount};
 pub use version::{ServiceFlags, UserAgent, UserAgentTooLong, Version, VersionAddr};
 
 define_p2p! {
@@ -62,6 +64,8 @@ define_p2p! {
     AddrV2(AddrV2Msg) => ADDRV2 "addrv2" @ 28,
     /// Signal CoinJoin queue relay.
     SendDsq(SendDsq) => SENDDSQ "senddsq" @ 130,
+    /// Sync status count.
+    Ssc(SyncStatusCount) => SSC "ssc" @ 139,
     /// Governance sync request.
     GovSync(GovSync) => GOVSYNC "govsync" @ 140,
     /// Governance object.
@@ -154,8 +158,6 @@ define_p2p! {
     Dstx => DSTX "dstx" @ 137,
     /// CoinJoin: queue entry.
     Dsq => DSQ "dsq" @ 138,
-    /// Sync status count.
-    Ssc => SSC "ssc" @ 139,
     /// LLMQ: final commitment.
     QfCommit => QFCOMMIT "qfcommit" @ 146,
     /// LLMQ: contribution.
