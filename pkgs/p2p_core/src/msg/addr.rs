@@ -8,14 +8,18 @@
 
 use super::version::ServiceFlags;
 use crate::codec::{codec_p2p, impl_p2p};
+use crate::error::{check_count, TooManyEntries};
 use crate::prelude::*;
 
 use dash_primitives::{hash_impl, AddrV2, ServiceV1};
 use dash_types::codec::{self, BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
-use dash_types::{CompactSize, Numeric};
+use dash_types::{Checkable, CompactSize, Numeric};
 
 use core::fmt;
+
+/// Largest number of entries in an `addr` or `addrv2` message.
+const MAX_ADDR_TO_SEND: usize = 1_000;
 
 /// V1 address announcement carrying timestamped addresses.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
@@ -26,6 +30,14 @@ pub struct Addr {
 }
 
 codec_p2p!(Addr { addrs });
+
+impl Checkable for Addr {
+  type Error = TooManyEntries;
+
+  fn check(&self) -> Option<Self::Error> {
+    check_count(self.addrs.len(), MAX_ADDR_TO_SEND)
+  }
+}
 
 /// BIP155 timestamped v2 address entry used in `addrv2` messages.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
@@ -83,6 +95,14 @@ pub struct AddrV2Msg {
 
 codec_p2p!(AddrV2Msg { addrs });
 
+impl Checkable for AddrV2Msg {
+  type Error = TooManyEntries;
+
+  fn check(&self) -> Option<Self::Error> {
+    check_count(self.addrs.len(), MAX_ADDR_TO_SEND)
+  }
+}
+
 /// Timestamped v1 address entry used in `addr` messages.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -96,3 +116,34 @@ pub struct TimestampedAddr {
 }
 
 codec_p2p!(TimestampedAddr { time, services, addr });
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  use dash_primitives::AddrV1;
+  use rstest::rstest;
+
+  #[rstest]
+  #[case::empty(0, None)]
+  #[case::at_limit(MAX_ADDR_TO_SEND, None)]
+  #[case::past_limit(MAX_ADDR_TO_SEND + 1, Some(TooManyEntries { count: MAX_ADDR_TO_SEND + 1, limit: MAX_ADDR_TO_SEND }))]
+  fn addr_and_addrv2_carry_at_most_1000_entries(#[case] count: usize, #[case] expected: Option<TooManyEntries>) {
+    let v1 = TimestampedAddr {
+      time: 0,
+      services: ServiceFlags::NONE,
+      addr: ServiceV1 {
+        addr: AddrV1::default(),
+        port: 9999,
+      },
+    };
+    let v2 = AddrV2Entry {
+      time: 0,
+      services: ServiceFlags::NONE,
+      addr: AddrV2::Ipv4([10, 0, 0, 1]),
+      port: 9999,
+    };
+    assert_eq!(Addr { addrs: vec![v1; count] }.check(), expected);
+    assert_eq!(AddrV2Msg { addrs: vec![v2; count] }.check(), expected);
+  }
+}
