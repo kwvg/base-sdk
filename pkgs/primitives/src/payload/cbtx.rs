@@ -7,6 +7,7 @@
 //! CoinbaseCommitment coinbase commitment payload (type 5).
 
 use crate::codec::impl_payload;
+use crate::deployment::{Activation, Deployments};
 use crate::types::{BlsScheme, BlsSig};
 use crate::{hash_impl, MerkleRoot};
 
@@ -230,6 +231,13 @@ impl CoinbaseCommitment {
   /// commits to the null root.
   pub const fn merkle_root_asset_unlocks(&self) -> Option<MerkleRoot> {
     self.merkle_root_asset_unlocks
+  }
+
+  /// Requires version 4 once v20 and v24 are both active, and rejects it
+  /// otherwise.
+  pub fn check_deployments(&self, deployments: Deployments) -> Option<CbTxInvalid> {
+    let requires_unlock_root = deployments.v20 == Activation::Active && deployments.v24 == Activation::Active;
+    (requires_unlock_root != (self.version >= 4)).then_some(CbTxInvalid::BadVersion { version: self.version })
   }
 
   const fn check_fields(&self) -> Option<CbTxInvalid> {
@@ -516,6 +524,29 @@ mod tests {
     item.height = BlockHeight::from_u32(7);
     item.best_cl_height_diff = Some(diff);
     assert_eq!(item.check(), expected);
+  }
+
+  #[rstest]
+  #[case::v3_before_v24(3, Activation::Active, Activation::Inactive, None)]
+  #[case::v4_before_v24(4, Activation::Active, Activation::Inactive, Some(CbTxInvalid::BadVersion { version: 4 }))]
+  #[case::v3_under_v24(3, Activation::Active, Activation::Active, Some(CbTxInvalid::BadVersion { version: 3 }))]
+  #[case::v4_under_v24(4, Activation::Active, Activation::Active, None)]
+  #[case::v4_under_v24_alone(4, Activation::Inactive, Activation::Active, Some(CbTxInvalid::BadVersion { version: 4 }))]
+  fn version_4_follows_v20_and_v24(
+    #[case] version: u16,
+    #[case] v20: Activation,
+    #[case] v24: Activation,
+    #[case] expected: Option<CbTxInvalid>,
+  ) {
+    let mut item = v3_item();
+    item.version = version;
+    let deployments = Deployments {
+      v19: Activation::Active,
+      v20,
+      v24,
+      evo_shares: Activation::Inactive,
+    };
+    assert_eq!(item.check_deployments(deployments), expected);
   }
 
   #[rstest]
