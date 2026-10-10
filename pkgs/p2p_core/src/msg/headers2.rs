@@ -7,7 +7,8 @@
 //! Compressed header messages.
 
 use crate::codec::{codec_p2p, impl_p2p};
-use crate::msg::headers::{check_chain, NonContinuousHeaders};
+use crate::error::{check_count, TooManyEntries};
+use crate::msg::headers::{check_chain, NonContinuousHeaders, MAX_LOCATOR_SZ};
 use crate::prelude::*;
 use crate::version::ProtocolVersion;
 
@@ -273,6 +274,14 @@ codec_p2p!(GetHeaders2 {
   hash_stop
 });
 
+impl Checkable for GetHeaders2 {
+  type Error = TooManyEntries;
+
+  fn check(&self) -> Option<Self::Error> {
+    check_count(self.locator_hashes.len(), MAX_LOCATOR_SZ)
+  }
+}
+
 /// Response carrying delta-compressed block headers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -319,6 +328,19 @@ mod tests {
 
   use dash_dev::{assert_serde_rt, check_wire, Corpus};
   use rstest::rstest;
+
+  #[rstest]
+  #[case::empty(0, None)]
+  #[case::at_limit(MAX_LOCATOR_SZ, None)]
+  #[case::past_limit(MAX_LOCATOR_SZ + 1, Some(TooManyEntries { count: MAX_LOCATOR_SZ + 1, limit: MAX_LOCATOR_SZ }))]
+  fn locators_carry_at_most_101_hashes(#[case] count: usize, #[case] expected: Option<TooManyEntries>) {
+    let msg = GetHeaders2 {
+      version: ProtocolVersion::CURRENT,
+      locator_hashes: vec![BlockHash::default(); count],
+      hash_stop: BlockHash::default(),
+    };
+    assert_eq!(msg.check(), expected);
+  }
 
   #[rstest]
   fn corpus_getheaders2() {

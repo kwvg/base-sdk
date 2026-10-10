@@ -7,6 +7,7 @@
 //! Standard header messages.
 
 use crate::codec::{codec_p2p, impl_p2p};
+use crate::error::{check_count, TooManyEntries};
 use crate::prelude::*;
 use crate::version::ProtocolVersion;
 
@@ -19,6 +20,9 @@ use core::fmt;
 
 /// Maximum headers per message.
 const MAX_HEADERS: usize = 2_000;
+
+/// Largest number of hashes in a block locator.
+pub(crate) const MAX_LOCATOR_SZ: usize = 101;
 
 /// A header in a batch does not build on the header before it.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
@@ -58,6 +62,14 @@ codec_p2p!(GetHeaders {
   locator_hashes,
   hash_stop
 });
+
+impl Checkable for GetHeaders {
+  type Error = TooManyEntries;
+
+  fn check(&self) -> Option<Self::Error> {
+    check_count(self.locator_hashes.len(), MAX_LOCATOR_SZ)
+  }
+}
 
 /// Response carrying block headers.
 ///
@@ -132,6 +144,19 @@ mod tests {
       });
     }
     headers
+  }
+
+  #[rstest]
+  #[case::empty(0, None)]
+  #[case::at_limit(MAX_LOCATOR_SZ, None)]
+  #[case::past_limit(MAX_LOCATOR_SZ + 1, Some(TooManyEntries { count: MAX_LOCATOR_SZ + 1, limit: MAX_LOCATOR_SZ }))]
+  fn locators_carry_at_most_101_hashes(#[case] count: usize, #[case] expected: Option<TooManyEntries>) {
+    let msg = GetHeaders {
+      version: ProtocolVersion::CURRENT,
+      locator_hashes: vec![BlockHash::default(); count],
+      hash_stop: BlockHash::default(),
+    };
+    assert_eq!(msg.check(), expected);
   }
 
   #[rstest]
