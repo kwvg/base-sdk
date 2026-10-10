@@ -8,17 +8,22 @@
 
 use crate::codec::{codec_p2p, impl_p2p};
 use crate::error::{check_count, TooManyEntries};
+use crate::macros::VersionedPayload;
 use crate::msg::headers::{check_chain, NonContinuousHeaders, MAX_LOCATOR_SZ};
 use crate::prelude::*;
 use crate::version::ProtocolVersion;
+use crate::P2pDecodeError;
 
 use dash_primitives::{hash_impl, BlockHash, BlockHeader, MerkleRoot};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::{Checkable, CompactSize, Hashable};
 
-/// Maximum headers per message.
+/// Maximum headers per message below protocol 70235.
 const MAX_HEADERS: usize = 2_000;
+
+/// Maximum headers per message from protocol 70235.
+const MAX_HEADERS_COMPRESSED: usize = 8_000;
 
 /// Maximum entries in the MRU version cache.
 const MAX_VERSION_CACHE: usize = 7;
@@ -286,15 +291,17 @@ impl Checkable for GetHeaders2 {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Headers2 {
-  /// Fully resolved block headers.
+  /// Fully resolved block headers. A peer below protocol 70235 rejects more
+  /// than 2000 headers, and a peer at 70235 or above more than 8000.
   pub headers: Vec<BlockHeader>,
 }
 
 impl_p2p!(Headers2);
 
+/// Decodes a message as sent at [`ProtocolVersion::CURRENT`].
 impl BaseCodec for Headers2 {
   fn decode(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    Self::decode_headers(data)
+    Self::decode_headers(data, Self::max_headers(ProtocolVersion::CURRENT))
   }
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
@@ -317,14 +324,39 @@ impl Checkable for Headers2 {
 hash_impl!(Headers2);
 
 impl Headers2 {
-  fn decode_headers(data: &mut &[u8]) -> Result<Self, DecodeError> {
-    let count = CompactSize::decode(data)?.into_len(MAX_HEADERS)?;
+  /// Largest number of headers in a message at `version`.
+  fn max_headers(version: ProtocolVersion) -> usize {
+    if version >= ProtocolVersion::INCREASE_MAX_HEADERS2 {
+      MAX_HEADERS_COMPRESSED
+    } else {
+      MAX_HEADERS
+    }
+  }
+
+  /// Decodes a message of at most `limit` headers.
+  fn decode_headers(data: &mut &[u8], limit: usize) -> Result<Self, DecodeError> {
+    let count = CompactSize::decode(data)?.into_len(limit)?;
     let mut state = CompressionState::new();
     let mut headers = Vec::with_capacity(count);
     for _ in 0..count {
       headers.push(state.decode_header(data)?);
     }
     Ok(Self { headers })
+  }
+}
+
+impl VersionedPayload for Headers2 {
+  fn decode_versioned(payload: &[u8], version: ProtocolVersion) -> Result<Self, P2pDecodeError> {
+    let mut data = payload;
+    let msg = Self::decode_headers(&mut data, Self::max_headers(version))?;
+    if !data.is_empty() {
+      return Err(DecodeError::TrailingBytes { remaining: data.len() }.into());
+    }
+    Ok(msg)
+  }
+
+  fn encode_versioned(&self, buf: &mut Vec<u8>, _version: ProtocolVersion) {
+    self.encode(buf);
   }
 }
 
@@ -467,6 +499,76 @@ mod tests {
       headers: vec![first, header_at(BlockHash::default(), 1_001)],
     };
     assert_eq!(broken.check(), Some(NonContinuousHeaders { index: 1 }));
+  }
+
+  /// A count within the cap reads past the prefix and fails on the missing
+  /// headers, so only a count past the cap reports the limit.
+  fn cap_error(limit: usize, count: usize) -> DecodeError {
+    if count > limit {
+      DecodeError::CompactSizeExceedsLimit {
+        limit,
+        value: count as u64,
+      }
+    } else {
+      DecodeError::Eof {
+        needed: 1,
+        remaining: 0,
+      }
+    }
+  }
+
+  #[rstest]
+  #[case::below_switch_at_limit(ProtocolVersion(70234), MAX_HEADERS, MAX_HEADERS)]
+  #[case::below_switch_past_limit(ProtocolVersion(70234), MAX_HEADERS, MAX_HEADERS + 1)]
+  #[case::at_switch(ProtocolVersion::INCREASE_MAX_HEADERS2, MAX_HEADERS_COMPRESSED, MAX_HEADERS + 1)]
+  #[case::at_limit(
+    ProtocolVersion::INCREASE_MAX_HEADERS2,
+    MAX_HEADERS_COMPRESSED,
+    MAX_HEADERS_COMPRESSED
+  )]
+  #[case::past_limit(ProtocolVersion::INCREASE_MAX_HEADERS2, MAX_HEADERS_COMPRESSED, MAX_HEADERS_COMPRESSED + 1)]
+  fn headers2_cap_follows_the_peer_version(
+    #[case] version: ProtocolVersion,
+    #[case] limit: usize,
+    #[case] count: usize,
+  ) {
+    let mut payload = Vec::new();
+    CompactSize::from(count).encode(&mut payload);
+    assert_eq!(
+      <Headers2 as VersionedPayload>::decode_versioned(&payload, version),
+      Err(P2pDecodeError::from(cap_error(limit, count)))
+    );
+  }
+
+  #[rstest]
+  #[case::at_limit(MAX_HEADERS_COMPRESSED)]
+  #[case::past_limit(MAX_HEADERS_COMPRESSED + 1)]
+  fn headers2_decodes_at_the_current_version(#[case] count: usize) {
+    let mut payload = Vec::new();
+    CompactSize::from(count).encode(&mut payload);
+    assert_eq!(
+      Headers2::decode(&mut payload.as_slice()),
+      Err(cap_error(MAX_HEADERS_COMPRESSED, count))
+    );
+  }
+
+  #[rstest]
+  fn headers2_round_trips_at_the_peer_version() {
+    let first = header_at(BlockHash::default(), 1_000);
+    let msg = Headers2 {
+      headers: vec![first, header_at(first.hash(), 1_001)],
+    };
+    let mut payload = Vec::new();
+    msg.encode_versioned(&mut payload, ProtocolVersion::CURRENT);
+    assert_eq!(
+      <Headers2 as VersionedPayload>::decode_versioned(&payload, ProtocolVersion::CURRENT),
+      Ok(msg)
+    );
+    payload.push(0);
+    assert!(matches!(
+      <Headers2 as VersionedPayload>::decode_versioned(&payload, ProtocolVersion::CURRENT),
+      Err(P2pDecodeError::Consensus(_))
+    ));
   }
 
   #[rstest]

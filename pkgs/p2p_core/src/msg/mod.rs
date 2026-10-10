@@ -53,7 +53,6 @@ unversioned_payload!(
   GovSync,
   GovVote,
   Headers,
-  Headers2,
   Inv,
   Ping,
   Pong,
