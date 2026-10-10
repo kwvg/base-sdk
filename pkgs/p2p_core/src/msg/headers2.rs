@@ -37,10 +37,12 @@ const FLAG_NBITS: u8 = 0b0010_0000;
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CompressionState {
-  /// MRU version cache (front = most recently used).
-  pub version_cache: Vec<i32>,
+  /// Most recently used versions, newest first. More than seven entries
+  /// would overflow the 3-bit version offset.
+  #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_version_cache"))]
+  version_cache: Vec<i32>,
   /// Previous fully-resolved header.
-  pub prev_header: Option<BlockHeader>,
+  prev_header: Option<BlockHeader>,
   /// Cached block hash of `prev_header`.
   #[cfg_attr(feature = "serde", serde(skip))]
   prev_block_hash: Option<BlockHash>,
@@ -54,6 +56,16 @@ impl CompressionState {
       prev_header: None,
       prev_block_hash: None,
     }
+  }
+
+  /// Returns the most recently used versions, newest first.
+  pub fn version_cache(&self) -> &[i32] {
+    &self.version_cache
+  }
+
+  /// Returns the previous fully-resolved header.
+  pub fn prev_header(&self) -> Option<&BlockHeader> {
+    self.prev_header.as_ref()
   }
 
   /// Moves the version at `position` to the front of the cache.
@@ -226,6 +238,16 @@ fn no_predecessor(flag: u8) -> DecodeError {
   }
 }
 
+/// Rejects a cache longer than the 3-bit version offset can index.
+#[cfg(feature = "serde")]
+fn deserialize_version_cache<'de, D: ::serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<i32>, D::Error> {
+  let cache = <Vec<i32> as ::serde::Deserialize>::deserialize(deserializer)?;
+  if cache.len() > MAX_VERSION_CACHE {
+    return Err(::serde::de::Error::invalid_length(cache.len(), &"at most 7 versions"));
+  }
+  Ok(cache)
+}
+
 impl Default for CompressionState {
   fn default() -> Self {
     Self::new()
@@ -358,6 +380,43 @@ mod tests {
       Headers2::decode(&mut wire.as_slice()),
       Err(DecodeError::InvalidValue { .. })
     ));
+  }
+
+  #[rstest]
+  fn caps_the_version_cache() {
+    let mut state = CompressionState::new();
+    let mut prev_hash = BlockHash::default();
+    for version in 1..=9 {
+      let header = BlockHeader {
+        version,
+        ..header_at(prev_hash, 1_000)
+      };
+      state.encode_header(&header, &mut Vec::new());
+      prev_hash = header.hash();
+    }
+    assert_eq!(state.version_cache(), [9, 8, 7, 6, 5, 4, 3]);
+  }
+
+  #[rstest]
+  #[case::full(7, true)]
+  #[case::overfull(8, false)]
+  fn deserializes_at_most_seven_versions(#[case] len: usize, #[case] accepted: bool) {
+    use ::serde::de::value::{Error, SeqDeserializer};
+
+    let versions = SeqDeserializer::<_, Error>::new(core::iter::repeat_n(1i32, len));
+    assert_eq!(deserialize_version_cache(versions).is_ok(), accepted);
+  }
+
+  #[rstest]
+  fn tracks_the_prev_header_and_its_hash() {
+    let first = header_at(BlockHash::default(), 1_000);
+    let mut state = CompressionState::new();
+    state.encode_header(&first, &mut Vec::new());
+    assert_eq!(state.prev_header(), Some(&first));
+
+    let mut buf = Vec::new();
+    state.encode_header(&header_at(first.hash(), 1_001), &mut buf);
+    assert_eq!(buf[0] & FLAG_PREV_HASH, 0);
   }
 
   #[rstest]
