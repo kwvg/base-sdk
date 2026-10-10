@@ -50,7 +50,7 @@ pub use payload::{
   QuorumVvecHash, SpecialPayload, TxType, UnknownProTxVersion, PROTX_VERSION_BASIC_BLS, PROTX_VERSION_EXT_ADDR,
   PROTX_VERSION_LEGACY_BLS, VERSIONBITS_NUM_BITS,
 };
-pub use support::{DynBitset, DynBitsetIterator, LlmqType, RevocationReason};
+pub use support::{DynBitset, DynBitsetIterator, LlmqParams, LlmqType, RevocationReason};
 pub use transaction::{
   OutPoint, Transaction, TxHash, TxIn, TxInvalid, TxOut, MAX_COINBASE_SCRIPT_SIZE, MAX_TX_EXTRA_PAYLOAD,
 };

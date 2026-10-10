@@ -54,6 +54,46 @@ impl_num!(LlmqType, u8);
 
 hash_impl!(LlmqType);
 
+impl LlmqType {
+  /// Size and threshold parameters of the type, or `None` for
+  /// [`LlmqType::LlmqNone`] and unknown types. Test and devnet types carry
+  /// their default values, which a node may override on its command line.
+  pub const fn params(self) -> Option<LlmqParams> {
+    let (size, min_size, threshold) = match self {
+      Self::Llmq50_60 => (50, 40, 30),
+      Self::Llmq400_60 => (400, 300, 240),
+      Self::Llmq400_85 => (400, 350, 340),
+      Self::Llmq100_67 => (100, 80, 67),
+      Self::Llmq60_75 => (60, 50, 45),
+      Self::Llmq25_67 => (25, 22, 17),
+      Self::LlmqTest | Self::LlmqTestV17 | Self::LlmqTestInstantsend | Self::LlmqTestPlatform => (3, 2, 2),
+      Self::LlmqTestDip0024 => (4, 4, 3),
+      Self::LlmqDevnet => (12, 7, 6),
+      Self::LlmqDevnetDip0024 => (8, 6, 4),
+      Self::LlmqDevnetPlatform => (12, 9, 8),
+      Self::LlmqNone | Self::Unknown(_) => return None,
+    };
+    Some(LlmqParams {
+      size,
+      min_size,
+      threshold,
+    })
+  }
+}
+
+/// Size and threshold parameters of an [`LlmqType`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub struct LlmqParams {
+  /// Number of members.
+  pub size: u16,
+  /// Fewest valid members and signers a commitment may carry.
+  pub min_size: u16,
+  /// Number of signature shares that recover the quorum signature.
+  pub threshold: u16,
+}
+
 enum_map! {
   /// Revocation reason for provider update revocation.
   #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
@@ -250,7 +290,7 @@ impl Iterator for DynBitsetIterator<'_> {
 
 #[cfg(test)]
 mod tests {
-  use super::{DynBitset, LlmqType, RevocationReason};
+  use super::{DynBitset, LlmqParams, LlmqType, RevocationReason};
   use crate::prelude::*;
 
   use dash_types::codec::{BaseCodec, DecodeError};
@@ -313,6 +353,44 @@ mod tests {
   fn llmq_types_follow_the_reference_codes(#[case] code: u8, #[case] llmq_type: LlmqType) {
     assert_eq!(LlmqType::from_base(code), llmq_type);
     assert_eq!(llmq_type.to_base(), code);
+  }
+
+  #[rstest]
+  #[case::llmq_50_60(LlmqType::Llmq50_60, 50, 40, 30)]
+  #[case::llmq_400_60(LlmqType::Llmq400_60, 400, 300, 240)]
+  #[case::llmq_400_85(LlmqType::Llmq400_85, 400, 350, 340)]
+  #[case::llmq_100_67(LlmqType::Llmq100_67, 100, 80, 67)]
+  #[case::llmq_60_75(LlmqType::Llmq60_75, 60, 50, 45)]
+  #[case::llmq_25_67(LlmqType::Llmq25_67, 25, 22, 17)]
+  #[case::llmq_test(LlmqType::LlmqTest, 3, 2, 2)]
+  #[case::llmq_test_v17(LlmqType::LlmqTestV17, 3, 2, 2)]
+  #[case::llmq_test_dip0024(LlmqType::LlmqTestDip0024, 4, 4, 3)]
+  #[case::llmq_test_instantsend(LlmqType::LlmqTestInstantsend, 3, 2, 2)]
+  #[case::llmq_test_platform(LlmqType::LlmqTestPlatform, 3, 2, 2)]
+  #[case::llmq_devnet(LlmqType::LlmqDevnet, 12, 7, 6)]
+  #[case::llmq_devnet_dip0024(LlmqType::LlmqDevnetDip0024, 8, 6, 4)]
+  #[case::llmq_devnet_platform(LlmqType::LlmqDevnetPlatform, 12, 9, 8)]
+  fn llmq_params_follow_the_reference_table(
+    #[case] llmq_type: LlmqType,
+    #[case] size: u16,
+    #[case] min_size: u16,
+    #[case] threshold: u16,
+  ) {
+    assert_eq!(
+      llmq_type.params(),
+      Some(LlmqParams {
+        size,
+        min_size,
+        threshold
+      })
+    );
+  }
+
+  #[rstest]
+  #[case::none(LlmqType::LlmqNone)]
+  #[case::unknown(LlmqType::Unknown(7))]
+  fn none_and_unknown_types_have_no_params(#[case] llmq_type: LlmqType) {
+    assert_eq!(llmq_type.params(), None);
   }
 
   #[rstest]
