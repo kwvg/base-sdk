@@ -88,7 +88,6 @@ pub struct Proposal {
 /// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Unencodable)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct Trigger {
   /// Block height at which payments occur.
   pub event_block_height: i32,
@@ -497,6 +496,20 @@ mod tests {
           amount.as_u64().unwrap() * 100_000_000,
           "{label}"
         );
+      }
+
+      if obj.object_type == GovObjectType::Trigger {
+        let trigger: Trigger = from_json_slice(&obj.data);
+        let Value::Object(fields) = &details.data else {
+          panic!("{label}: trigger data is not an object");
+        };
+        let Value::Object(parsed) = to_value(&trigger) else {
+          panic!("{label}: trigger does not serialize as an object");
+        };
+        for (key, value) in &parsed {
+          assert_eq!(fields.get(key), Some(value), "{label}: {key}");
+        }
+        assert_eq!(parsed.len(), 4, "{label}");
       }
 
       let mut encoded = Vec::new();
