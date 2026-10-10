@@ -35,8 +35,8 @@ pub use headers2::{CompressionState, GetHeaders2, Headers2};
 pub use inv::{GetData, Inv, InvType, Inventory, NotFound};
 pub use llmq::QSendRecSigs;
 pub use mn_list::{
-  sml_merkle_root, DeletedQuorum, GetMnListDiff, MnListDiff, MnListDiffPayload, NetInfoVersionMismatch, QuorumClSig,
-  SimplifiedMnListEntry,
+  sml_merkle_root, DeletedQuorum, GetMnListDiff, MnListDiff, MnListDiffInvalid, MnListDiffPayload,
+  NetInfoVersionMismatch, QuorumClSig, SimplifiedMnListEntry, SmlEntryInvalid,
 };
 pub use ping::{Ping, Pong};
 pub use sync::{SyncItemId, SyncStatusCount};

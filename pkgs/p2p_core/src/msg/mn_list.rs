@@ -16,12 +16,13 @@ use dash_num::Hash256;
 use dash_pkc::bls::{BlsScIetf, BlsSigBytes, BLS_PK_LEN};
 use dash_primitives::{
   hash_impl, merkle_root_mutated, BlockHash, BlsPubKey, BlsScheme, Commitment, LlmqType, MerkleRoot, MnType, NetInfo,
-  NetInfoV1, NetInfoV2, PartialMerkleTree, PlatformNodeId, Transaction, TxHash, PROTX_VERSION_EXT_ADDR,
+  NetInfoV1, NetInfoV2, PartialMerkleTree, PlatformNodeId, Transaction, TxHash, PROTX_VERSION_BASIC_BLS,
+  PROTX_VERSION_EXT_ADDR, PROTX_VERSION_LEGACY_BLS,
 };
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
-use dash_types::{CompactSize, Hashable, Numeric};
+use dash_types::{Checkable, CompactSize, Hashable, Numeric};
 
 use core::fmt;
 
@@ -78,6 +79,31 @@ impl VersionedPayload for MnListDiff {
   }
 }
 
+/// Masternode list diff failure.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub enum MnListDiffInvalid {
+  /// The entry at `index` of `mn_list` fails its check.
+  Entry { index: usize, error: SmlEntryInvalid },
+  /// Two chainlock signatures are equal, which a signature-keyed map cannot
+  /// hold.
+  DuplicateClSig,
+  /// A chainlock index set is not strictly ascending.
+  UnsortedClSigIndices,
+  /// A chainlock index points past `new_quorums`.
+  ClSigIndexOutOfRange { index: u16 },
+}
+
+impl fmt::Display for MnListDiffInvalid {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Entry { index, error } => write!(f, "mnlistdiff entry {index}: {error}"),
+      Self::DuplicateClSig => f.write_str("mnlistdiff repeats a chainlock signature"),
+      Self::UnsortedClSigIndices => f.write_str("mnlistdiff chainlock indices not strictly ascending"),
+      Self::ClSigIndexOutOfRange { index } => write!(f, "mnlistdiff chainlock index {index} past the new quorums"),
+    }
+  }
+}
+
 /// Full masternode list diff payload.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -114,6 +140,34 @@ impl BaseCodec for MnListDiffPayload {
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
     self.encode_versioned(buf, ProtocolVersion::CURRENT);
+  }
+}
+
+impl Checkable for MnListDiffPayload {
+  type Error = MnListDiffInvalid;
+
+  fn check(&self) -> Option<Self::Error> {
+    for (index, entry) in self.mn_list.iter().enumerate() {
+      if let Some(error) = entry.check() {
+        return Some(MnListDiffInvalid::Entry { index, error });
+      }
+    }
+    for (i, cl_sig) in self.quorum_cl_sigs.iter().enumerate() {
+      if self.quorum_cl_sigs[..i].iter().any(|other| other.sig == cl_sig.sig) {
+        return Some(MnListDiffInvalid::DuplicateClSig);
+      }
+      if cl_sig.index_set.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Some(MnListDiffInvalid::UnsortedClSigIndices);
+      }
+      if let Some(&index) = cl_sig
+        .index_set
+        .iter()
+        .find(|&&index| usize::from(index) >= self.new_quorums.len())
+      {
+        return Some(MnListDiffInvalid::ClSigIndexOutOfRange { index });
+      }
+    }
+    None
   }
 }
 
@@ -220,6 +274,30 @@ pub struct QuorumClSig {
 
 codec_p2p!(QuorumClSig { sig, index_set });
 
+/// Simplified masternode list entry failure.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
+pub enum SmlEntryInvalid {
+  /// The version is outside the ProTx versions.
+  BadVersion { version: u16 },
+  /// A version 1 entry has a type other than regular, which version 1
+  /// cannot encode.
+  TypeBeforeBasicBls { mn_type: MnType },
+  /// The platform fields present do not match the type and version.
+  BadPlatformFields,
+}
+
+impl fmt::Display for SmlEntryInvalid {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::BadVersion { version } => write!(f, "sml entry version {version} out of range"),
+      Self::TypeBeforeBasicBls { mn_type } => {
+        write!(f, "sml entry type {} below the basic bls version", mn_type.to_base())
+      }
+      Self::BadPlatformFields => f.write_str("sml entry platform fields do not match its type and version"),
+    }
+  }
+}
+
 /// The net info form of a simplified masternode list entry disagrees with
 /// its version.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Unencodable)]
@@ -269,6 +347,27 @@ impl BaseCodec for SimplifiedMnListEntry {
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
     self.encode_versioned(buf, ProtocolVersion::CURRENT);
+  }
+}
+
+/// The checks cover what the entry version can encode. Net info is not
+/// validated, since revoked masternodes carry empty net info.
+impl Checkable for SimplifiedMnListEntry {
+  type Error = SmlEntryInvalid;
+
+  fn check(&self) -> Option<Self::Error> {
+    if !(PROTX_VERSION_LEGACY_BLS..=PROTX_VERSION_EXT_ADDR).contains(&self.version) {
+      return Some(SmlEntryInvalid::BadVersion { version: self.version });
+    }
+    if self.version < PROTX_VERSION_BASIC_BLS && self.mn_type != MnType::Regular {
+      return Some(SmlEntryInvalid::TypeBeforeBasicBls { mn_type: self.mn_type });
+    }
+    let is_evo = self.mn_type == MnType::Evo;
+    let has_http_port = is_evo && self.version < PROTX_VERSION_EXT_ADDR;
+    if self.platform_http_port.is_some() != has_http_port || self.platform_node_id.is_some() != is_evo {
+      return Some(SmlEntryInvalid::BadPlatformFields);
+    }
+    None
   }
 }
 
@@ -942,5 +1041,90 @@ mod tests {
     entries.push(merkleroots_entry(15));
     let (root, mutated) = sml_merkle_root(&entries);
     assert_eq!((format!("{root}").as_str(), mutated), (MERKLEROOTS_ROOT, true));
+  }
+
+  #[rstest]
+  fn corpus_mnlistdiff_passes_its_checks() {
+    assert_eq!(corpus_diff().check(), None);
+  }
+
+  #[rstest]
+  #[case::evo_basic_bls(evo_entry(2), None)]
+  #[case::evo_ext_addr(evo_entry(3), None)]
+  #[case::version_zero(
+    SimplifiedMnListEntry { version: 0, ..merkleroots_entry(1) },
+    Some(SmlEntryInvalid::BadVersion { version: 0 }),
+  )]
+  #[case::version_above_ext_addr(
+    SimplifiedMnListEntry { version: 4, ..evo_entry(3) },
+    Some(SmlEntryInvalid::BadVersion { version: 4 }),
+  )]
+  #[case::evo_legacy_bls(
+    SimplifiedMnListEntry { mn_type: MnType::Evo, ..merkleroots_entry(1) },
+    Some(SmlEntryInvalid::TypeBeforeBasicBls { mn_type: MnType::Evo }),
+  )]
+  #[case::http_port_at_ext_addr(
+    SimplifiedMnListEntry { platform_http_port: Some(443), ..evo_entry(3) },
+    Some(SmlEntryInvalid::BadPlatformFields),
+  )]
+  #[case::no_http_port_below_ext_addr(
+    SimplifiedMnListEntry { platform_http_port: None, ..evo_entry(2) },
+    Some(SmlEntryInvalid::BadPlatformFields),
+  )]
+  #[case::no_node_id(
+    SimplifiedMnListEntry { platform_node_id: None, ..evo_entry(3) },
+    Some(SmlEntryInvalid::BadPlatformFields),
+  )]
+  #[case::regular_with_node_id(
+    SimplifiedMnListEntry { mn_type: MnType::Regular, platform_http_port: None, ..evo_entry(3) },
+    Some(SmlEntryInvalid::BadPlatformFields),
+  )]
+  fn entry_check(#[case] entry: SimplifiedMnListEntry, #[case] expected: Option<SmlEntryInvalid>) {
+    assert_eq!(entry.check(), expected);
+  }
+
+  #[rstest]
+  fn diff_check_reports_the_failing_entry() {
+    let mut diff = corpus_diff();
+    diff.mn_list[1].version = 0;
+    assert_eq!(
+      diff.check(),
+      Some(MnListDiffInvalid::Entry {
+        index: 1,
+        error: SmlEntryInvalid::BadVersion { version: 0 },
+      })
+    );
+  }
+
+  /// Corpus diff whose first chainlock signature covers `indices`.
+  fn diff_with_cl_indices(indices: &[u16]) -> MnListDiffPayload {
+    let mut diff = corpus_diff();
+    diff.quorum_cl_sigs[0].index_set = indices.to_vec();
+    diff
+  }
+
+  #[rstest]
+  fn diff_check_rejects_a_repeated_cl_sig() {
+    let mut diff = corpus_diff();
+    let first = diff.quorum_cl_sigs[0].clone();
+    diff.quorum_cl_sigs.push(first);
+    assert_eq!(diff.check(), Some(MnListDiffInvalid::DuplicateClSig));
+  }
+
+  #[rstest]
+  #[case::repeated(&[0, 0], Some(MnListDiffInvalid::UnsortedClSigIndices))]
+  #[case::descending(&[1, 0], Some(MnListDiffInvalid::UnsortedClSigIndices))]
+  #[case::ascending(&[0, 1], None)]
+  fn diff_check_wants_ascending_cl_indices(#[case] indices: &[u16], #[case] expected: Option<MnListDiffInvalid>) {
+    assert_eq!(diff_with_cl_indices(indices).check(), expected);
+  }
+
+  #[rstest]
+  fn diff_check_rejects_a_cl_index_past_the_new_quorums() {
+    let index = u16::try_from(corpus_diff().new_quorums.len()).unwrap_or(u16::MAX);
+    assert_eq!(
+      diff_with_cl_indices(&[index]).check(),
+      Some(MnListDiffInvalid::ClSigIndexOutOfRange { index })
+    );
   }
 }
