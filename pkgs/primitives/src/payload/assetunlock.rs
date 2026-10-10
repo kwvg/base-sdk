@@ -63,6 +63,9 @@ impl BaseCodec for AssetUnlock {
   }
 }
 
+/// Most outputs an asset unlock transaction may carry.
+pub const MAXIMUM_WITHDRAWALS: usize = 32;
+
 /// Asset unlock validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Unencodable)]
 pub enum AssetUnlockInvalid {
@@ -72,6 +75,10 @@ pub enum AssetUnlockInvalid {
   FeeOutOfRange { fee: u32 },
   /// `bad-assetunlocktx-payload`
   BadPayload,
+  /// `bad-assetunlocktx-have-input`
+  HaveInput,
+  /// `bad-assetunlocktx-too-many-outs`
+  TooManyOutputs { count: usize },
 }
 
 impl core::fmt::Display for AssetUnlockInvalid {
@@ -80,6 +87,8 @@ impl core::fmt::Display for AssetUnlockInvalid {
       Self::BadVersion { version } => write!(f, "bad-assetunlocktx-version: {version}"),
       Self::FeeOutOfRange { fee } => write!(f, "bad-txns-assetunlock-fee-outofrange: {fee}"),
       Self::BadPayload => write!(f, "bad-assetunlocktx-payload"),
+      Self::HaveInput => write!(f, "bad-assetunlocktx-have-input"),
+      Self::TooManyOutputs { count } => write!(f, "bad-assetunlocktx-too-many-outs: {count}"),
     }
   }
 }

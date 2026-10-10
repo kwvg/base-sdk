@@ -8,7 +8,7 @@
 //! special transactions.
 
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
-use crate::payload::{PayloadError, PayloadInvalid, TxType};
+use crate::payload::{AssetUnlockInvalid, PayloadError, PayloadInvalid, TxType, MAXIMUM_WITHDRAWALS};
 use crate::prelude::*;
 use crate::{codec_type, hash_impl};
 
@@ -320,6 +320,12 @@ impl Checkable for Transaction {
       return Some(TxInvalid::CoinbaseCommitmentNotCoinbase);
     }
 
+    if self.has_extra_payload() && self.tx_type == TxType::AssetUnlock {
+      if let Some(e) = self.check_asset_unlock_shape() {
+        return Some(TxInvalid::PayloadCheck(PayloadInvalid::AssetUnlock(e)));
+      }
+    }
+
     if let Some(result) = self.decode_payload() {
       match result {
         Ok(ref payload) if payload.is_unknown() => {
@@ -383,6 +389,16 @@ impl Transaction {
       }
       Ok(payload)
     }))
+  }
+
+  /// Checks that an asset unlock spends nothing and pays few enough outputs.
+  fn check_asset_unlock_shape(&self) -> Option<AssetUnlockInvalid> {
+    if !self.inputs.is_empty() {
+      return Some(AssetUnlockInvalid::HaveInput);
+    }
+    (self.outputs.len() > MAXIMUM_WITHDRAWALS).then_some(AssetUnlockInvalid::TooManyOutputs {
+      count: self.outputs.len(),
+    })
   }
 
   /// Tells whether the transaction is a coinbase. A null first input followed
@@ -511,6 +527,42 @@ mod tests {
       Some(TxInvalid::Oversize {
         size: MAX_LEGACY_BLOCK_SIZE + 1
       })
+    );
+  }
+
+  fn corpus_asset_unlock() -> Transaction {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
+    let mut raws = Vec::new();
+    corpus.entries::<crate::AssetUnlock>("assetunlock", |raw, _, _| raws.push(raw.to_vec()));
+    Transaction::decode(&mut raws[0].as_slice()).unwrap()
+  }
+
+  #[rstest]
+  fn asset_unlock_spends_nothing() {
+    let mut tx = corpus_asset_unlock();
+    assert_eq!(tx.check(), None);
+    tx.inputs.push(TxIn {
+      prevout: OutPoint {
+        hash: TxHash::from_lendian([0x11; 32]),
+        index: 0,
+      },
+      script_sig: ScriptSigBuf::new(),
+      sequence: u32::MAX,
+    });
+    let error = TxInvalid::PayloadCheck(PayloadInvalid::AssetUnlock(AssetUnlockInvalid::HaveInput));
+    assert_eq!(tx.check(), Some(error));
+  }
+
+  #[rstest]
+  #[case::at_the_limit(MAXIMUM_WITHDRAWALS, None)]
+  #[case::past_the_limit(MAXIMUM_WITHDRAWALS + 1, Some(AssetUnlockInvalid::TooManyOutputs { count: MAXIMUM_WITHDRAWALS + 1 }))]
+  fn asset_unlock_pays_at_most_32_outputs(#[case] count: usize, #[case] expected: Option<AssetUnlockInvalid>) {
+    let mut tx = corpus_asset_unlock();
+    let output = tx.outputs[0].clone();
+    tx.outputs = vec![output; count];
+    assert_eq!(
+      tx.check(),
+      expected.map(|e| TxInvalid::PayloadCheck(PayloadInvalid::AssetUnlock(e)))
     );
   }
 
