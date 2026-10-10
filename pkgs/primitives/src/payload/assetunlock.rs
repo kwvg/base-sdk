@@ -107,7 +107,7 @@ impl Checkable for AssetUnlock {
   type Error = AssetUnlockInvalid;
 
   fn check(&self) -> Option<Self::Error> {
-    if self.version == 0 || self.version > 1 {
+    if self.version == 0 || self.version > 2 {
       return Some(AssetUnlockInvalid::BadVersion { version: self.version });
     }
 
@@ -155,6 +155,22 @@ mod tests {
       assert_eq!(item.quorum_sig.scheme(), BlsScheme::Basic, "{label}");
     }
   }
+  #[rstest]
+  #[case::v0(0, Some(AssetUnlockInvalid::BadVersion { version: 0 }))]
+  #[case::v1(1, None)]
+  #[case::v2(2, None)]
+  #[case::v3(3, Some(AssetUnlockInvalid::BadVersion { version: 3 }))]
+  fn payload_versions_1_and_2_are_known(#[case] version: u8, #[case] expected: Option<AssetUnlockInvalid>) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
+    let mut item = corpus
+      .entries::<AssetUnlock>("assetunlock", |_, _, _| {})
+      .into_values()
+      .next()
+      .unwrap();
+    item.version = version;
+    assert_eq!(item.check(), expected);
+  }
+
   #[rstest]
   fn non_canonical_signature_is_a_bad_payload() {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "assetunlock");
