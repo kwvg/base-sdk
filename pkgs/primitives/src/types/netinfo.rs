@@ -26,6 +26,8 @@ const DOMAIN_LABEL_MAX: usize = 63;
 const DOMAIN_MAX: usize = 253;
 /// Minimum FQDN length.
 const DOMAIN_MIN: usize = 3;
+/// Privileged port that Platform HTTPS entries may use.
+const PLATFORM_HTTPS_PORT: u16 = 443;
 
 /// Reserved and privacy TLDs that must be rejected.
 const TLDS_BAD: &[&str] = &[
@@ -236,17 +238,9 @@ impl Checkable for NIEntry {
 
   fn check(&self) -> Option<Self::Error> {
     match self {
-      Self::Service(svc) => {
-        if let Some(error) = svc.check() {
-          return Some(NIError::BadAddr { error });
-        }
-        if !svc.addr.is_i2p() && is_bad_port(svc.port) {
-          return Some(NIError::BadPort { port: svc.port });
-        }
-        None
-      }
+      Self::Service(svc) => svc.check().map(|error| NIError::BadAddr { error }),
       Self::Domain { name, port } => {
-        if *port == 0 || (is_bad_port(*port) && *port != 443) {
+        if *port == 0 || (is_bad_port(*port) && *port != PLATFORM_HTTPS_PORT) {
           return Some(NIError::BadPort { port: *port });
         }
         check_domain(name)
@@ -443,6 +437,12 @@ impl Checkable for NetInfoV2 {
         }
         if let Some(e) = entry.check() {
           return Some(e);
+        }
+        if let NIEntry::Service(svc) = entry {
+          let https_port = *purpose == NIPurpose::PlatformHttps && svc.port == PLATFORM_HTTPS_PORT;
+          if !svc.addr.is_i2p() && is_bad_port(svc.port) && !https_port {
+            return Some(NIError::BadPort { port: svc.port });
+          }
         }
       }
     }
@@ -1021,8 +1021,6 @@ mod tests {
     AddrV2::Ipv4([1, 2, 3, 4]), 0,
     Some(NIError::BadAddr { error: NetAddrError::BadPort { port: 0 } }),
   )]
-  #[case::ipv4_port_privileged(AddrV2::Ipv4([1, 2, 3, 4]), 22, Some(NIError::BadPort { port: 22 }))]
-  #[case::ipv4_port_named_bad(AddrV2::Ipv4([1, 2, 3, 4]), 8333, Some(NIError::BadPort { port: 8333 }))]
   #[case::i2p_port_zero(AddrV2::I2p([1; 32]), 0, None)]
   #[case::i2p_port_nonzero(
     AddrV2::I2p([1; 32]), 9998,
@@ -1037,6 +1035,28 @@ mod tests {
   fn check_entry_service(#[case] addr: AddrV2, #[case] port: u16, #[case] expected: Option<NIError>) {
     let entry = NIEntry::Service(ServiceV2 { addr, port });
     assert_eq!(entry.check(), expected);
+  }
+
+  /// Only a Platform HTTPS service may use port 443, and no service may use
+  /// another bad port.
+  #[rstest]
+  #[case::core_p2p_valid(NIPurpose::CoreP2p, AddrV2::Ipv4([1, 2, 3, 4]), 9999, None)]
+  #[case::core_p2p_privileged(NIPurpose::CoreP2p, AddrV2::Ipv4([1, 2, 3, 4]), 22, Some(NIError::BadPort { port: 22 }))]
+  #[case::core_p2p_named_bad(NIPurpose::CoreP2p, AddrV2::Ipv4([1, 2, 3, 4]), 8333, Some(NIError::BadPort { port: 8333 }))]
+  #[case::core_p2p_443(NIPurpose::CoreP2p, AddrV2::Ipv4([1, 2, 3, 4]), 443, Some(NIError::BadPort { port: 443 }))]
+  #[case::platform_p2p_443(NIPurpose::PlatformP2p, AddrV2::Ipv4([1, 2, 3, 4]), 443, Some(NIError::BadPort { port: 443 }))]
+  #[case::platform_https_443(NIPurpose::PlatformHttps, AddrV2::Ipv4([1, 2, 3, 4]), 443, None)]
+  #[case::platform_https_ipv6_443(NIPurpose::PlatformHttps, AddrV2::Ipv6([0x2a; 16]), 443, None)]
+  #[case::platform_https_80(NIPurpose::PlatformHttps, AddrV2::Ipv4([1, 2, 3, 4]), 80, Some(NIError::BadPort { port: 80 }))]
+  #[case::platform_https_named_bad(NIPurpose::PlatformHttps, AddrV2::Ipv4([1, 2, 3, 4]), 8333, Some(NIError::BadPort { port: 8333 }))]
+  fn service_port_follows_the_purpose(
+    #[case] purpose: NIPurpose,
+    #[case] addr: AddrV2,
+    #[case] port: u16,
+    #[case] expected: Option<NIError>,
+  ) {
+    let entry = NIEntry::Service(ServiceV2 { addr, port });
+    assert_eq!(NetInfoV2::new(vec![(purpose, vec![entry])]).check(), expected);
   }
 
   #[rstest]
