@@ -18,7 +18,7 @@ use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
 use crate::prelude::*;
 use crate::types::{BlsPubKey, BlsScheme, NITrait, NetInfo, NetInfoV1, NetInfoV2, Routing, ServiceV1};
-use crate::{TxHash, TxOut};
+use crate::{Transaction, TxHash, TxOut};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
 use bitcoin_units::Amount;
@@ -28,7 +28,7 @@ use dash_script::{is_shared_collateral_script, PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Hashable;
-use dash_types::{Checkable, Numeric};
+use dash_types::{Checkable, CompactSize, Numeric};
 
 use core::fmt;
 
@@ -147,6 +147,9 @@ fn check_share_list<'a>(
   }
   None
 }
+
+/// Prefix of the shared registration consent message.
+const CONSENT_PREFIX: [u8; 15] = *b"DashSharedMNReg";
 
 /// Core P2P port of mainnet, which platform ports may not take on any network.
 const MAINNET_CORE_PORT: u16 = 9999;
@@ -559,6 +562,40 @@ impl ProRegTx {
     (!pays_template).then_some(ProTxInvalid::SharesCollateralScript)
   }
 
+  /// Hash each share owner signs to join the shared registration in `tx`.
+  /// It covers the inputs, sequences and outputs of `tx`, the share table,
+  /// the early terms and the registrar fields.
+  pub fn consent_hash(&self, tx: &Transaction) -> Hash256 {
+    payload_hash(|buf| {
+      CompactSize::from(CONSENT_PREFIX.len()).encode(buf);
+      CONSENT_PREFIX.encode(buf);
+      self.version.encode(buf);
+      tx.version.encode(buf);
+      tx.tx_type.to_base().encode(buf);
+      tx.lock_time.encode(buf);
+      tx.inputs_hash().encode(buf);
+      for input in &tx.inputs {
+        input.sequence.encode(buf);
+      }
+      tx.outputs_hash().encode(buf);
+      self.mn_type.to_base().encode(buf);
+      self.mode.encode(buf);
+      encode_net_info(&self.net_info, NetInfoForm::Hash, buf);
+      if let Some(node_id) = self.platform_node_id {
+        node_id.encode(buf);
+      }
+      self.key_id_voting.encode(buf);
+      self.pub_key_operator.encode(buf);
+      self.operator_reward.encode(buf);
+      encode_u8_count(self.shares.len(), buf);
+      for (share, _) in &self.shares {
+        share.encode(buf);
+      }
+      self.early_period_blocks.encode(buf);
+      self.early_penalty.encode(buf);
+    })
+  }
+
   fn check_owner_payouts(&self) -> Option<ProTxInvalid> {
     if self.is_shared() {
       let Some(required) = self.mn_type.collateral_amount() else {
@@ -679,6 +716,7 @@ impl fmt::Display for ProRegTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
+  use crate::payload::protx::testing::signer;
   use crate::types::{AddrV1, NIError, NIPurpose};
   use crate::{PayloadInvalid, Transaction, TxInvalid};
 
@@ -1230,5 +1268,46 @@ mod tests {
       ProTxInvalid::SharesCollateralScript.to_string(),
       "bad-protx-shares-collateral-script"
     );
+  }
+
+  /// Each join signature recovers, over the consent hash, to the owner of
+  /// its share.
+  #[rstest]
+  fn share_owners_sign_the_consent_hash() {
+    for (tx, item) in shared_transactions() {
+      let hash = item.consent_hash(&tx);
+      for (share, join_sig) in item.shares() {
+        assert_eq!(signer(&hash, join_sig.as_bytes()), Some(share.key_id_owner));
+      }
+    }
+  }
+
+  #[rstest]
+  #[case::sequence(|tx: &mut Transaction, _: &mut ProRegTx| tx.inputs[0].sequence ^= 1)]
+  #[case::output(|tx: &mut Transaction, _: &mut ProRegTx| tx.outputs.truncate(1))]
+  #[case::lock_time(|tx: &mut Transaction, _: &mut ProRegTx| tx.lock_time ^= 1)]
+  #[case::share(|_: &mut Transaction, item: &mut ProRegTx| item.shares[0].0.amount -= 1)]
+  #[case::penalty(|_: &mut Transaction, item: &mut ProRegTx| item.early_penalty += 1)]
+  #[case::voting(|_: &mut Transaction, item: &mut ProRegTx| item.key_id_voting = PubKeyHash::default())]
+  fn consent_hash_covers(#[case] edit: fn(&mut Transaction, &mut ProRegTx)) {
+    for (mut tx, mut item) in shared_transactions() {
+      let hash = item.consent_hash(&tx);
+      edit(&mut tx, &mut item);
+      assert_ne!(item.consent_hash(&tx), hash);
+    }
+  }
+
+  /// The consent hash leaves out the join signatures and the inputs hash
+  /// field, which the transaction inputs already pin.
+  #[rstest]
+  fn consent_hash_leaves_out_join_signatures() {
+    for (tx, mut item) in shared_transactions() {
+      let hash = item.consent_hash(&tx);
+      for (_, join_sig) in &mut item.shares {
+        *join_sig = CompactSignature::from_bytes([0; 65]);
+      }
+      item.inputs_hash = InputsHash::default();
+      assert_eq!(item.consent_hash(&tx), hash);
+    }
   }
 }
