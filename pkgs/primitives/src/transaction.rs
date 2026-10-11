@@ -10,8 +10,8 @@
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
 use crate::payload::{
   AssetLockInvalid, AssetUnlockInvalid, InputsHash, OutputsHash, PayloadError, PayloadInvalid, ProTxInvalid,
-  SpecialPayload, TxType, ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE, ASSET_UNLOCK_STABLE_TXID_VERSION,
-  MAXIMUM_WITHDRAWALS,
+  ProTxPayload, SpecialPayload, TxType, ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE,
+  ASSET_UNLOCK_STABLE_TXID_VERSION, MAXIMUM_WITHDRAWALS,
 };
 use crate::prelude::*;
 use crate::{codec_type, hash_impl};
@@ -351,6 +351,11 @@ impl Checkable for Transaction {
         Ok(payload) => {
           if let Some(e) = payload.check() {
             return Some(TxInvalid::PayloadCheck(e));
+          }
+          if let SpecialPayload::ProviderRegister(ProTxPayload::Known(protx)) = &payload {
+            if let Some(e) = protx.check_shared_collateral(&self.outputs) {
+              return Some(TxInvalid::PayloadCheck(PayloadInvalid::ProTx(e)));
+            }
           }
           if payload
             .inputs_hash()

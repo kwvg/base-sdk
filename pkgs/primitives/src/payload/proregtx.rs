@@ -18,13 +18,13 @@ use crate::codec::impl_payload;
 use crate::payload::PlatformNodeId;
 use crate::prelude::*;
 use crate::types::{BlsPubKey, BlsScheme, NITrait, NetInfo, NetInfoV1, NetInfoV2, Routing, ServiceV1};
-use crate::TxHash;
+use crate::{TxHash, TxOut};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
 use bitcoin_units::Amount;
 use dash_num::Hash256;
 use dash_pkc::bls::BLS_PK_LEN;
-use dash_script::{PubKeyHash, Recipient};
+use dash_script::{is_shared_collateral_script, PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Hashable;
@@ -546,6 +546,19 @@ impl ProRegTx {
       .map(|error| ProTxInvalid::NetInfoInvalid { error })
   }
 
+  /// Rejects a shared registration whose collateral output, among the
+  /// transaction's `outputs`, does not pay the shared collateral script.
+  pub(crate) fn check_shared_collateral(&self, outputs: &[TxOut]) -> Option<ProTxInvalid> {
+    if !self.is_shared() {
+      return None;
+    }
+    let collateral = usize::try_from(self.collateral_index)
+      .ok()
+      .and_then(|index| outputs.get(index));
+    let pays_template = collateral.is_some_and(|output| is_shared_collateral_script(output.script_pubkey.as_bytes()));
+    (!pays_template).then_some(ProTxInvalid::SharesCollateralScript)
+  }
+
   fn check_owner_payouts(&self) -> Option<ProTxInvalid> {
     if self.is_shared() {
       let Some(required) = self.mn_type.collateral_amount() else {
@@ -667,8 +680,10 @@ impl fmt::Display for ProRegTx {
 mod tests {
   use super::*;
   use crate::types::{AddrV1, NIError, NIPurpose};
+  use crate::{PayloadInvalid, Transaction, TxInvalid};
 
   use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
+  use dash_script::SHARED_COLLATERAL_SCRIPT;
   use hex_conservative::hex;
   use rstest::rstest;
 
@@ -1166,5 +1181,54 @@ mod tests {
     assert_eq!(item.check(), None);
     item.pub_key_operator = item.pub_key_operator.corrupted();
     assert_eq!(item.check(), Some(ProTxInvalid::NullKey));
+  }
+
+  /// The corpus shared registrations, each in its transaction.
+  fn shared_transactions() -> Vec<(Transaction, ProRegTx)> {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    let mut txs = Vec::new();
+    corpus.entries::<ProRegTx>("proregtx_shared", |raw, item, label| {
+      let tx = Transaction::decode(&mut &raw[..]);
+      assert!(tx.is_ok(), "{label}");
+      if let Ok(tx) = tx {
+        txs.push((tx, item.clone()));
+      }
+    });
+    txs
+  }
+
+  #[rstest]
+  fn shared_collateral_pays_the_template_script() {
+    for (tx, item) in shared_transactions() {
+      let collateral = &tx.outputs[item.collateral_index as usize];
+      assert_eq!(collateral.script_pubkey.as_bytes(), SHARED_COLLATERAL_SCRIPT);
+      assert_eq!(tx.check(), None);
+    }
+  }
+
+  #[rstest]
+  #[case::other_script(|tx: &mut Transaction, item: &mut ProRegTx| {
+    tx.outputs[item.collateral_index as usize].script_pubkey = ScriptPubKeyBuf::from_bytes(vec![0x51]);
+  })]
+  #[case::extended_script(|tx: &mut Transaction, item: &mut ProRegTx| {
+    let mut script = SHARED_COLLATERAL_SCRIPT.to_vec();
+    script.push(0x00);
+    tx.outputs[item.collateral_index as usize].script_pubkey = ScriptPubKeyBuf::from_bytes(script);
+  })]
+  #[case::no_such_output(|tx: &mut Transaction, item: &mut ProRegTx| {
+    item.collateral_index = tx.outputs.len() as u32;
+  })]
+  fn shared_collateral_must_pay_the_template_script(#[case] edit: fn(&mut Transaction, &mut ProRegTx)) {
+    for (mut tx, mut item) in shared_transactions() {
+      edit(&mut tx, &mut item);
+      tx.extra_payload.clear();
+      item.encode(&mut tx.extra_payload);
+      let error = TxInvalid::PayloadCheck(PayloadInvalid::ProTx(ProTxInvalid::SharesCollateralScript));
+      assert_eq!(tx.check(), Some(error));
+    }
+    assert_eq!(
+      ProTxInvalid::SharesCollateralScript.to_string(),
+      "bad-protx-shares-collateral-script"
+    );
   }
 }
