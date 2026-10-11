@@ -33,7 +33,7 @@ pub use gov::GovSync;
 pub use headers::{GetHeaders, Headers, NonContinuousHeaders};
 pub use headers2::{CompressionState, GetHeaders2, Headers2};
 pub use inv::{GetData, Inv, InvType, Inventory, NotFound};
-pub use llmq::{GetQrInfo, QSendRecSigs, QuorumSnapshot, SnapshotSkipMode};
+pub use llmq::{GetQrInfo, QSendRecSigs, QrInfo, QuorumCycle, QuorumSnapshot, SnapshotSkipMode};
 pub use mn_list::{
   sml_merkle_root, DeletedQuorum, GetMnListDiff, MnListDiff, MnListDiffInvalid, MnListDiffPayload,
   NetInfoVersionMismatch, QuorumClSig, SimplifiedMnListEntry, SmlEntryInvalid,
@@ -113,6 +113,8 @@ define_p2p! {
     Headers2(Headers2) => HEADERS2 "headers2" @ 165,
     /// Request quorum rotation info.
     GetQrInfo(GetQrInfo) => GETQRINFO "getqrinfo" @ 166,
+    /// Quorum rotation info, boxed because it holds at least nine diffs.
+    QrInfo(Box<QrInfo>) => QRINFO "qrinfo" @ 167,
   }
 
   parsed_empty {
@@ -217,8 +219,6 @@ define_p2p! {
     QData => QDATA "qdata" @ 159,
     /// Masternode authentication.
     MnAuth => MNAUTH "mnauth" @ 162,
-    /// Quorum rotation info.
-    QrInfo => QRINFO "qrinfo" @ 167,
     /// DIP-0031: platform ban.
     PlatformBan => PLATFORMBAN "platformban" @ 168,
   }

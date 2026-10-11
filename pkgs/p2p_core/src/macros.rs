@@ -34,6 +34,16 @@ pub(crate) trait VersionedPayload: Sized {
   fn encode_versioned(&self, buf: &mut Vec<u8>, version: ProtocolVersion);
 }
 
+impl<T: VersionedPayload> VersionedPayload for Box<T> {
+  fn decode_versioned(payload: &[u8], version: ProtocolVersion) -> Result<Self, P2pDecodeError> {
+    T::decode_versioned(payload, version).map(Box::new)
+  }
+
+  fn encode_versioned(&self, buf: &mut Vec<u8>, version: ProtocolVersion) {
+    (**self).encode_versioned(buf, version);
+  }
+}
+
 /// Implements [`VersionedPayload`] for payloads with one layout at every
 /// version.
 macro_rules! unversioned_payload {
