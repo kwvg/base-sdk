@@ -699,6 +699,8 @@ mod tests {
     assert_inputs_hash::<crate::ProUpServTx>("proupservtx", |payload| payload.inputs_hash);
     assert_inputs_hash::<crate::ProUpRegTx>("proupregtx", |payload| payload.inputs_hash);
     assert_inputs_hash::<crate::ProUpRevTx>("prouprevtx", |payload| payload.inputs_hash);
+    assert_inputs_hash::<crate::ProUpShareTx>("proupsharetx", |payload| payload.inputs_hash);
+    assert_inputs_hash::<crate::ProUpSharedRegTx>("proupsharedregtx", |payload| payload.inputs_hash);
   }
 
   fn corpus_first<T: ::serde::de::DeserializeOwned>(section: &str) -> Transaction {
@@ -713,6 +715,8 @@ mod tests {
   #[case::proupservtx(corpus_first::<crate::ProUpServTx>("proupservtx"))]
   #[case::proupregtx(corpus_first::<crate::ProUpRegTx>("proupregtx"))]
   #[case::prouprevtx(corpus_first::<crate::ProUpRevTx>("prouprevtx"))]
+  #[case::proupsharetx(corpus_first::<crate::ProUpShareTx>("proupsharetx"))]
+  #[case::proupsharedregtx(corpus_first::<crate::ProUpSharedRegTx>("proupsharedregtx"))]
   fn protx_inputs_hash_must_match_the_inputs(#[case] mut tx: Transaction) {
     assert_eq!(tx.check(), None);
     tx.inputs[0].prevout.index ^= 1;

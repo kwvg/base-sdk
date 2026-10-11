@@ -112,6 +112,12 @@ enum_map! {
     AssetLock = 8 => "asset_lock",
     /// Asset unlock: platform to L1 (type 9).
     AssetUnlock = 9 => "asset_unlock",
+    /// Shared masternode dissolution (type 10).
+    ProviderDissolve = 10 => "provider_dissolve",
+    /// Collateral share reward update (type 11).
+    ProviderUpdateShare = 11 => "provider_update_share",
+    /// Shared masternode registrar key update (type 12).
+    ProviderUpdateSharedRegistrar = 12 => "provider_update_shared_registrar",
   }
 }
 
@@ -493,6 +499,12 @@ pub enum SpecialPayload {
   AssetLock(AssetLock),
   /// Asset unlock: Platform to L1 (type 9).
   AssetUnlock(AssetUnlock),
+  /// Shared masternode dissolution (type 10).
+  ProviderDissolve(ProDisTx),
+  /// Collateral share reward update (type 11).
+  ProviderUpdateShare(ProUpShareTx),
+  /// Shared masternode registrar key update (type 12).
+  ProviderUpdateSharedRegistrar(ProUpSharedRegTx),
   /// Unrecognized type, stored as raw bytes.
   Unknown {
     /// The transaction type code.
@@ -564,6 +576,9 @@ impl Checkable for SpecialPayload {
       Self::MnhfSignal(p) => p.check().map(PayloadInvalid::MnHardFork),
       Self::AssetLock(p) => p.check().map(PayloadInvalid::AssetLock),
       Self::AssetUnlock(p) => p.check().map(PayloadInvalid::AssetUnlock),
+      Self::ProviderDissolve(p) => p.check().map(PayloadInvalid::ProTx),
+      Self::ProviderUpdateShare(p) => p.check().map(PayloadInvalid::ProTx),
+      Self::ProviderUpdateSharedRegistrar(p) => p.check().map(PayloadInvalid::ProTx),
       Self::Unknown { .. } => None,
     }
   }
@@ -582,6 +597,8 @@ impl SpecialPayload {
       Self::ProviderUpdateService(ProTxPayload::Known(payload)) => Some(payload.inputs_hash),
       Self::ProviderUpdateRegistrar(ProTxPayload::Known(payload)) => Some(payload.inputs_hash),
       Self::ProviderUpdateRevoke(ProTxPayload::Known(payload)) => Some(payload.inputs_hash),
+      Self::ProviderUpdateShare(payload) => Some(payload.inputs_hash),
+      Self::ProviderUpdateSharedRegistrar(payload) => Some(payload.inputs_hash),
       _ => None,
     }
   }
@@ -618,6 +635,11 @@ impl SpecialPayload {
       TxType::AssetLock => assetlock::AssetLock::decode(data).map(Self::AssetLock).map_err(err),
       TxType::AssetUnlock => assetunlock::AssetUnlock::decode(data)
         .map(Self::AssetUnlock)
+        .map_err(err),
+      TxType::ProviderDissolve => ProDisTx::decode(data).map(Self::ProviderDissolve).map_err(err),
+      TxType::ProviderUpdateShare => ProUpShareTx::decode(data).map(Self::ProviderUpdateShare).map_err(err),
+      TxType::ProviderUpdateSharedRegistrar => ProUpSharedRegTx::decode(data)
+        .map(Self::ProviderUpdateSharedRegistrar)
         .map_err(err),
       unknown => {
         let bytes = data.to_vec();
@@ -740,5 +762,63 @@ mod tests {
 
     let tx = special(TxType::ProviderUpdateRevoke, vec![0x00, 0x00, 0x00]);
     assert!(matches!(tx.check(), Some(TxInvalid::PayloadDecode(_))));
+  }
+
+  #[cfg(feature = "serde")]
+  fn corpus_transactions<T: ::serde::de::DeserializeOwned>(section: &str) -> Vec<Transaction> {
+    let corpus = dash_dev::Corpus::open(env!("CARGO_MANIFEST_DIR"), section);
+    let mut txs = Vec::new();
+    corpus.entries::<T>(section, |raw, _, _| {
+      txs.push(Transaction::decode(&mut &raw[..]).unwrap())
+    });
+    txs
+  }
+
+  #[cfg(feature = "serde")]
+  #[rstest]
+  #[case::dissolve(corpus_transactions::<crate::ProDisTx>("prodistx"), TxType::ProviderDissolve)]
+  #[case::update_share(corpus_transactions::<crate::ProUpShareTx>("proupsharetx"), TxType::ProviderUpdateShare)]
+  #[case::update_shared_registrar(
+    corpus_transactions::<crate::ProUpSharedRegTx>("proupsharedregtx"),
+    TxType::ProviderUpdateSharedRegistrar
+  )]
+  fn types_10_to_12_decode_and_pass_checks(#[case] txs: Vec<Transaction>, #[case] tx_type: TxType) {
+    for tx in txs {
+      assert_eq!(tx.tx_type, tx_type);
+      let payload = tx.decode_payload().unwrap().unwrap();
+      let matches_type = match tx_type {
+        TxType::ProviderDissolve => matches!(payload, SpecialPayload::ProviderDissolve(_)),
+        TxType::ProviderUpdateShare => matches!(payload, SpecialPayload::ProviderUpdateShare(_)),
+        _ => matches!(payload, SpecialPayload::ProviderUpdateSharedRegistrar(_)),
+      };
+      assert!(matches_type, "{tx_type}");
+      assert_eq!(tx.check(), None, "{tx_type}");
+    }
+  }
+
+  #[rstest]
+  #[case::dissolve(10, "provider_dissolve")]
+  #[case::update_share(11, "provider_update_share")]
+  #[case::update_shared_registrar(12, "provider_update_shared_registrar")]
+  fn types_10_to_12_are_known(#[case] code: u16, #[case] name: &str) {
+    let tx_type = TxType::from_base(code);
+    assert!(!matches!(tx_type, TxType::Unknown(_)));
+    assert_eq!(tx_type.to_string(), name);
+  }
+
+  /// A payload of types 10 to 12 runs its own check rather than failing as
+  /// an unknown type.
+  #[rstest]
+  fn type_10_payload_reports_its_own_check() {
+    let mut payload = 0u16.to_le_bytes().to_vec();
+    payload.extend([0; 34]);
+    payload.push(0);
+    let tx = special(TxType::ProviderDissolve, payload);
+    assert_eq!(
+      tx.check(),
+      Some(TxInvalid::PayloadCheck(PayloadInvalid::ProTx(
+        ProTxInvalid::BadDissolveVersion { version: 0 }
+      )))
+    );
   }
 }
