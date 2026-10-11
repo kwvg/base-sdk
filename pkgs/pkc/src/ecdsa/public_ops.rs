@@ -10,18 +10,18 @@ use super::error::EcdsaError;
 use super::public_bytes::{EcdsaPkBytes, Sec1Byte, ECDSA_PK_LEN};
 use super::secret_bytes::ECDSA_SK_LEN;
 use super::secret_ops::tweak_scalar;
+use super::sig_bytes::ECDSA_SIG_LEN;
 use super::sig_ops::EcdsaSignature;
+use super::sig_rec_bytes::EcdsaRecSigBytes;
 use super::sig_rec_ops::EcdsaRecSignature;
-use super::Compression;
-#[cfg(feature = "codec")]
-use super::EcdsaPkHash;
+use super::{Compression, EcdsaPkHash};
 use crate::prelude::*;
 
 #[cfg(feature = "codec")]
 use dash_types::dlgt_codec;
-use dash_types::type_cvrt;
 #[cfg(feature = "codec")]
 use dash_types::type_id::{TypeId, Unencodable};
+use dash_types::{type_cvrt, Hashable};
 use secp256k1::ecdsa::RecoverableSignature;
 use secp256k1::{Message, PublicKey, Scalar};
 
@@ -265,6 +265,31 @@ impl EcdsaPublicKey {
   }
 }
 
+impl EcdsaPkHash {
+  /// Verifies a compact signature over `msg_hash` by the key with this id.
+  /// Only a header byte from 27 to 34 and a low S pass, so a third party
+  /// cannot rewrite a valid signature into another valid one.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`EcdsaError::InvalidSignature`] for another header byte, a
+  /// high S or a scalar outside the curve order, [`EcdsaError::RecoveryFailed`]
+  /// when no key recovers and [`EcdsaError::VerifyFailed`] when the recovered
+  /// key has another id.
+  pub fn verify_hash_canonical(&self, msg_hash: &[u8; 32], sig: &[u8; ECDSA_SIG_LEN + 1]) -> Result<(), EcdsaError> {
+    let bytes = EcdsaRecSigBytes::from_raw(*sig).ok_or(EcdsaError::InvalidSignature)?;
+    let sig = EcdsaRecSignature::try_from(bytes)?;
+    if !sig.signature().is_low_s() {
+      return Err(EcdsaError::InvalidSignature);
+    }
+    let key = EcdsaPublicKey::recover(msg_hash, &sig)?;
+    if Hashable::hash(&EcdsaPkBytes::from(&key)) != *self {
+      return Err(EcdsaError::VerifyFailed);
+    }
+    Ok(())
+  }
+}
+
 impl Hash for EcdsaPublicKey {
   fn hash<H: Hasher>(&self, state: &mut H) {
     EcdsaPkBytes::from(self).as_bytes().hash(state);
@@ -297,8 +322,8 @@ type_cvrt!(From<PublicKey> for EcdsaPublicKey, |inner| {
 mod tests {
   use crate::ecdsa::tests::*;
   use crate::ecdsa::{
-    Compression, EcdsaPkBytes, EcdsaPublicKey, EcdsaRecSigBytes, EcdsaRecSignature, EcdsaSecretKey, EcdsaSigBytes,
-    EcdsaSignature,
+    Compression, EcdsaError, EcdsaPkBytes, EcdsaPkHash, EcdsaPublicKey, EcdsaRecSigBytes, EcdsaRecSignature,
+    EcdsaSecretKey, EcdsaSigBytes, EcdsaSignature,
   };
   use crate::prelude::*;
 
@@ -504,5 +529,65 @@ mod tests {
     let mut bad = MSG;
     bad[0] ^= 0xff;
     assert!(alice_pk.verify(&bad, alice_sig).is_err());
+  }
+
+  fn canonical_sig(sk: &EcdsaSecretKey) -> [u8; 65] {
+    EcdsaRecSigBytes::from(&sk.sign_recoverable(&MSG)).to_bytes()
+  }
+
+  fn key_id(sk: &EcdsaSecretKey) -> EcdsaPkHash {
+    EcdsaPkBytes::from(&sk.public_key()).hash()
+  }
+
+  #[rstest]
+  #[case::compressed(Compression::Compressed)]
+  #[case::uncompressed(Compression::Uncompressed)]
+  fn canonical_signature_verifies(#[case] compressed: Compression) {
+    let sk = EcdsaSecretKey::from_bytes(&ALICE_SK, compressed).unwrap();
+    assert_eq!(key_id(&sk).verify_hash_canonical(&MSG, &canonical_sig(&sk)), Ok(()));
+  }
+
+  #[rstest]
+  fn other_key_or_message_fails(alice_sk: EcdsaSecretKey, bob_sk: EcdsaSecretKey) {
+    let sig = canonical_sig(&alice_sk);
+    assert_eq!(
+      key_id(&bob_sk).verify_hash_canonical(&MSG, &sig),
+      Err(EcdsaError::VerifyFailed)
+    );
+    let mut msg = MSG;
+    msg[0] ^= 1;
+    assert_eq!(
+      key_id(&alice_sk).verify_hash_canonical(&msg, &sig),
+      Err(EcdsaError::VerifyFailed)
+    );
+  }
+
+  /// A header outside 27 to 34 aliases a canonical one in its low bits.
+  #[rstest]
+  #[case::below(26)]
+  #[case::alias(35)]
+  #[case::high_bit(0x9f)]
+  fn non_canonical_header_fails(alice_sk: EcdsaSecretKey, #[case] header: u8) {
+    let mut sig = canonical_sig(&alice_sk);
+    sig[0] = header;
+    assert_eq!(
+      key_id(&alice_sk).verify_hash_canonical(&MSG, &sig),
+      Err(EcdsaError::InvalidSignature)
+    );
+  }
+
+  /// The high-S twin recovers the same key, yet fails.
+  #[rstest]
+  fn high_s_fails(alice_sk: EcdsaSecretKey, alice_pk: EcdsaPublicKey) {
+    let sig = canonical_sig(&alice_sk);
+    let mut high = sig;
+    high[0] = 27 + ((sig[0] - 27) ^ 1);
+    high[33..].copy_from_slice(&negate_scalar(&sig[33..]));
+    let rec = EcdsaRecSignature::try_from(EcdsaRecSigBytes::from_raw(high).unwrap()).unwrap();
+    assert_eq!(EcdsaPublicKey::recover(&MSG, &rec).unwrap(), alice_pk);
+    assert_eq!(
+      key_id(&alice_sk).verify_hash_canonical(&MSG, &high),
+      Err(EcdsaError::InvalidSignature)
+    );
   }
 }
