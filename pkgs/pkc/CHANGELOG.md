@@ -26,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `Bls{Pk,Sig}Share`, `BlsIes{Blob,Multi}`, `EcdsaPkBytes`, `EcdsaSigBytes`, `EcdsaRecSigBytes`, `EcdsaPkHash`,
   `EcdsaPublicKey`, `EcdsaSignature`, `EcdsaRecSignature`, `EddsaPkBytes`, `EddsaSigBytes`, `EddsaPkHash`,
   `EddsaPublicKey`, `EddsaSignature`.
+- The `serde` feature no longer implies `codec`. `BlsIes{Blob,Multi}` and `BlsIes{Blob,Multi}Bytes` serialize as
+  their wire image and implement `Serialize` and `Deserialize` only with both features. Callers that relied on `serde`
+  to enable `codec` must enable it explicitly.
 
 ## [0.1.0-beta] - 2026-09-15
 
