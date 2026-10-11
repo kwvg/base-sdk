@@ -33,7 +33,7 @@ pub use gov::GovSync;
 pub use headers::{GetHeaders, Headers, NonContinuousHeaders};
 pub use headers2::{CompressionState, GetHeaders2, Headers2};
 pub use inv::{GetData, Inv, InvType, Inventory, NotFound};
-pub use llmq::{GetQrInfo, QSendRecSigs};
+pub use llmq::{GetQrInfo, QSendRecSigs, QuorumSnapshot, SnapshotSkipMode};
 pub use mn_list::{
   sml_merkle_root, DeletedQuorum, GetMnListDiff, MnListDiff, MnListDiffInvalid, MnListDiffPayload,
   NetInfoVersionMismatch, QuorumClSig, SimplifiedMnListEntry, SmlEntryInvalid,

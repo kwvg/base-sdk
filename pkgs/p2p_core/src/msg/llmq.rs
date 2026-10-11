@@ -9,9 +9,10 @@
 use crate::codec::{codec_p2p, impl_p2p};
 use crate::prelude::*;
 
-use dash_primitives::{hash_impl, BlockHash};
+use dash_primitives::{hash_impl, BlockHash, DynBitset};
 use dash_types::codec::{self, BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
+use dash_types::{enum_map, impl_num};
 
 /// Largest number of base block hashes in a `getqrinfo` message.
 const MAX_BASE_BLOCK_HASHES: usize = 4096;
@@ -59,13 +60,52 @@ impl BaseCodec for GetQrInfo {
 
 hash_impl!(GetQrInfo);
 
+enum_map! {
+  /// How a quorum snapshot's skip list selects masternodes.
+  #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TypeId)]
+  pub enum SnapshotSkipMode, i32, Unknown {
+    /// No masternode is skipped.
+    NoSkipping = 0 => "no_skipping",
+    /// The skip list holds the skipped masternodes.
+    SkippingEntries = 1 => "skipping_entries",
+    /// The skip list holds the masternodes that are not skipped.
+    NoSkippingEntries = 2 => "no_skipping_entries",
+    /// Every masternode is skipped.
+    AllSkipped = 3 => "all_skipped",
+  }
+}
+
+impl_num!(SnapshotSkipMode, i32);
+
+hash_impl!(SnapshotSkipMode);
+
+/// Quorum membership at one rotation cycle.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub struct QuorumSnapshot {
+  /// How `skip_list` is read.
+  pub skip_list_mode: SnapshotSkipMode,
+  /// One bit per masternode, set when the masternode is in the quorum.
+  pub active_quorum_members: DynBitset,
+  /// Masternodes that `skip_list_mode` selects. The first entry is an index
+  /// into the sorted masternode list, and each later entry an offset from it.
+  pub skip_list: Vec<i32>,
+}
+
+codec_p2p!(QuorumSnapshot {
+  skip_list_mode,
+  active_quorum_members,
+  skip_list
+});
+
 #[cfg(test)]
 mod tests {
-  use super::{GetQrInfo, QSendRecSigs, MAX_BASE_BLOCK_HASHES};
+  use super::{GetQrInfo, QSendRecSigs, QuorumSnapshot, SnapshotSkipMode, MAX_BASE_BLOCK_HASHES};
   use crate::prelude::*;
   use crate::{CommandString, P2pDecodeError, P2pMsg};
 
-  use dash_primitives::BlockHash;
+  use dash_primitives::{BlockHash, DynBitset};
+  use dash_types::codec::BaseCodec;
   use dash_types::Numeric;
   use rstest::rstest;
 
@@ -144,5 +184,36 @@ mod tests {
       P2pMsg::decode_payload(&CommandString::GETQRINFO, &payload),
       Err(P2pDecodeError::Consensus(_))
     ));
+  }
+
+  #[rstest]
+  fn quorum_snapshot_wire_is_mode_members_and_skip_list() {
+    let item = QuorumSnapshot {
+      skip_list_mode: SnapshotSkipMode::SkippingEntries,
+      active_quorum_members: DynBitset {
+        num_bits: 10,
+        data: vec![0x55, 0x01],
+      },
+      skip_list: vec![10, -1],
+    };
+    let wire = [
+      0x01, 0x00, 0x00, 0x00, 0x0a, 0x55, 0x01, 0x02, 0x0a, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+    ];
+    let mut buf = Vec::new();
+    item.encode(&mut buf);
+    assert_eq!(buf, wire);
+    assert_eq!(QuorumSnapshot::decode(&mut wire.as_slice()), Ok(item));
+  }
+
+  #[rstest]
+  #[case::no_skipping(0, SnapshotSkipMode::NoSkipping)]
+  #[case::skipping_entries(1, SnapshotSkipMode::SkippingEntries)]
+  #[case::no_skipping_entries(2, SnapshotSkipMode::NoSkippingEntries)]
+  #[case::all_skipped(3, SnapshotSkipMode::AllSkipped)]
+  #[case::unknown(4, SnapshotSkipMode::Unknown(4))]
+  #[case::negative(-1, SnapshotSkipMode::Unknown(-1))]
+  fn skip_modes_follow_the_reference_codes(#[case] code: i32, #[case] mode: SnapshotSkipMode) {
+    assert_eq!(SnapshotSkipMode::from_base(code), mode);
+    assert_eq!(mode.to_base(), code);
   }
 }
