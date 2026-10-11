@@ -240,6 +240,12 @@ pub enum ProTxInvalid {
   BadDissolveSigCount { count: usize },
   /// `bad-proupsharedreg-sig-count`
   BadSharedRegSigCount { count: usize },
+  /// `bad-proupshare-version`
+  BadShareUpdateVersion { version: u16 },
+  /// `bad-proupshare-sig-size`
+  BadShareUpdateSigSize { size: usize },
+  /// `bad-proupshare-payee`
+  BadShareUpdatePayee,
 }
 
 impl fmt::Display for ProTxInvalid {
@@ -302,6 +308,9 @@ impl fmt::Display for ProTxInvalid {
       Self::BadDissolveVersion { version } => write!(f, "bad-prodis-version: {version}"),
       Self::BadDissolveSigCount { count } => write!(f, "bad-prodis-sig-count: {count}"),
       Self::BadSharedRegSigCount { count } => write!(f, "bad-proupsharedreg-sig-count: {count}"),
+      Self::BadShareUpdateVersion { version } => write!(f, "bad-proupshare-version: {version}"),
+      Self::BadShareUpdateSigSize { size } => write!(f, "bad-proupshare-sig-size: {size}"),
+      Self::BadShareUpdatePayee => write!(f, "bad-proupshare-payee"),
     }
   }
 }

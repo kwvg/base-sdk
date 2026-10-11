@@ -17,7 +17,7 @@ use dash_types::type_id::TypeId;
 use dash_types::{derive_bytes, impl_bytes};
 
 /// Length of a compact recoverable ECDSA signature.
-const COMPACT_SIGNATURE_LEN: usize = 65;
+pub(crate) const COMPACT_SIGNATURE_LEN: usize = 65;
 
 /// Compact recoverable ECDSA signature, carried as 65 raw bytes without a
 /// length prefix.
