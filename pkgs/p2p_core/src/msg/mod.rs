@@ -23,7 +23,7 @@ use crate::command::CommandString;
 use crate::prelude::*;
 use crate::short_id::ShortId;
 
-use dash_primitives::{GovObject, GovVote};
+use dash_primitives::{ChainLockSig, GovObject, GovVote};
 use dash_types::type_id::Unencodable;
 
 pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
@@ -45,6 +45,7 @@ pub use version::{ServiceFlags, UserAgent, UserAgentTooLong, Version, VersionAdd
 unversioned_payload!(
   Addr,
   AddrV2Msg,
+  ChainLockSig,
   GetData,
   GetHeaders,
   GetHeaders2,
@@ -100,6 +101,8 @@ define_p2p! {
     MnListDiff(MnListDiff) => MNLISTDIFF "mnlistdiff" @ 144,
     /// LLMQ: send recovered signatures.
     QSendRecSigs(QSendRecSigs) => QSENDRECSIGS "qsendrecsigs" @ 145,
+    /// ChainLock signature.
+    ClSig(ChainLockSig) => CLSIG "clsig" @ 160,
     /// Request compressed block headers.
     GetHeaders2(GetHeaders2) => GETHEADERS2 "getheaders2" @ 163,
     /// Compressed block headers.
@@ -206,8 +209,6 @@ define_p2p! {
     QGetData => QGETDATA "qgetdata" @ 158,
     /// LLMQ: quorum data.
     QData => QDATA "qdata" @ 159,
-    /// ChainLock signature.
-    ClSig => CLSIG "clsig" @ 160,
     /// InstantSend deterministic lock.
     IsdLock => ISDLOCK "isdlock" @ 161,
     /// Masternode authentication.
@@ -226,9 +227,46 @@ define_p2p! {
 #[cfg(test)]
 mod tests {
   use super::{CommandString, P2pMsg};
+  use crate::prelude::*;
   use crate::P2pDecodeError;
 
+  use dash_pkc::bls::BlsSigBytes;
+  use dash_primitives::{BlockHash, ChainLockSig};
+  use dash_types::Numeric;
   use rstest::rstest;
+
+  fn clsig_payload() -> Vec<u8> {
+    let mut payload = vec![0x64, 0x00, 0x00, 0x00];
+    payload.extend([0x11; 32]);
+    payload.extend([0xab; 96]);
+    payload
+  }
+
+  #[rstest]
+  fn clsig_is_a_chainlock_sig() {
+    let item = ChainLockSig {
+      height: 100,
+      block_hash: BlockHash::from_lendian([0x11; 32]),
+      sig: BlsSigBytes::from_bytes([0xab; 96]),
+    };
+    let msg = P2pMsg::decode_payload(&CommandString::CLSIG, &clsig_payload());
+    assert_eq!(msg, Ok(P2pMsg::ClSig(item.clone())));
+    let mut buf = Vec::new();
+    P2pMsg::ClSig(item).encode_payload(&mut buf);
+    assert_eq!(buf, clsig_payload());
+  }
+
+  #[rstest]
+  #[case::truncated(-1)]
+  #[case::trailing(1)]
+  fn clsig_rejects_a_payload_of_another_length(#[case] delta: isize) {
+    let mut payload = clsig_payload();
+    payload.resize(payload.len().saturating_add_signed(delta), 0);
+    assert!(matches!(
+      P2pMsg::decode_payload(&CommandString::CLSIG, &payload),
+      Err(P2pDecodeError::Consensus(_))
+    ));
+  }
 
   #[rstest]
   #[case::filterclear(CommandString::FILTERCLEAR, P2pMsg::FilterClear)]
