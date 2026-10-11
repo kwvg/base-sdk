@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `ProtocolVersion::ADDRV2`, `NO_LEGACY_ISLOCK`, `DSQ_INV`, `INCREASE_MAX_HEADERS2`, `EFFICIENT_QRINFO`,
   `ISDLOCK_CYCLEHASH_UPDATE`, `PLATFORM_BAN`, `QFCOMMIT_STALE_REPROP_BAN`, `PLATFORMBAN_V2_SHORT_ID`,
-  `ASSET_UNLOCK_INV` and `MIN_MASTERNODE`.
+  `COINJOIN_REBALANCE`, `ASSET_UNLOCK_INV` and `MIN_MASTERNODE`.
 - `encode_v2_with_version`, `decode_v2_with_version`, `P2pMsg::encode_payload_with_version` and
   `P2pMsg::decode_payload_with_version`, which take the protocol version negotiated with the peer. The forms without a
   version use `ProtocolVersion::CURRENT`.
@@ -31,12 +31,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   enforce these limits, so callers split or trim larger messages before sending them.
 - `BloomFilterInvalid`, with `Checkable` implementations for `BloomFilter` and `GovSync` that reject filter data above
   36000 bytes or more than 50 hash functions.
+- `GetQrInfo`, `QrInfo`, `QuorumCycle`, `QuorumSnapshot` and `SnapshotSkipMode`, the quorum rotation request and
+  response. `getqrinfo` decoding rejects more than 4096 base block hashes, and `qrinfo` lays out its masternode list
+  diffs at the peer version. Encoding does not enforce the limit.
+- `CoinJoinAccept` and `CoinJoinBroadcastTx`, the `dsa` and `dstx` payloads. The `dsa` flags byte is on the wire from
+  protocol 70241.
 
 ### Changed
 
 - `P2pMsg::SendDsq`, `P2pMsg::QSendRecSigs` and `P2pMsg::Ssc` carry the new `SendDsq`, `QSendRecSigs` and
   `SyncStatusCount` payloads, and `SyncItemId` names the `ssc` item. Callers match the payload instead of a unit
   variant or raw bytes.
+- `P2pMsg::ClSig`, `P2pMsg::IsdLock`, `P2pMsg::GetQrInfo`, `P2pMsg::QrInfo`, `P2pMsg::Dsa` and `P2pMsg::Dstx` carry
+  `ChainLockSig`, `InstantSendLock`, `GetQrInfo`, a boxed `QrInfo`, `CoinJoinAccept` and `CoinJoinBroadcastTx` instead
+  of raw bytes, and `P2pMsg::is_stub` returns `false` for them.
 - `GovSync::bloom_filter` is a `BloomFilter` instead of the filter bytes alone.
 - `P2pMsg::is_stub` returns `false` for `FilterClear`, `Mempool`, `GetSporks` and `QWatch`.
 - `SimplifiedMnListEntry` keeps `version`, `net_info` and `operator_key` private. `net_info` replaces `service` and is
@@ -48,12 +56,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `total_transactions`, `merkle_hashes` and `merkle_flags`. The JSON keys move under `cbTxMerkleTree`.
 - `CompressionState` keeps `version_cache` and `prev_header` private, and deserializing it rejects more than seven
   cached versions. Callers read both with the accessors.
-- `InvType` gains variants for inventory types 6, 16, 21, 23 to 26, 28, 29 and 31 to 33, which decode as the named
+- `InvType` gains variants for inventory types 6, 16, 21, 23 to 26, 28, 29 and 31 to 34, which decode as the named
   variants instead of `InvType::Unknown`. Callers that match `InvType` exhaustively must handle the new variants.
-- `notfound` decoding rejects more than 116 entries below protocol 70242 and more than 50000 from it. The forms without
-  a version use `ProtocolVersion::CURRENT`, which is below 70242, so callers that accept up to 50000 entries must pass
-  a peer version of 70242 or above. Encoding does not enforce the limit, so callers sending to a peer below 70242 split
-  larger messages.
+- `notfound` decoding rejects more than 116 entries below protocol 70242 and more than 50000 from it. Encoding does not
+  enforce the limit, so callers sending to a peer below 70242 split larger messages.
+- `ProtocolVersion::CURRENT` is 70242, so the forms without a version decode `notfound` up to 50000 entries and `dsa`
+  with its flags byte.
 
 ### Fixed
 
