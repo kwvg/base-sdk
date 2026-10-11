@@ -24,11 +24,12 @@ use bitcoin_primitives::script::ScriptPubKeyBuf;
 use bitcoin_units::Amount;
 use dash_num::Hash256;
 use dash_pkc::bls::BLS_PK_LEN;
-use dash_script::{is_shared_collateral_script, PubKeyHash, Recipient};
+use dash_script::{is_shared_collateral_script, AddrParams, PubKeyHash, Recipient};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 use dash_types::Hashable;
 use dash_types::{Checkable, CompactSize, Numeric};
+use hex_conservative::DisplayHex;
 
 use core::fmt;
 
@@ -596,6 +597,34 @@ impl ProRegTx {
     })
   }
 
+  /// Message the collateral key signs for an external collateral, under the
+  /// address prefixes of `params`. From version 3 it lists every owner
+  /// payout with its reward.
+  pub fn sign_string(&self, params: &AddrParams) -> String {
+    let address = |script: &ScriptPubKeyBuf| {
+      Recipient::from_script(script.as_bytes())
+        .and_then(|recipient| recipient.to_base58c(params))
+        .unwrap_or_else(|| script.as_bytes().to_lower_hex_string())
+    };
+    let payout = if self.version >= PROTX_VERSION_EXT_ADDR {
+      let entries: Vec<String> = self
+        .payouts
+        .iter()
+        .map(|payout| format!("{}:{}", address(&payout.script_payout), payout.reward))
+        .collect();
+      entries.join(",")
+    } else {
+      address(&self.script_payout)
+    };
+    format!(
+      "{payout}|{}|{}|{}|{}",
+      self.operator_reward,
+      self.key_id_owner.to_base58c(params.pubkey_addr),
+      self.key_id_voting.to_base58c(params.pubkey_addr),
+      self.hash()
+    )
+  }
+
   fn check_owner_payouts(&self) -> Option<ProTxInvalid> {
     if self.is_shared() {
       let Some(required) = self.mn_type.collateral_amount() else {
@@ -721,7 +750,7 @@ mod tests {
   use crate::{PayloadInvalid, Transaction, TxInvalid};
 
   use dash_dev::{assert_serde_rt, check_sptx, from_json, json_rejects, to_json, Corpus};
-  use dash_script::SHARED_COLLATERAL_SCRIPT;
+  use dash_script::{AddrParams, SHARED_COLLATERAL_SCRIPT};
   use hex_conservative::hex;
   use rstest::rstest;
 
@@ -1309,5 +1338,57 @@ mod tests {
       item.inputs_hash = InputsHash::default();
       assert_eq!(item.consent_hash(&tx), hash);
     }
+  }
+
+  /// Address prefixes of mainnet, and of testnet, which regtest shares.
+  const MAINNET: AddrParams = AddrParams {
+    pubkey_addr: 76,
+    script_addr: 16,
+    secret_key: 204,
+    ext_pubkey: [0x04, 0x88, 0xb2, 0x1e],
+    ext_secret: [0x04, 0x88, 0xad, 0xe4],
+    bip44_idx: 5,
+    platform_hrp: "dash",
+  };
+  const TESTNET: AddrParams = AddrParams {
+    pubkey_addr: 140,
+    script_addr: 19,
+    secret_key: 239,
+    ext_pubkey: [0x04, 0x35, 0x87, 0xcf],
+    ext_secret: [0x04, 0x35, 0x83, 0x94],
+    bip44_idx: 1,
+    platform_hrp: "tdash",
+  };
+
+  // A Python script gives each expected string, from the corpus payload
+  // fields and the SHA256d of the payload without its signature.
+  #[rstest]
+  #[case::v2_payout_script(
+    "a9e25c9aa56874c5703fc78ce8541364560d5b21eb12812cf452a27776b1f840",
+    &MAINNET,
+    "XjbaGWaGnvEtuQAUoBgDxJWe8ZNv45upG2|0|XgtGsSKzBvYNoT5UrzyBRxbYoiJ9B6rbDf|XvqUMzeCEhnj9RLYcZSxcQBdTigHj9i1hN|\
+     c1527da893c82e0ca6adb83eb8eb45e120d752c2fae594527d5732cd04b50250"
+  )]
+  #[case::v3_payout_list(
+    "ed3eaebc84033d16abe221b0e27a0ba232a89aaeb1331aca6771a72b4ba6db28",
+    &TESTNET,
+    "yYKjtrDMzAd7E55XofmCvmqpDPAATPQ7tW:7000,yT1Pgoe3uQxYzFtjKBENn6rMp53fccQVk9:3000|2500|\
+     yaqN4VVy5XRaSBjDRf6AZW8JTGK2mx274F|ygTMxvJxe4iVW9T88rQ21Xo13DWEtGbyS9|\
+     735b98520015f219f0766b8e2a289b8e36af683794080b56fd288b6487dde632"
+  )]
+  fn sign_string_follows_the_version(#[case] txid: &str, #[case] params: &AddrParams, #[case] expected: &str) {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    let items = corpus.entries::<ProRegTx>("proregtx", |_, _, _| {});
+    assert_eq!(
+      items.get(txid).map(|item| item.sign_string(params)).as_deref(),
+      Some(expected)
+    );
+  }
+
+  #[rstest]
+  fn sign_string_writes_an_unknown_payout_script_as_hex() {
+    let mut item = corpus_item(2, MnType::Regular);
+    item.script_payout = ScriptPubKeyBuf::from_bytes(vec![0x51, 0x52]);
+    assert!(item.sign_string(&MAINNET).starts_with("5152|"));
   }
 }
