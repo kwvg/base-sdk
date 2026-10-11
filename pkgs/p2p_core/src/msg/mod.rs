@@ -23,7 +23,7 @@ use crate::command::CommandString;
 use crate::prelude::*;
 use crate::short_id::ShortId;
 
-use dash_primitives::{ChainLockSig, GovObject, GovVote};
+use dash_primitives::{ChainLockSig, GovObject, GovVote, InstantSendLock};
 use dash_types::type_id::Unencodable;
 
 pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
@@ -54,6 +54,7 @@ unversioned_payload!(
   GovSync,
   GovVote,
   Headers,
+  InstantSendLock,
   Inv,
   Ping,
   Pong,
@@ -103,6 +104,8 @@ define_p2p! {
     QSendRecSigs(QSendRecSigs) => QSENDRECSIGS "qsendrecsigs" @ 145,
     /// ChainLock signature.
     ClSig(ChainLockSig) => CLSIG "clsig" @ 160,
+    /// InstantSend deterministic lock.
+    IsdLock(InstantSendLock) => ISDLOCK "isdlock" @ 161,
     /// Request compressed block headers.
     GetHeaders2(GetHeaders2) => GETHEADERS2 "getheaders2" @ 163,
     /// Compressed block headers.
@@ -209,8 +212,6 @@ define_p2p! {
     QGetData => QGETDATA "qgetdata" @ 158,
     /// LLMQ: quorum data.
     QData => QDATA "qdata" @ 159,
-    /// InstantSend deterministic lock.
-    IsdLock => ISDLOCK "isdlock" @ 161,
     /// Masternode authentication.
     MnAuth => MNAUTH "mnauth" @ 162,
     /// Request quorum rotation info.
@@ -231,7 +232,7 @@ mod tests {
   use crate::P2pDecodeError;
 
   use dash_pkc::bls::BlsSigBytes;
-  use dash_primitives::{BlockHash, ChainLockSig};
+  use dash_primitives::{BlockHash, ChainLockSig, InstantSendLock, OutPoint, TxHash};
   use dash_types::Numeric;
   use rstest::rstest;
 
@@ -264,6 +265,47 @@ mod tests {
     payload.resize(payload.len().saturating_add_signed(delta), 0);
     assert!(matches!(
       P2pMsg::decode_payload(&CommandString::CLSIG, &payload),
+      Err(P2pDecodeError::Consensus(_))
+    ));
+  }
+
+  fn isdlock_payload() -> Vec<u8> {
+    let mut payload = vec![0x01, 0x01];
+    payload.extend([0x22; 32]);
+    payload.extend([0x03, 0x00, 0x00, 0x00]);
+    payload.extend([0x33; 32]);
+    payload.extend([0x44; 32]);
+    payload.extend([0xab; 96]);
+    payload
+  }
+
+  #[rstest]
+  fn isdlock_is_an_instant_send_lock() {
+    let item = InstantSendLock {
+      version: 1,
+      inputs: vec![OutPoint {
+        hash: TxHash::from_lendian([0x22; 32]),
+        index: 3,
+      }],
+      txid: TxHash::from_lendian([0x33; 32]),
+      cycle_hash: BlockHash::from_lendian([0x44; 32]),
+      sig: BlsSigBytes::from_bytes([0xab; 96]),
+    };
+    let msg = P2pMsg::decode_payload(&CommandString::ISDLOCK, &isdlock_payload());
+    assert_eq!(msg, Ok(P2pMsg::IsdLock(item.clone())));
+    let mut buf = Vec::new();
+    P2pMsg::IsdLock(item).encode_payload(&mut buf);
+    assert_eq!(buf, isdlock_payload());
+  }
+
+  #[rstest]
+  #[case::truncated(-1)]
+  #[case::trailing(1)]
+  fn isdlock_rejects_a_payload_of_another_length(#[case] delta: isize) {
+    let mut payload = isdlock_payload();
+    payload.resize(payload.len().saturating_add_signed(delta), 0);
+    assert!(matches!(
+      P2pMsg::decode_payload(&CommandString::ISDLOCK, &payload),
       Err(P2pDecodeError::Consensus(_))
     ));
   }
