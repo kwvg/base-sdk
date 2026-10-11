@@ -18,7 +18,7 @@ hash_impl!(ProtocolVersion);
 
 impl ProtocolVersion {
   /// Current protocol version.
-  pub const CURRENT: Self = Self(70240);
+  pub const CURRENT: Self = Self(70242);
   /// Minimum acceptable peer version.
   pub const MIN_PEER: Self = Self(70221);
   /// Minimum version for BIP324 v2 transport.

@@ -198,6 +198,14 @@ mod tests {
   }
 
   #[rstest]
+  fn dsa_carries_flags_at_the_current_version() {
+    assert_eq!(
+      P2pMsg::decode_payload(&CommandString::DSA, &dsa_payload(Some(2))),
+      Ok(P2pMsg::Dsa(dsa(2)))
+    );
+  }
+
+  #[rstest]
   fn dsa_drops_flags_below_70241() {
     let mut buf = Vec::new();
     P2pMsg::Dsa(dsa(2)).encode_payload_with_version(&mut buf, ProtocolVersion::PLATFORMBAN_V2_SHORT_ID);

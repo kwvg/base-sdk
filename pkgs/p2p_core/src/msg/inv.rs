@@ -252,12 +252,13 @@ mod tests {
   }
 
   #[rstest]
-  #[case::legacy_at_limit(ProtocolVersion::CURRENT, MAX_NOTFOUND_SZ_LEGACY, true)]
-  #[case::legacy_past_limit(ProtocolVersion::CURRENT, MAX_NOTFOUND_SZ_LEGACY + 1, false)]
+  #[case::legacy_at_limit(ProtocolVersion::PLATFORMBAN_V2_SHORT_ID, MAX_NOTFOUND_SZ_LEGACY, true)]
+  #[case::legacy_past_limit(ProtocolVersion::PLATFORMBAN_V2_SHORT_ID, MAX_NOTFOUND_SZ_LEGACY + 1, false)]
   #[case::below_switch(ProtocolVersion(70241), MAX_NOTFOUND_SZ_LEGACY + 1, false)]
   #[case::at_switch(ProtocolVersion::ASSET_UNLOCK_INV, MAX_NOTFOUND_SZ_LEGACY + 1, true)]
   #[case::at_limit(ProtocolVersion::ASSET_UNLOCK_INV, MAX_INV_SZ, true)]
   #[case::past_limit(ProtocolVersion::ASSET_UNLOCK_INV, MAX_INV_SZ + 1, false)]
+  #[case::current(ProtocolVersion::CURRENT, MAX_INV_SZ, true)]
   fn notfound_cap_follows_the_peer_version(
     #[case] version: ProtocolVersion,
     #[case] count: usize,

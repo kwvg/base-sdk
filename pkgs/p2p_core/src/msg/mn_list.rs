@@ -682,7 +682,7 @@ mod tests {
   #[case::smnle_versioned(70228, false, true, true, false)]
   #[case::version_order(70229, true, false, true, false)]
   #[case::chainlocks(70230, true, false, true, true)]
-  #[case::current(70240, true, false, true, true)]
+  #[case::current(70242, true, false, true, true)]
   fn layout_follows_the_protocol_version(
     #[case] version: u32,
     #[case] version_first: bool,
