@@ -37,6 +37,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `Activation` and `Deployments`, the deployment states a gated check takes. `AssetUnlock::check_deployments` and
   `AssetLock::check_deployments` reject version 2 while v24 is inactive, and `CoinbaseCommitment::check_deployments`
   requires version 4 exactly when v20 and v24 are both active.
+- `MnType::collateral_amount`, the collateral a masternode of each type locks.
+- `CompactSignature`, `MasternodePayoutShare` and `CollateralShare`, the 65-byte compact ECDSA signature, the owner
+  payout entry of version 3 ProTx payloads and one participant's share of a shared masternode collateral.
+- `ProDisTx`, `ProUpShareTx` and `ProUpSharedRegTx`, the payloads of transaction types 10 to 12, with `Checkable`
+  implementations for their version, signature and key rules.
+- `ProRegTx::payouts`, `ProRegTx::shares`, `ProRegTx::early_period_blocks`, `ProRegTx::early_penalty`,
+  `ProRegTx::is_shared`, `ProRegTx::MIN_SHARES`, `ProRegTx::MAX_SHARES` and `ProRegTx::MAX_EARLY_PERIOD_BLOCKS`, for
+  version 3 payout lists and shared registrations.
+- `ProDisTx::sign_hash`, `ProRegTx::consent_hash` and `ProRegTx::sign_string`, the hash a dissolution signs, the hash
+  each share owner signs to join a shared registration, and the message an external collateral key signs.
+- `ProRegTx::verify_join_sigs`, which verifies each join signature of a shared registration against its share owner.
+- `Transaction::check_deployments`, which rejects an output paying the shared collateral script outside a shared
+  ProRegTx once v24 is active.
 
 ### Changed
 
@@ -75,6 +88,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ProTxInvalid::BadInputsHash`, `AssetLockInvalid::CreditBadScript`, `AssetLockInvalid::Version2Inactive`,
   `AssetUnlockInvalid::Version2Inactive`, `CbTxInvalid::BadClHeightDiff` and `BlockInvalid::AssetUnlockMerkleRoot`
   are new variants. Callers that match these enums exhaustively must handle them.
+- `ProRegTx` and `ProUpRegTx` decode the version 3 owner payout list, and `ProRegTx` the collateral shares with their
+  join signatures and the early period terms. `ProRegTx::new` takes the payouts, shares and early terms after
+  `script_payout`, and JSON carries the `payouts`, `shares`, `earlyPeriodBlocks` and `earlyPenalty` keys.
+- `ProUpRegTx` keeps its version-coupled fields private. Callers build it with `ProUpRegTx::new`, which takes the
+  operator key as raw bytes and the payout list, and returns an error for fields that do not match the version.
+- `TxType` and `SpecialPayload` gain variants for types 10 to 12, so `Transaction::check` checks those payloads
+  instead of reporting `bad-txns-type`, and checks the inputs hash of types 11 and 12. Callers that match these enums
+  exhaustively must handle the new variants.
+- `ProUpShareTx` and `ProUpSharedRegTx` hash without their signatures.
+- `NIEntry::check` leaves the bad-port rule for services to `NetInfoV2::check`, which knows each entry's purpose.
+- `ProTxInvalid` gains variants for payout lists, shared registrations and types 10 to 12, and `TxInvalid` gains
+  `SharedCollateralCreate`. Callers that match these enums exhaustively must handle them.
+- `dash-pkc` is built with its `ecdsa` feature, which compiles `secp256k1` and needs a C compiler for the target.
 
 ### Fixed
 
@@ -103,3 +129,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Blocks whose coinbase commitment of version 4 commits to another asset unlock root are rejected.
 - Coinbase commitments with a null chainlock and a non-zero height diff, or with a height diff at or above their
   height, are rejected.
+- ProRegTx and ProUpRegTx check the owner payouts as a list before the net info, and reject a payout list with a bad
+  count, reward, script or reward sum, a duplicate script, or a payout to the owner or voting key.
+- Shared registrations are checked for their collateral, owner key, payouts, shares and early terms, and must pay
+  their collateral to the shared collateral script. Single-owner registrations must carry no early terms.
+- Platform HTTPS service entries accept port 443, which every other purpose still rejects.

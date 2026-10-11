@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `Bls{Public,Secret}Key::negate`, `BlsSecretKey::mul_tweak`, `EcdsaPublicKey::negate` and `EcdsaSecretKey::mul_tweak`.
 - `BlsPkBytes::is_canonical`, `BlsSigBytes::is_canonical` and `BlsSkBytes::is_canonical`, behind the `bls` feature.
   They reject bytes that decode in the scheme only after masking, or not at all. Null bytes count as canonical.
+- `EcdsaPkHash::verify_hash_canonical`, behind the `ecdsa` feature. It verifies a compact signature against a key id
+  and rejects a header byte outside 27 to 34 and a high S.
 
 ### Changed
 
