@@ -166,6 +166,34 @@ pub(crate) fn encode_u8_list<T: BaseCodec>(items: &[T], buf: &mut impl EncodeBuf
   }
 }
 
+/// Corpus lookups and signature recovery for the ProTx payload tests.
+#[cfg(all(test, feature = "serde"))]
+pub(crate) mod testing {
+  use crate::payload::ProRegTx;
+  use crate::prelude::*;
+  use crate::TxHash;
+
+  use dash_dev::Corpus;
+  use dash_num::Hash256;
+  use dash_pkc::ecdsa::{EcdsaPkBytes, EcdsaPublicKey, EcdsaRecSigBytes, EcdsaRecSignature};
+  use dash_script::PubKeyHash;
+  use dash_types::{Hashable, Numeric};
+
+  /// The corpus shared registration whose txid is `pro_tx_hash`.
+  pub(crate) fn shared_registration(pro_tx_hash: &TxHash) -> Option<ProRegTx> {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    let mut items = corpus.entries::<ProRegTx>("proregtx_shared", |_, _, _| {});
+    items.remove(&pro_tx_hash.to_string())
+  }
+
+  /// Key id of the key that made the compact signature `sig` over `hash`.
+  pub(crate) fn signer(hash: &Hash256, sig: &[u8; 65]) -> Option<PubKeyHash> {
+    let sig = EcdsaRecSignature::try_from(EcdsaRecSigBytes::from_raw(*sig)?).ok()?;
+    let key = EcdsaPublicKey::recover(&hash.to_lendian(), &sig).ok()?;
+    Some(EcdsaPkBytes::from(&key).hash())
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::{check_payout_list, CollateralShare, CompactSignature, MasternodePayoutShare};

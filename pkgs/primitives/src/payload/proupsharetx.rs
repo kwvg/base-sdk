@@ -7,15 +7,16 @@
 //! ProUpShareTx share reward update payload (type 11).
 
 use super::protx::COMPACT_SIGNATURE_LEN;
-use super::{InputsHash, ProTxInvalid};
-use crate::codec::codec_payload;
+use super::{payload_hash, InputsHash, ProTxInvalid};
 use crate::prelude::*;
-use crate::TxHash;
+use crate::{codec_base, TxHash};
 
 use bitcoin_primitives::script::ScriptPubKeyBuf;
+use dash_num::Hash256;
 use dash_script::Recipient;
+use dash_types::codec::BaseCodec;
 use dash_types::type_id::TypeId;
-use dash_types::Checkable;
+use dash_types::{Checkable, Hashable};
 
 use core::fmt;
 
@@ -40,7 +41,7 @@ pub struct ProUpShareTx {
   pub vch_sig: Vec<u8>,
 }
 
-codec_payload!(ProUpShareTx {
+codec_base!(ProUpShareTx, crate::codec::MAX_SPTX_PAYLOAD_SIZE, {
   version,
   pro_tx_hash,
   share_index,
@@ -67,6 +68,21 @@ impl Checkable for ProUpShareTx {
   }
 }
 
+/// The hash leaves out the owner signature, which signs the hash.
+impl Hashable for ProUpShareTx {
+  type Hash = Hash256;
+
+  fn hash(&self) -> Hash256 {
+    payload_hash(|buf| {
+      self.version.encode(buf);
+      self.pro_tx_hash.encode(buf);
+      self.share_index.encode(buf);
+      self.script_reward.encode(buf);
+      self.inputs_hash.encode(buf);
+    })
+  }
+}
+
 impl ProUpShareTx {
   /// Highest payload version.
   pub const CURRENT_VERSION: u16 = 1;
@@ -81,6 +97,7 @@ impl fmt::Display for ProUpShareTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
+  use crate::payload::protx::testing::{shared_registration, signer};
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use dash_types::codec::BaseCodec;
@@ -178,6 +195,30 @@ mod tests {
         Some(ProTxInvalid::BadShareUpdateVersion { version: 0 }),
         "{label}"
       );
+    }
+  }
+
+  /// Each corpus signature recovers, over the hash, to the owner of the
+  /// share it updates.
+  #[rstest]
+  fn owner_signs_the_hash() {
+    for (label, item) in corpus_items() {
+      let registration = shared_registration(&item.pro_tx_hash);
+      assert!(registration.is_some(), "{label}");
+      let owner = registration.map(|reg| reg.shares()[usize::from(item.share_index)].0.key_id_owner);
+      let sig: Option<[u8; 65]> = item.vch_sig.as_slice().try_into().ok();
+      assert_eq!(sig.and_then(|sig| signer(&item.hash(), &sig)), owner, "{label}");
+    }
+  }
+
+  #[rstest]
+  fn hash_leaves_out_the_signature() {
+    for (label, mut item) in corpus_items() {
+      let hash = item.hash();
+      item.vch_sig.clear();
+      assert_eq!(item.hash(), hash, "{label}");
+      item.share_index ^= 1;
+      assert_ne!(item.hash(), hash, "{label}");
     }
   }
 }

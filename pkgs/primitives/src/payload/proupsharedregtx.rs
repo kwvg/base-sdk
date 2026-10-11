@@ -7,17 +7,18 @@
 //! ProUpSharedRegTx shared registrar update payload (type 12).
 
 use super::protx::{decode_u8_list, encode_u8_list, MAX_U8_LIST_LEN};
-use super::{CompactSignature, InputsHash, ProRegTx, ProTxInvalid};
+use super::{payload_hash, CompactSignature, InputsHash, ProRegTx, ProTxInvalid};
 use crate::codec::impl_payload;
 use crate::prelude::*;
 use crate::types::{BlsPubKey, BlsScheme};
-use crate::{hash_impl, TxHash};
+use crate::TxHash;
 
+use dash_num::Hash256;
 use dash_pkc::bls::BLS_PK_LEN;
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
-use dash_types::Checkable;
+use dash_types::{Checkable, Hashable};
 
 use core::fmt;
 
@@ -60,11 +61,7 @@ impl BaseCodec for ProUpSharedRegTx {
   }
 
   fn encode(&self, buf: &mut impl EncodeBuf) {
-    self.version.encode(buf);
-    self.pro_tx_hash.encode(buf);
-    self.pub_key_operator.encode(buf);
-    self.key_id_voting.encode(buf);
-    self.inputs_hash.encode(buf);
+    self.encode_unsigned(buf);
     encode_u8_list(&self.sigs, buf);
   }
 }
@@ -85,11 +82,27 @@ impl Checkable for ProUpSharedRegTx {
   }
 }
 
-hash_impl!(ProUpSharedRegTx);
+/// The hash leaves out the owner signatures and their count, since every
+/// owner signs the hash.
+impl Hashable for ProUpSharedRegTx {
+  type Hash = Hash256;
+
+  fn hash(&self) -> Hash256 {
+    payload_hash(|buf| self.encode_unsigned(buf))
+  }
+}
 
 impl ProUpSharedRegTx {
   /// Highest payload version.
   pub const CURRENT_VERSION: u16 = 1;
+
+  fn encode_unsigned(&self, buf: &mut impl EncodeBuf) {
+    self.version.encode(buf);
+    self.pro_tx_hash.encode(buf);
+    self.pub_key_operator.encode(buf);
+    self.key_id_voting.encode(buf);
+    self.inputs_hash.encode(buf);
+  }
 
   /// Builds a shared registrar update with `pub_key_operator` in the basic
   /// scheme.
@@ -170,6 +183,7 @@ impl fmt::Display for ProUpSharedRegTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
+  use crate::payload::protx::testing::{shared_registration, signer};
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
@@ -269,6 +283,37 @@ mod tests {
         Some(ProTxInvalid::BadSharedRegVersion { version: 2 }),
         "{label}"
       );
+    }
+  }
+
+  /// Each corpus signature recovers, over the hash, to the owner of the share
+  /// at its position.
+  #[rstest]
+  fn every_owner_signs_the_hash_in_share_order() {
+    for (label, item) in corpus_items() {
+      let registration = shared_registration(&item.pro_tx_hash);
+      assert!(registration.is_some(), "{label}");
+      let owners: Vec<_> = registration
+        .iter()
+        .flat_map(|reg| reg.shares().iter().map(|(share, _)| Some(share.key_id_owner)))
+        .collect();
+      let signers: Vec<_> = item
+        .sigs()
+        .iter()
+        .map(|sig| signer(&item.hash(), sig.as_bytes()))
+        .collect();
+      assert_eq!(signers, owners, "{label}");
+    }
+  }
+
+  #[rstest]
+  fn hash_leaves_out_the_signatures_and_their_count() {
+    for (label, mut item) in corpus_items() {
+      let hash = item.hash();
+      item.sigs.clear();
+      assert_eq!(item.hash(), hash, "{label}");
+      item.key_id_voting = PubKeyHash::default();
+      assert_ne!(item.hash(), hash, "{label}");
     }
   }
 }
