@@ -7,7 +7,7 @@
 //! ProUpSharedRegTx shared registrar update payload (type 12).
 
 use super::protx::{decode_u8_list, encode_u8_list, MAX_U8_LIST_LEN};
-use super::{CompactSignature, InputsHash, ProTxInvalid};
+use super::{CompactSignature, InputsHash, ProRegTx, ProTxInvalid};
 use crate::codec::impl_payload;
 use crate::prelude::*;
 use crate::types::{BlsPubKey, BlsScheme};
@@ -17,6 +17,7 @@ use dash_pkc::bls::BLS_PK_LEN;
 use dash_script::PubKeyHash;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
+use dash_types::Checkable;
 
 use core::fmt;
 
@@ -68,9 +69,28 @@ impl BaseCodec for ProUpSharedRegTx {
   }
 }
 
+impl Checkable for ProUpSharedRegTx {
+  type Error = ProTxInvalid;
+
+  fn check(&self) -> Option<Self::Error> {
+    if self.version == 0 || self.version > Self::CURRENT_VERSION {
+      return Some(ProTxInvalid::BadSharedRegVersion { version: self.version });
+    }
+    // A non-canonical operator key is an invalid key, reported as null.
+    if self.pub_key_operator.is_null() || !self.pub_key_operator.is_canonical() || self.key_id_voting.is_null() {
+      return Some(ProTxInvalid::NullKey);
+    }
+    let count = self.sigs.len();
+    (count == 0 || count > ProRegTx::MAX_SHARES).then_some(ProTxInvalid::BadSharedRegSigCount { count })
+  }
+}
+
 hash_impl!(ProUpSharedRegTx);
 
 impl ProUpSharedRegTx {
+  /// Highest payload version.
+  pub const CURRENT_VERSION: u16 = 1;
+
   /// Builds a shared registrar update with `pub_key_operator` in the basic
   /// scheme.
   ///
@@ -150,27 +170,13 @@ impl fmt::Display for ProUpSharedRegTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
-  use crate::Transaction;
 
-  use dash_dev::{assert_serde_rt, Corpus};
-  use dash_types::Hashable;
+  use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
 
   fn corpus_items() -> BTreeMap<String, ProUpSharedRegTx> {
     let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proupsharedregtx");
-    corpus.entries::<ProUpSharedRegTx>("proupsharedregtx", |raw, item, label| {
-      let tx = Transaction::decode(&mut &raw[..]);
-      assert_eq!(tx.as_ref().map(|tx| tx.hash().to_string()), Ok(label.to_string()));
-      let payload = tx.map(|tx| tx.extra_payload).unwrap_or_default();
-      assert_eq!(
-        ProUpSharedRegTx::decode(&mut payload.as_slice()).as_ref(),
-        Ok(item),
-        "{label}"
-      );
-      let mut buf = Vec::new();
-      item.encode(&mut buf);
-      assert_eq!(buf, payload, "{label}");
-    })
+    corpus.entries::<ProUpSharedRegTx>("proupsharedregtx", check_sptx)
   }
 
   #[rstest]
@@ -209,5 +215,60 @@ mod tests {
       ProTxInvalid::BadSharedRegSigCount { count: 256 }.to_string(),
       "bad-proupsharedreg-sig-count: 256"
     );
+  }
+
+  #[rstest]
+  #[case::zero(0, Some(ProTxInvalid::BadSharedRegVersion { version: 0 }))]
+  #[case::current(1, None)]
+  #[case::past_current(2, Some(ProTxInvalid::BadSharedRegVersion { version: 2 }))]
+  fn version_is_one(#[case] version: u16, #[case] expected: Option<ProTxInvalid>) {
+    for (label, mut item) in corpus_items() {
+      item.version = version;
+      assert_eq!(item.check(), expected, "{label}");
+    }
+    assert_eq!(
+      ProTxInvalid::BadSharedRegVersion { version: 2 }.to_string(),
+      "bad-proupsharedreg-version: 2"
+    );
+  }
+
+  #[rstest]
+  #[case::null_operator(|t: &mut ProUpSharedRegTx| t.pub_key_operator = BlsPubKey::from_bytes([0; BLS_PK_LEN], BlsScheme::Basic))]
+  #[case::corrupted_operator(|t: &mut ProUpSharedRegTx| t.pub_key_operator = t.pub_key_operator.corrupted())]
+  #[case::null_voting(|t: &mut ProUpSharedRegTx| t.key_id_voting = PubKeyHash::default())]
+  fn keys_must_be_valid(#[case] edit: fn(&mut ProUpSharedRegTx)) {
+    for (label, mut item) in corpus_items() {
+      edit(&mut item);
+      assert_eq!(item.check(), Some(ProTxInvalid::NullKey), "{label}");
+    }
+  }
+
+  #[rstest]
+  #[case::none(0, Some(ProTxInvalid::BadSharedRegSigCount { count: 0 }))]
+  #[case::one(1, None)]
+  #[case::eight(8, None)]
+  #[case::nine(9, Some(ProTxInvalid::BadSharedRegSigCount { count: 9 }))]
+  fn one_to_eight_signatures(#[case] count: usize, #[case] expected: Option<ProTxInvalid>) {
+    for (label, mut item) in corpus_items() {
+      item.sigs = vec![CompactSignature::from_bytes([1; 65]); count];
+      assert_eq!(item.check(), expected, "{label}");
+    }
+  }
+
+  /// The version fails ahead of a null key, and a null key ahead of a bad
+  /// signature count.
+  #[rstest]
+  fn version_then_keys_then_signature_count() {
+    for (label, mut item) in corpus_items() {
+      item.sigs.clear();
+      item.key_id_voting = PubKeyHash::default();
+      assert_eq!(item.check(), Some(ProTxInvalid::NullKey), "{label}");
+      item.version = 2;
+      assert_eq!(
+        item.check(),
+        Some(ProTxInvalid::BadSharedRegVersion { version: 2 }),
+        "{label}"
+      );
+    }
   }
 }
