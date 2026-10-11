@@ -28,7 +28,7 @@ use dash_types::type_id::Unencodable;
 
 pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
 pub use bloom::{BloomFilter, BloomFilterInvalid};
-pub use coinjoin::SendDsq;
+pub use coinjoin::{CoinJoinAccept, SendDsq};
 pub use gov::GovSync;
 pub use headers::{GetHeaders, Headers, NonContinuousHeaders};
 pub use headers2::{CompressionState, GetHeaders2, Headers2};
@@ -89,6 +89,8 @@ define_p2p! {
     AddrV2(AddrV2Msg) => ADDRV2 "addrv2" @ 28,
     /// Signal CoinJoin queue relay.
     SendDsq(SendDsq) => SENDDSQ "senddsq" @ 130,
+    /// CoinJoin: accept denomination.
+    Dsa(CoinJoinAccept) => DSA "dsa" @ 131,
     /// Sync status count.
     Ssc(SyncStatusCount) => SSC "ssc" @ 139,
     /// Governance sync request.
@@ -175,8 +177,6 @@ define_p2p! {
     CFCheckpt => CFCHECKPT "cfcheckpt" @ 27,
     /// Spork broadcast/request.
     Spork => SPORK "spork" @ 128,
-    /// CoinJoin: accept denomination.
-    Dsa => DSA "dsa" @ 131,
     /// CoinJoin: submit inputs.
     Dsi => DSI "dsi" @ 132,
     /// CoinJoin: final transaction.
