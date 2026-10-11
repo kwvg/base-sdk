@@ -8,6 +8,7 @@
 //! special transactions.
 
 use crate::block::MAX_LEGACY_BLOCK_SIZE;
+use crate::deployment::{Activation, Deployments};
 use crate::payload::{
   AssetLockInvalid, AssetUnlockInvalid, InputsHash, OutputsHash, PayloadError, PayloadInvalid, ProTxInvalid,
   ProTxPayload, SpecialPayload, TxType, ASSET_UNLOCK_PAYLOAD_SIZE, ASSET_UNLOCK_QUORUM_INFO_SIZE,
@@ -21,6 +22,7 @@ use bitcoin_primitives::script::{ScriptPubKeyBuf, ScriptSigBuf};
 use bitcoin_units::Amount;
 use dash_num::{make_hash, Hash256};
 use dash_pkc::bls::BLS_SIG_LEN;
+use dash_script::is_shared_collateral_script;
 use dash_types::codec::{self, BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::{TypeId, Unencodable};
 use dash_types::{impl_type, Checkable, CompactSize, Hashable, Numeric};
@@ -165,6 +167,8 @@ pub enum TxInvalid {
   PayloadDecode(PayloadError),
   /// `bad-txns-payload-check`
   PayloadCheck(PayloadInvalid),
+  /// `bad-shared-collateral-create`
+  SharedCollateralCreate { index: usize },
 }
 
 impl fmt::Display for TxInvalid {
@@ -183,6 +187,7 @@ impl fmt::Display for TxInvalid {
       Self::CoinbaseCommitmentNotCoinbase => write!(f, "bad-cbtx-invalid"),
       Self::PayloadDecode(e) => write!(f, "bad-txns-payload-decode: {e}"),
       Self::PayloadCheck(e) => write!(f, "bad-txns-payload-check: {e}"),
+      Self::SharedCollateralCreate { index } => write!(f, "bad-shared-collateral-create: output {index}"),
     }
   }
 }
@@ -469,6 +474,34 @@ impl Transaction {
         .is_some_and(|&version| version >= ASSET_UNLOCK_STABLE_TXID_VERSION)
   }
 
+  /// Rejects, once v24 is active, an output paying the shared collateral
+  /// script anywhere but as the internal collateral of a shared ProRegTx.
+  /// The rule applies to every transaction, the coinbase included.
+  pub fn check_deployments(&self, deployments: Deployments) -> Option<TxInvalid> {
+    if deployments.v24 == Activation::Inactive {
+      return None;
+    }
+    let mut templates = self
+      .outputs
+      .iter()
+      .enumerate()
+      .filter(|(_, output)| is_shared_collateral_script(output.script_pubkey.as_bytes()))
+      .map(|(index, _)| index)
+      .peekable();
+    templates.peek()?;
+    let collateral = match self.decode_payload() {
+      Some(Ok(SpecialPayload::ProviderRegister(ProTxPayload::Known(protx))))
+        if protx.is_shared() && protx.collateral_hash.is_null() =>
+      {
+        usize::try_from(protx.collateral_index).ok()
+      }
+      _ => None,
+    };
+    templates
+      .find(|&index| Some(index) != collateral)
+      .map(|index| TxInvalid::SharedCollateralCreate { index })
+  }
+
   /// Returns true when this transaction carries an extra payload.
   fn has_extra_payload(&self) -> bool {
     self.version >= 3 && self.tx_type != TxType::Spend
@@ -564,6 +597,7 @@ mod tests {
   use super::*;
 
   use dash_dev::{assert_serde_rt, check_tx, Corpus};
+  use dash_script::SHARED_COLLATERAL_SCRIPT;
   use hex_conservative::hex;
   use rstest::rstest;
 
@@ -946,5 +980,68 @@ mod tests {
     tx.inputs.push(extra);
     assert!(!tx.is_coinbase());
     assert_eq!(tx.check(), Some(TxInvalid::NullPrevout { index: 0 }));
+  }
+
+  fn deployments(v24: Activation) -> Deployments {
+    Deployments {
+      v19: Activation::Active,
+      v20: Activation::Active,
+      v24,
+      evo_shares: Activation::Inactive,
+    }
+  }
+
+  fn template_output() -> TxOut {
+    TxOut {
+      value: Amount::ZERO,
+      script_pubkey: ScriptPubKeyBuf::from_bytes(SHARED_COLLATERAL_SCRIPT.to_vec()),
+    }
+  }
+
+  /// The corpus shared registrations, each with its collateral index.
+  fn shared_registrations() -> Vec<(Transaction, usize)> {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "proregtx");
+    let mut txs = Vec::new();
+    corpus.entries::<crate::ProRegTx>("proregtx_shared", |raw, item, _| {
+      txs.push((
+        Transaction::decode(&mut &raw[..]).unwrap(),
+        item.collateral_index as usize,
+      ));
+    });
+    txs
+  }
+
+  #[rstest]
+  fn shared_registration_creates_its_collateral() {
+    for (tx, index) in shared_registrations() {
+      assert_eq!(tx.outputs[index].script_pubkey.as_bytes(), SHARED_COLLATERAL_SCRIPT);
+      assert_eq!(tx.check_deployments(deployments(Activation::Active)), None);
+    }
+  }
+
+  #[rstest]
+  fn shared_registration_creates_no_second_template_output() {
+    for (mut tx, _) in shared_registrations() {
+      tx.outputs.push(template_output());
+      let index = tx.outputs.len() - 1;
+      let error = Some(TxInvalid::SharedCollateralCreate { index });
+      assert_eq!(tx.check_deployments(deployments(Activation::Active)), error);
+    }
+  }
+
+  #[rstest]
+  #[case::spend(spend_of_size(100_000))]
+  #[case::coinbase(corpus_first::<crate::CoinbaseCommitment>("cbtx"))]
+  #[case::single_owner_registration(corpus_first::<crate::ProRegTx>("proregtx"))]
+  fn other_transactions_create_no_template_output(#[case] mut tx: Transaction) {
+    assert_eq!(tx.check_deployments(deployments(Activation::Active)), None);
+    tx.outputs.insert(0, template_output());
+    let error = Some(TxInvalid::SharedCollateralCreate { index: 0 });
+    assert_eq!(tx.check_deployments(deployments(Activation::Active)), error);
+    assert_eq!(tx.check_deployments(deployments(Activation::Inactive)), None);
+    assert_eq!(
+      TxInvalid::SharedCollateralCreate { index: 0 }.to_string(),
+      "bad-shared-collateral-create: output 0"
+    );
   }
 }
