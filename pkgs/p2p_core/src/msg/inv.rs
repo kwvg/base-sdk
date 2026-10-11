@@ -86,6 +86,12 @@ enum_map! {
     Dsq = 32 => "dsq",
     /// Platform service ban (DIP-0031).
     PlatformBan = 33 => "platform_ban",
+    /// Asset unlock announced by its instance hash.
+    ///
+    /// Only peers at [`ProtocolVersion::ASSET_UNLOCK_INV`] or above receive it,
+    /// and a `getdata` for it is answered with a `tx`. The hash is
+    /// [`Transaction::instance_hash`](dash_primitives::Transaction::instance_hash).
+    AssetUnlock = 34 => "asset_unlock",
   }
 }
 
@@ -189,6 +195,7 @@ mod tests {
   #[case::isdlock(31, InvType::IsdLock)]
   #[case::dsq(32, InvType::Dsq)]
   #[case::platform_ban(33, InvType::PlatformBan)]
+  #[case::asset_unlock(34, InvType::AssetUnlock)]
   fn inv_types_follow_the_reference_codes(#[case] code: u32, #[case] inv_type: InvType) {
     assert_eq!(InvType::from_base(code), inv_type);
     assert_eq!(inv_type.to_base(), code);
@@ -200,7 +207,6 @@ mod tests {
   #[case::quorum_dummy_commitment(22)]
   #[case::quorum_debug_status(27)]
   #[case::islock(30)]
-  #[case::asset_unlock(34)]
   fn other_inv_codes_are_unknown(#[case] code: u32) {
     assert_eq!(InvType::from_base(code), InvType::Unknown(code));
   }
