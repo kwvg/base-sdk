@@ -24,7 +24,7 @@ impl ProtocolVersion {
   /// Minimum version for BIP324 v2 transport.
   pub const BIP324_BASELINE: Self = Self(70235);
   /// Minimum masternode version accepted in DKGs.
-  pub const MIN_MASTERNODE: Self = Self(70240);
+  pub const MIN_MASTERNODE: Self = Self(70242);
   /// BIP155 addrv2 version boundary.
   pub const ADDRV2: Self = Self(70223);
   /// BLS signature scheme version boundary.
