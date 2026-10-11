@@ -256,6 +256,8 @@ pub enum ProTxInvalid {
   BadSharedRegVersion { version: u16 },
   /// `bad-protx-shares-collateral-script`
   SharesCollateralScript,
+  /// `bad-protx-shares-sig`
+  BadShareSig { index: usize },
 }
 
 impl fmt::Display for ProTxInvalid {
@@ -323,6 +325,7 @@ impl fmt::Display for ProTxInvalid {
       Self::BadShareUpdatePayee => write!(f, "bad-proupshare-payee"),
       Self::BadSharedRegVersion { version } => write!(f, "bad-proupsharedreg-version: {version}"),
       Self::SharesCollateralScript => write!(f, "bad-protx-shares-collateral-script"),
+      Self::BadShareSig { index } => write!(f, "bad-protx-shares-sig: share {index}"),
     }
   }
 }

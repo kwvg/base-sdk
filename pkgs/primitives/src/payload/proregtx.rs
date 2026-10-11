@@ -625,6 +625,23 @@ impl ProRegTx {
     )
   }
 
+  /// Verifies each join signature against the owner of its share, over the
+  /// [`consent_hash`](Self::consent_hash) of the shared registration in `tx`.
+  /// A registration without shares has nothing to verify.
+  pub fn verify_join_sigs(&self, tx: &Transaction) -> Option<ProTxInvalid> {
+    let hash = self.consent_hash(tx).to_lendian();
+    self
+      .shares
+      .iter()
+      .position(|(share, join_sig)| {
+        share
+          .key_id_owner
+          .verify_hash_canonical(&hash, join_sig.as_bytes())
+          .is_err()
+      })
+      .map(|index| ProTxInvalid::BadShareSig { index })
+  }
+
   fn check_owner_payouts(&self) -> Option<ProTxInvalid> {
     if self.is_shared() {
       let Some(required) = self.mn_type.collateral_amount() else {
@@ -1390,5 +1407,38 @@ mod tests {
     let mut item = corpus_item(2, MnType::Regular);
     item.script_payout = ScriptPubKeyBuf::from_bytes(vec![0x51, 0x52]);
     assert!(item.sign_string(&MAINNET).starts_with("5152|"));
+  }
+
+  #[rstest]
+  fn corpus_join_signatures_verify() {
+    for (tx, item) in shared_transactions() {
+      assert_eq!(item.verify_join_sigs(&tx), None);
+    }
+    let (tx, _) = &shared_transactions()[0];
+    assert_eq!(corpus_item(3, MnType::Regular).verify_join_sigs(tx), None);
+  }
+
+  #[rstest]
+  #[case::output(|tx: &mut Transaction, _: &mut ProRegTx| tx.outputs[0].value = Amount::ZERO, 0)]
+  #[case::swapped(|_: &mut Transaction, item: &mut ProRegTx| {
+    let first = item.shares[0].1;
+    item.shares[0].1 = item.shares[1].1;
+    item.shares[1].1 = first;
+  }, 0)]
+  #[case::second(|_: &mut Transaction, item: &mut ProRegTx| item.shares[1].1 = item.shares[0].1, 1)]
+  #[case::header(|_: &mut Transaction, item: &mut ProRegTx| {
+    let mut bytes = *item.shares[0].1.as_bytes();
+    bytes[0] += 8;
+    item.shares[0].1 = CompactSignature::from_bytes(bytes);
+  }, 0)]
+  fn join_signatures_must_verify(#[case] edit: fn(&mut Transaction, &mut ProRegTx), #[case] index: usize) {
+    for (mut tx, mut item) in shared_transactions() {
+      edit(&mut tx, &mut item);
+      assert_eq!(item.verify_join_sigs(&tx), Some(ProTxInvalid::BadShareSig { index }));
+    }
+    assert_eq!(
+      ProTxInvalid::BadShareSig { index: 1 }.to_string(),
+      "bad-protx-shares-sig: share 1"
+    );
   }
 }

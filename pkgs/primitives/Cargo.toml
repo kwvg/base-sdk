@@ -42,6 +42,7 @@ dash-num = { version = "0.1.0-beta", path = "../num", features = ["codec"] }
 dash-pkc = { version = "0.1.0-beta", path = "../pkc", default-features = false, features = [
   "bls",
   "codec",
+  "ecdsa",
 ] }
 dash-pow = { version = "0.0.0", path = "../pow" }
 dash-script = { version = "0.0.0", path = "../script" }
@@ -61,11 +62,6 @@ serde = { workspace = true, features = [
 
 [dev-dependencies]
 dash-dev = { version = "0.0.0", path = "../dev", features = ["full"] }
-dash-pkc = { version = "0.1.0-beta", path = "../pkc", default-features = false, features = [
-  "bls",
-  "codec",
-  "ecdsa",
-] }
 rstest = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 
