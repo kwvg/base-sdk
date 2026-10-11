@@ -25,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   formats, JSON retains hex encoded big-endian string encoding.
 - `CompactTarget::from_str` requires exactly 8 hex digits, optionally `0x`/`0X`-prefixed. Shorter input is now
   rejected with `ParseHexError::OddLength` or `ParseHexError::InvalidLength`.
+- The `serde` feature no longer implies `codec`. `CompactTarget` implements `Serialize` and `Deserialize` without
+  `codec`. Callers that relied on `serde` to enable `codec` must enable it explicitly.
 
 ### Removed
 
