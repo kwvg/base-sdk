@@ -28,7 +28,7 @@ use dash_types::type_id::Unencodable;
 
 pub use addr::{Addr, AddrV2Entry, AddrV2Msg, TimestampedAddr};
 pub use bloom::{BloomFilter, BloomFilterInvalid};
-pub use coinjoin::{CoinJoinAccept, SendDsq};
+pub use coinjoin::{CoinJoinAccept, CoinJoinBroadcastTx, SendDsq};
 pub use gov::GovSync;
 pub use headers::{GetHeaders, Headers, NonContinuousHeaders};
 pub use headers2::{CompressionState, GetHeaders2, Headers2};
@@ -46,6 +46,7 @@ unversioned_payload!(
   Addr,
   AddrV2Msg,
   ChainLockSig,
+  CoinJoinBroadcastTx,
   GetData,
   GetHeaders,
   GetHeaders2,
@@ -91,6 +92,8 @@ define_p2p! {
     SendDsq(SendDsq) => SENDDSQ "senddsq" @ 130,
     /// CoinJoin: accept denomination.
     Dsa(CoinJoinAccept) => DSA "dsa" @ 131,
+    /// CoinJoin: broadcast transaction.
+    Dstx(CoinJoinBroadcastTx) => DSTX "dstx" @ 137,
     /// Sync status count.
     Ssc(SyncStatusCount) => SSC "ssc" @ 139,
     /// Governance sync request.
@@ -187,8 +190,6 @@ define_p2p! {
     Dsc => DSC "dsc" @ 135,
     /// CoinJoin: status update.
     Dssu => DSSU "dssu" @ 136,
-    /// CoinJoin: broadcast transaction.
-    Dstx => DSTX "dstx" @ 137,
     /// CoinJoin: queue entry.
     Dsq => DSQ "dsq" @ 138,
     /// LLMQ: final commitment.

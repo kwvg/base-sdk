@@ -11,7 +11,7 @@ use crate::macros::VersionedPayload;
 use crate::prelude::*;
 use crate::{P2pDecodeError, ProtocolVersion};
 
-use dash_primitives::{hash_impl, Transaction};
+use dash_primitives::{hash_impl, Transaction, TxHash};
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
 
@@ -94,14 +94,38 @@ impl VersionedPayload for CoinJoinAccept {
   }
 }
 
+/// Mixing transaction relayed with the signature of the masternode that
+/// built it.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, TypeId)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub struct CoinJoinBroadcastTx {
+  /// Mixing transaction.
+  pub tx: Transaction,
+  /// ProRegTx hash of the masternode.
+  pub pro_tx_hash: TxHash,
+  /// Masternode signature.
+  #[cfg_attr(feature = "serde", serde(with = "dash_types::serialize::hex"))]
+  pub sig: Vec<u8>,
+  /// Signing time, in seconds since the Unix epoch.
+  pub sig_time: i64,
+}
+
+codec_p2p!(CoinJoinBroadcastTx {
+  tx,
+  pro_tx_hash,
+  sig,
+  sig_time
+});
+
 #[cfg(test)]
 mod tests {
-  use super::{CoinJoinAccept, SendDsq};
+  use super::{CoinJoinAccept, CoinJoinBroadcastTx, SendDsq};
   use crate::prelude::*;
   use crate::{CommandString, P2pDecodeError, P2pMsg, ProtocolVersion};
 
-  use dash_primitives::{Transaction, TxType};
+  use dash_primitives::{Transaction, TxHash, TxType};
   use dash_types::codec::BaseCodec;
+  use dash_types::Numeric;
   use rstest::rstest;
 
   #[rstest]
@@ -187,6 +211,45 @@ mod tests {
   fn dsa_rejects_a_payload_of_another_layout(#[case] version: ProtocolVersion, #[case] payload: Vec<u8>) {
     assert!(matches!(
       P2pMsg::decode_payload_with_version(&CommandString::DSA, &payload, version),
+      Err(P2pDecodeError::Consensus(_))
+    ));
+  }
+
+  fn dstx_payload() -> Vec<u8> {
+    let mut payload = Vec::new();
+    collateral().encode(&mut payload);
+    payload.extend([0x22; 32]);
+    payload.push(0x02);
+    payload.extend([0xab, 0xcd]);
+    payload.extend([0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    payload
+  }
+
+  #[rstest]
+  fn dstx_is_tx_masternode_signature_and_time() {
+    let item = CoinJoinBroadcastTx {
+      tx: collateral(),
+      pro_tx_hash: TxHash::from_lendian([0x22; 32]),
+      sig: vec![0xab, 0xcd],
+      sig_time: 16,
+    };
+    let mut buf = Vec::new();
+    P2pMsg::Dstx(item.clone()).encode_payload(&mut buf);
+    assert_eq!(buf, dstx_payload());
+    assert_eq!(
+      P2pMsg::decode_payload(&CommandString::DSTX, &dstx_payload()),
+      Ok(P2pMsg::Dstx(item))
+    );
+  }
+
+  #[rstest]
+  #[case::truncated(-1)]
+  #[case::trailing(1)]
+  fn dstx_rejects_a_payload_of_another_length(#[case] delta: isize) {
+    let mut payload = dstx_payload();
+    payload.resize(payload.len().saturating_add_signed(delta), 0);
+    assert!(matches!(
+      P2pMsg::decode_payload(&CommandString::DSTX, &payload),
       Err(P2pDecodeError::Consensus(_))
     ));
   }
