@@ -7,14 +7,15 @@
 //! ProDisTx shared masternode dissolution payload (type 10).
 
 use super::protx::{decode_u8_list, encode_u8_list, MAX_U8_LIST_LEN};
-use super::{CompactSignature, ProRegTx, ProTxInvalid};
+use super::{payload_hash, CompactSignature, ProRegTx, ProTxInvalid};
 use crate::codec::impl_payload;
 use crate::prelude::*;
-use crate::{hash_impl, TxHash};
+use crate::{hash_impl, Transaction, TxHash};
 
+use dash_num::Hash256;
 use dash_types::codec::{BaseCodec, DecodeError, EncodeBuf};
 use dash_types::type_id::TypeId;
-use dash_types::Checkable;
+use dash_types::{Checkable, CompactSize, Numeric};
 
 use core::fmt;
 
@@ -70,6 +71,9 @@ impl Checkable for ProDisTx {
 
 hash_impl!(ProDisTx);
 
+/// Prefix of the dissolution signing message.
+const SIGN_PREFIX: [u8; 20] = *b"DashSharedMNDissolve";
+
 impl ProDisTx {
   /// Highest payload version.
   pub const CURRENT_VERSION: u16 = 1;
@@ -100,6 +104,32 @@ impl ProDisTx {
   /// Signatures of the share owners.
   pub fn sigs(&self) -> &[CompactSignature] {
     &self.sigs
+  }
+
+  /// Hash every signature of the dissolution in `tx` signs. It commits to
+  /// `sig_count`, the count `tx` carries, so a third party cannot switch the
+  /// mode by adding or dropping signatures.
+  pub fn sign_hash(&self, tx: &Transaction, sig_count: u8) -> Hash256 {
+    payload_hash(|buf| {
+      CompactSize::from(SIGN_PREFIX.len()).encode(buf);
+      SIGN_PREFIX.encode(buf);
+      self.version.encode(buf);
+      tx.version.encode(buf);
+      tx.tx_type.to_base().encode(buf);
+      tx.lock_time.encode(buf);
+      for input in &tx.inputs {
+        input.prevout.encode(buf);
+      }
+      for input in &tx.inputs {
+        input.sequence.encode(buf);
+      }
+      for output in &tx.outputs {
+        output.encode(buf);
+      }
+      self.pro_tx_hash.encode(buf);
+      self.actor_index.encode(buf);
+      sig_count.encode(buf);
+    })
   }
 }
 
@@ -139,6 +169,7 @@ impl fmt::Display for ProDisTx {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
   use super::*;
+  use crate::payload::protx::testing::{shared_registration, signer};
 
   use dash_dev::{assert_serde_rt, check_sptx, Corpus};
   use rstest::rstest;
@@ -223,5 +254,49 @@ mod tests {
       ProTxInvalid::BadDissolveVersion { version: 2 }.to_string(),
       "bad-prodis-version: 2"
     );
+  }
+
+  /// The corpus dissolutions, each in its transaction.
+  fn corpus_transactions() -> Vec<(Transaction, ProDisTx)> {
+    let corpus = Corpus::open(env!("CARGO_MANIFEST_DIR"), "prodistx");
+    let mut txs = Vec::new();
+    corpus.entries::<ProDisTx>("prodistx", |raw, item, label| {
+      let tx = Transaction::decode(&mut &raw[..]);
+      assert!(tx.is_ok(), "{label}");
+      if let Ok(tx) = tx {
+        txs.push((tx, item.clone()));
+      }
+    });
+    txs
+  }
+
+  /// One signature recovers to the actor's share owner; several recover to
+  /// every share owner in share order.
+  #[rstest]
+  fn share_owners_sign_the_sign_hash() {
+    for (tx, item) in corpus_transactions() {
+      let registration = shared_registration(&item.pro_tx_hash);
+      assert!(registration.is_some(), "{}", item.pro_tx_hash);
+      let owners: Vec<_> = registration
+        .iter()
+        .flat_map(|reg| reg.shares().iter().map(|(share, _)| Some(share.key_id_owner)))
+        .collect();
+      let count = u8::try_from(item.sigs().len()).unwrap_or(u8::MAX);
+      let hash = item.sign_hash(&tx, count);
+      let signers: Vec<_> = item.sigs().iter().map(|sig| signer(&hash, sig.as_bytes())).collect();
+      if signers.len() == 1 {
+        assert_eq!(signers[0], owners[usize::from(item.actor_index)]);
+      } else {
+        assert_eq!(signers, owners);
+      }
+    }
+  }
+
+  #[rstest]
+  fn sign_hash_commits_to_the_signature_count() {
+    for (tx, item) in corpus_transactions() {
+      let count = u8::try_from(item.sigs().len()).unwrap_or(u8::MAX);
+      assert_ne!(item.sign_hash(&tx, count), item.sign_hash(&tx, count + 1));
+    }
   }
 }
