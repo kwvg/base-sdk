@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The minimum supported Rust version is raised from 1.85 to 1.89.**
 - `{derive,make}_bytes!`-defined types serialize as their raw storage bytes for machine-readable formats. JSON and
   other human-readable formats retain hex in storage order for `fwd` and in reverse storage order for `rev`.
 - `derive_bytes!` emits `From<[u8; N]>` in place of `impl_bytes!`, and `make_sbytes!` emits the implementation itself.
