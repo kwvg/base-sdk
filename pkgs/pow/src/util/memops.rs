@@ -86,6 +86,28 @@ pub(crate) const fn store_u64_be(buf: &mut [u8], i: usize, v: u64) {
   buf[off + 7] = b[7];
 }
 
+/// Writes sixteen words little-endian into a digest.
+#[inline]
+pub(crate) fn digest_from_u32_le(words: &[u32]) -> [u8; 64] {
+  debug_assert_eq!(words.len(), 16);
+  let mut out = [0u8; 64];
+  for (bytes, word) in out.chunks_exact_mut(4).zip(words) {
+    bytes.copy_from_slice(&word.to_le_bytes());
+  }
+  out
+}
+
+/// Writes eight words little-endian into a digest.
+#[inline]
+pub(crate) fn digest_from_u64_le(words: &[u64]) -> [u8; 64] {
+  debug_assert_eq!(words.len(), 8);
+  let mut out = [0u8; 64];
+  for (bytes, word) in out.chunks_exact_mut(8).zip(words) {
+    bytes.copy_from_slice(&word.to_le_bytes());
+  }
+  out
+}
+
 /// Copies `N` bytes from `src` starting at `offset` into a fixed-size array,
 /// avoiding range-based slice indexing which is not yet const-stable.
 #[inline]

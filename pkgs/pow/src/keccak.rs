@@ -112,7 +112,7 @@ pub fn keccak_f1600(state: &mut [u64; 25]) {
 
 /// Keccak-512 sponge parameterised over a permutation function.
 pub(crate) fn sponge(data: &[u8], perm: fn(&mut [u64; 25])) -> [u8; 64] {
-  use crate::util::memops::{load_u64_le, store_u64_le};
+  use crate::util::memops::{digest_from_u64_le, load_u64_le};
 
   use crate::consts::keccak::RATE;
 
@@ -139,14 +139,7 @@ pub(crate) fn sponge(data: &[u8], perm: fn(&mut [u64; 25])) -> [u8; 64] {
     i += 1;
   }
   perm(&mut state);
-
-  let mut out = [0u8; 64];
-  let mut i = 0;
-  while i < 8 {
-    store_u64_le(&mut out, i, state[i]);
-    i += 1;
-  }
-  out
+  digest_from_u64_le(&state[..8])
 }
 
 pub fn hash512(data: &[u8]) -> [u8; 64] {
