@@ -161,22 +161,19 @@ jobs:
             echo "CARGO=$TOOLCHAIN_MSRV/bin/cargo"
           } >> "$GITHUB_ENV"
 
-      - name: Build workspace
-        run: |
-          "$CARGO" build --workspace --no-default-features
-          "$CARGO" build --workspace --features full
+      - name: Build every feature
+        run: '"$CARGO" hack --workspace --exclude-features default --each-feature build'
 
-      - name: Test workspace (without default features)
+      - name: Test every feature
         run: |
-          "$CARGO" nextest run --config-file .cargo/nextest.toml --workspace --no-default-features
-          "$CARGO" test --doc --workspace --no-default-features
+          "$CARGO" hack --workspace --exclude-features default --each-feature nextest run --config-file .cargo/nextest.toml --no-tests=warn
+          "$CARGO" hack --workspace --exclude-features default --each-feature test --doc
 
       - name: Test workspace (with coverage)
         run: |
           "$CARGO" llvm-cov clean --workspace
           "$CARGO" llvm-cov --no-report nextest --config-file .cargo/nextest.toml --workspace --features full
           "$CARGO" llvm-cov report --lcov --output-path lcov.info
-          "$CARGO" test --doc --workspace --features full
 
       - name: Upload coverage to Codecov
         if: env.HAS_CODECOV == 'true'
@@ -195,4 +192,4 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Sanity check benchmarks
-        run: '"$CARGO" test --workspace --features full --benches'
+        run: '"$CARGO" hack --workspace --exclude-features default --each-feature test --benches'
