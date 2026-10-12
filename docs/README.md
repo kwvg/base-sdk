@@ -7,7 +7,7 @@ ecosystem to provide a framework that builds upon existing, familiar APIs and co
 To achieve this, state-independent portions of the consensus engine have been split into composable packages that can be
 imported as needed.
 
-<!-- [include:README.md:crate-index] -->
+<!-- [include:README.md:crate-info] -->
 
 ## Is the SDK a full node?
 
