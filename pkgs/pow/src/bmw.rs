@@ -48,8 +48,8 @@ fn compute_w(mh: &[u64; WORDS]) -> [u64; WORDS] {
   let mut w = [0u64; WORDS];
   macro_rules! word {
     ($i:literal) => {{
-      const IDX: [usize; 5] = W_IDX[$i];
-      const OPS: [bool; 4] = W_OPS[$i];
+      const IDX: [usize; 5] = W_IDX[$i]; // nosemgrep: pow-table-not-const
+      const OPS: [bool; 4] = W_OPS[$i]; // nosemgrep: pow-table-not-const
       let mut acc = mh[IDX[0]];
       macro_rules! term {
         ($t:literal) => {

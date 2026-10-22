@@ -35,10 +35,10 @@ const fn sub_shift_masks(shifts: &[usize; 8]) -> [[u8; 16]; 8] {
 }
 
 /// Fused SubBytes and ShiftBytes masks of the `P` permutation.
-const SUBSH_P: [[u8; 16]; 8] = sub_shift_masks(&SHIFT_P);
+static SUBSH_P: [[u8; 16]; 8] = sub_shift_masks(&SHIFT_P);
 
 /// Fused SubBytes and ShiftBytes masks of the `Q` permutation.
-const SUBSH_Q: [[u8; 16]; 8] = sub_shift_masks(&SHIFT_Q);
+static SUBSH_Q: [[u8; 16]; 8] = sub_shift_masks(&SHIFT_Q);
 
 /// Returns the state as plain bytes, which `Hash` accepts.
 #[inline(always)]
