@@ -65,7 +65,14 @@ jobs:
         run: pytest
 
       - name: Manage cargo registry
-        uses: actions/cache@v5
+        uses: runs-on/cache@v5.0.7
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ secrets.CACHE_GHA_AUTH && vars.CACHE_GHA_URL && vars.CACHE_GHA_BUCKET || '' }}
+          RUNS_ON_S3_BUCKET_ENDPOINT: ${{ vars.CACHE_GHA_URL }}
+          RUNS_ON_S3_FORCE_PATH_STYLE: "true"
+          AWS_REGION: ${{ vars.CACHE_GHA_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ vars.CACHE_GHA_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_GHA_AUTH }}
         with:
           path: |
             ~/.cargo/registry
