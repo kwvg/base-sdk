@@ -101,7 +101,7 @@ jobs:
         if: vars.CACHE_NIX_URL != ''
         with:
           server-url: ${{ vars.CACHE_NIX_URL }}
-          skip-push: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
+          skip-push: ${{ !(github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/runner_p1')) }}
 
       - name: Restore cargo registry
         uses: runs-on/cache/restore@v5.0.7

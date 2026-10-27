@@ -101,7 +101,7 @@ jobs:
           CACHE_BZL_AUTH: ${{ secrets.CACHE_BZL_AUTH }}
         run: |
           echo "build --remote_cache=${CACHE_BZL_URL}" >> .bazelrc.user
-          if [ "${{ github.event_name }}" = push ] && [ "${{ github.ref }}" = refs/heads/develop ] && [ -n "${CACHE_BZL_AUTH}" ]; then
+          if [ "${{ github.event_name }}" = push ] && { [ "${{ github.ref }}" = refs/heads/develop ] || [ "${{ github.ref }}" = refs/heads/runner_p1 ]; } && [ -n "${CACHE_BZL_AUTH}" ]; then
             echo "build \"--remote_header=Authorization=Basic ${CACHE_BZL_AUTH}\"" >> .bazelrc.user
           else
             echo "build --remote_upload_local_results=false" >> .bazelrc.user

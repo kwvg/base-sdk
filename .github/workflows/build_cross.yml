@@ -2,7 +2,7 @@ name: Cross-compilation build
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, runner_p1]
   pull_request:
 
 concurrency:
@@ -44,10 +44,10 @@ jobs:
         if: vars.CACHE_NIX_URL != ''
         with:
           server-url: ${{ vars.CACHE_NIX_URL }}
-          skip-push: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
+          skip-push: ${{ !(github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/runner_p1')) }}
 
       - name: Upload devshell
-        if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && vars.CACHE_NIX_URL != ''
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/runner_p1') && vars.CACHE_NIX_URL != ''
         shell: bash
         env:
           NIKS3: ${{ steps.niks3.outputs.binary-dir }}/niks3
@@ -123,7 +123,7 @@ jobs:
         if: vars.CACHE_NIX_URL != ''
         with:
           server-url: ${{ vars.CACHE_NIX_URL }}
-          skip-push: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
+          skip-push: ${{ !(github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/runner_p1')) }}
 
       - name: Restore cargo registry
         uses: runs-on/cache/restore@v5.0.7
