@@ -7,6 +7,9 @@ on:
         description: Package directory relative to pkgs/ (e.g. num)
         required: true
         type: string
+    secrets:
+      CACHE_BZL_AUTH:
+        required: false
 
 permissions:
   contents: read
@@ -79,6 +82,21 @@ jobs:
           key: bazel-repos-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'bazel/*.MODULE.bazel') }}
           restore-keys: |
             bazel-repos-${{ runner.os }}-${{ runner.arch }}-
+
+      # Only CI runners reach the cache, so `.bazelrc` leaves it out. The
+      # credential stays out of the command line Bazel echoes on failure.
+      - name: Configure the remote cache
+        if: vars.CACHE_BZL_URL != ''
+        env:
+          CACHE_BZL_URL: ${{ vars.CACHE_BZL_URL }}
+          CACHE_BZL_AUTH: ${{ secrets.CACHE_BZL_AUTH }}
+        run: |
+          echo "build --remote_cache=${CACHE_BZL_URL}" >> .bazelrc.user
+          if [ "${{ github.event_name }}" = push ] && [ "${{ github.ref }}" = refs/heads/develop ] && [ -n "${CACHE_BZL_AUTH}" ]; then
+            echo "build \"--remote_header=Authorization=Basic ${CACHE_BZL_AUTH}\"" >> .bazelrc.user
+          else
+            echo "build --remote_upload_local_results=false" >> .bazelrc.user
+          fi
 
       - name: Build every target
         run: just ${{ inputs.package_dir }}::zbuild
